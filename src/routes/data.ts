@@ -66,9 +66,9 @@ export default function () {
               {
                 entryType: "Website",
                 image:
-                  "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/main/public/images/ATLAS-Backend-Banner.png",
+                  "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/images/ATLAS-Backend-Banner.png",
                 tileImage:
-                  "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/main/public/images/ATLAS-Backend-Banner-Slim.png",
+                  "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/images/ATLAS-Backend-Banner-Slim.png",
                 videoMute: false,
                 hidden: false,
                 tabTitleOverride: "ATLAS",

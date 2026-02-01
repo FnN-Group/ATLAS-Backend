@@ -847,7 +847,7 @@ class _TopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bannerPath = joinPath([
-      getBackendRoot(),
+      getInstallationRoot(),
       'public',
       'images',
       'ATLAS-Backend-Banner-Transparent.png',
@@ -8987,6 +8987,33 @@ String getBackendRoot() {
   }
 
   // Development/source mode - look for static and src directories
+  final candidates = <Directory>[
+    Directory.current,
+    Directory.current.parent,
+    Directory(File(Platform.resolvedExecutable).parent.path),
+    Directory(File(Platform.resolvedExecutable).parent.parent.path),
+  ];
+
+  for (final start in candidates) {
+    var current = start;
+    while (true) {
+      final staticDir = Directory(joinPath([current.path, 'static']));
+      final srcDir = Directory(joinPath([current.path, 'src']));
+      if (staticDir.existsSync() && srcDir.existsSync()) {
+        return current.path;
+      }
+      if (current.parent.path == current.path) {
+        break;
+      }
+      current = current.parent;
+    }
+  }
+  return Directory.current.path;
+}
+
+String getInstallationRoot() {
+  // Returns the directory where the backend code/assets are installed
+  // This is different from getBackendRoot() which returns the data directory
   final candidates = <Directory>[
     Directory.current,
     Directory.current.parent,
