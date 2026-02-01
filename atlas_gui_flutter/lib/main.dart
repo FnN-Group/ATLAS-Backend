@@ -2927,8 +2927,8 @@ class ArenaScreen extends StatefulWidget {
 }
 
 class _ArenaScreenState extends State<ArenaScreen> {
-  bool _loading = true;
   bool _saveArenaPoints = false;
+  bool _leaderboardLoading = true;
   List<ArenaEntry> _leaderboard = [];
 
   @override
@@ -2938,14 +2938,189 @@ class _ArenaScreenState extends State<ArenaScreen> {
   }
 
   Future<void> _load() async {
+    // Load config immediately so screen shows
     final config = await ConfigService.load();
+    if (mounted) {
+      setState(() {
+        _saveArenaPoints = config.saveArenaPoints;
+      });
+    }
+    
+    // Load leaderboard in background (always fresh)
     final leaderboard = await ArenaService.loadLeaderboard();
     if (!mounted) return;
     setState(() {
-      _saveArenaPoints = config.saveArenaPoints;
       _leaderboard = leaderboard;
-      _loading = false;
+      _leaderboardLoading = false;
     });
+  }
+
+  void _showFullLeaderboard(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final blurEnabled = appDialogBlurEnabled.value;
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.3),
+      builder: (context) => blurEnabled
+          ? BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: _buildLeaderboardDialog(context, isDark),
+            )
+          : _buildLeaderboardDialog(context, isDark),
+    );
+  }
+
+  Widget _buildLeaderboardDialog(BuildContext context, bool isDark) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          width: 500,
+          height: 600,
+          decoration: BoxDecoration(
+            color: isDark ? Colors.grey.shade900.withOpacity(0.7) : Colors.white.withOpacity(0.7),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.1),
+            ),
+          ),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Full Leaderboard',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : Colors.black,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 50,
+                      child: Text(
+                        'Rank',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.shade500,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        'Name',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.shade500,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      'Points',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade500,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: _leaderboard.length,
+                  itemBuilder: (context, index) {
+                    final entry = _leaderboard[index];
+                    final rank = index + 1;
+                    
+                    Color? rankColor;
+                    FontWeight rankWeight = FontWeight.bold;
+                    double rankSize = 14;
+                    
+                    if (rank == 1) {
+                      rankColor = const Color(0xFFD4AF37); // Gold
+                      rankWeight = FontWeight.w900;
+                      rankSize = 16;
+                    } else if (rank == 2) {
+                      rankColor = const Color(0xFFC0C0C0); // Silver
+                      rankWeight = FontWeight.w900;
+                      rankSize = 16;
+                    } else if (rank == 3) {
+                      rankColor = const Color(0xFFCD7F32); // Bronze
+                      rankWeight = FontWeight.w900;
+                      rankSize = 16;
+                    } else {
+                      rankColor = isDark ? Colors.grey.shade300 : Colors.grey.shade700;
+                    }
+                    
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: (isDark ? Colors.grey.shade800 : Colors.grey.shade100).withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 50,
+                              child: Text(
+                                '#$rank',
+                                style: TextStyle(
+                                  fontWeight: rankWeight,
+                                  fontSize: rankSize,
+                                  color: rankColor,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: Text(
+                                entry.accountId,
+                                style: TextStyle(
+                                  color: isDark ? Colors.white70 : Colors.black87,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            Text(
+                              '${entry.hype}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? Colors.orangeAccent : Colors.orange.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _toggleSavePoints(bool value) async {
@@ -2962,16 +3137,15 @@ class _ArenaScreenState extends State<ArenaScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final leaderboardTitleColor = isDark ? Colors.white70 : Colors.black87;
     final podiumBaselineColor = isDark ? Colors.grey.shade700 : Colors.grey.shade300;
-    final listRowColor = isDark ? Colors.grey.shade800 : Colors.grey.shade100;
+    final listRowColor = (isDark ? Colors.grey.shade800 : Colors.grey.shade100).withOpacity(0.5);
     final listRankColor = isDark ? Colors.grey.shade300 : Colors.grey.shade600;
+    final listNameColor = isDark ? Colors.white70 : Colors.black87;
     final listHypeColor = isDark ? Colors.orangeAccent : Colors.orange.shade700;
     final podiumNameColor = isDark ? Colors.white : Colors.black87;
 
     return _BaseScreen(
       title: 'Arena',
-      child: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
+      child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
@@ -3013,28 +3187,43 @@ class _ArenaScreenState extends State<ArenaScreen> {
                       // Right side: Leaderboard Box
                       Expanded(
                         flex: 1,
-                        child: GlassPanel(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
+                        child: Stack(
+                          children: [
+                            GlassPanel(
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 12),
-                                child: Text(
-                                  'Leaderboard',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: leaderboardTitleColor,
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 12),
+                                    child: Text(
+                                      'Leaderboard',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: leaderboardTitleColor,
+                                      ),
+                                    ),
                                   ),
-                                ),
+                                  TextButton.icon(
+                                    onPressed: () => _showFullLeaderboard(context),
+                                    icon: const Icon(Icons.list_alt, size: 16),
+                                    label: const Text('View Full List', style: TextStyle(fontSize: 12)),
+                                    style: TextButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    ),
+                                  ),
+                                ],
                               ),
                               // Top 3 Podium
                               Column(
                                 children: [
                                   SizedBox(
-                                    height: 210,
+                                    height: 230,
                                     child: Row(
                                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                                       crossAxisAlignment: CrossAxisAlignment.end,
@@ -3117,37 +3306,20 @@ class _ArenaScreenState extends State<ArenaScreen> {
                                                    ),
                                                  ),
                                                  child: Center(
-                                                   child: Column(
-                                                     mainAxisAlignment: MainAxisAlignment.center,
-                                                     children: [
-                                                        Text(
-                                                          '#1',
-                                                          style: TextStyle(
-                                                            fontSize: 22,
-                                                            fontWeight: FontWeight.w900,
-                                                            color: Colors.yellow.shade100,
-                                                            shadows: const [
-                                                              Shadow(
-                                                                blurRadius: 10,
-                                                                color: Color(0xCC000000),
-                                                                offset: Offset(0, 2),
-                                                              ),
-                                                            ],
-                                                          ),
-                                                        ),
-                                                       if (top3.isNotEmpty)
-                                                         Padding(
-                                                           padding: const EdgeInsets.only(top: 8),
-                                                           child: Text(
-                                                             '${top3[0].hype}',
-                                                             style: const TextStyle(
-                                                               fontSize: 11,
-                                                               fontWeight: FontWeight.bold,
-                                                               color: Colors.black87,
-                                                             ),
-                                                           ),
+                                                   child: Text(
+                                                     '#1',
+                                                     style: TextStyle(
+                                                       fontSize: 22,
+                                                       fontWeight: FontWeight.w900,
+                                                       color: Colors.yellow.shade100,
+                                                       shadows: const [
+                                                         Shadow(
+                                                           blurRadius: 10,
+                                                           color: Color(0xCC000000),
+                                                           offset: Offset(0, 2),
                                                          ),
-                                                     ],
+                                                       ],
+                                                     ),
                                                    ),
                                                  ),
                                                ),
@@ -3212,7 +3384,47 @@ class _ArenaScreenState extends State<ArenaScreen> {
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 16),
+                              const SizedBox(height: 4),
+                              // Column headers for the list
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 40,
+                                      child: Text(
+                                        'Rank',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.grey.shade500,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                                        child: Text(
+                                          'Name',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.grey.shade500,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Text(
+                                      'Points',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.grey.shade500,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                               // Scrollable list of remaining players
                               Expanded(
                                 child: rest.isEmpty
@@ -3251,7 +3463,16 @@ class _ArenaScreenState extends State<ArenaScreen> {
                                                     ),
                                                   ),
                                                   Expanded(
-                                                    child: SizedBox.shrink(),
+                                                    child: Padding(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                                                      child: Text(
+                                                        entry.accountId,
+                                                        style: TextStyle(
+                                                          color: listNameColor,
+                                                        ),
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
                                                   ),
                                                   Text(
                                                     '${entry.hype}',
@@ -3272,7 +3493,25 @@ class _ArenaScreenState extends State<ArenaScreen> {
                             ),
                           ),
                         ),
-                      ),
+                        // Loading overlay with blur
+                        if (_leaderboardLoading)
+                          Positioned.fill(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: BackdropFilter(
+                                filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+                                child: Container(
+                                  color: Colors.black.withOpacity(0.3),
+                                  child: const Center(
+                                    child: CircularProgressIndicator(),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                     ],
                   ),
                 ),
@@ -4782,7 +5021,7 @@ class ArenaService {
       }
     }
     entries.sort((a, b) => b.hype.compareTo(a.hype));
-    return entries.take(10).toList();
+    return entries;
   }
 }
 
@@ -7268,6 +7507,7 @@ class DataService {
     );
     appBackgroundPath.value = '';
     appBackgroundBlur.value = 18;
+    
     if (context.mounted) {
       ScaffoldMessenger.of(
         context,
@@ -9080,7 +9320,7 @@ String? _resolveBackgroundPath(String path) {
     final medalIcons = {
       1: Icons.emoji_events,
       2: Icons.military_tech,
-      3: Icons.grade,
+      3: Icons.military_tech,
     };
 
     return Column(
@@ -9103,6 +9343,15 @@ String? _resolveBackgroundPath(String path) {
               fontWeight: FontWeight.w700,
               color: nameColor,
             ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '${entry.hype}',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: nameColor.withOpacity(0.8),
           ),
         ),
       ],
