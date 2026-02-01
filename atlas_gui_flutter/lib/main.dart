@@ -1731,7 +1731,7 @@ Future<Color> _computeAcrylicTint(String path) async {
     getBackendRoot(),
     'public',
     'images',
-    'hey-fortnite-flat-earthers-explain-these-images-of-things-v0-0c9emy18f0t81.webp',
+    'DefaultBackground.webp',
   ]);
   final candidatePath = resolved ?? fallbackPath;
   try {
