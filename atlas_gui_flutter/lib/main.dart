@@ -107,12 +107,14 @@ class _AtlasAppState extends State<AtlasApp> {
             ),
           ),
           switchTheme: SwitchThemeData(
-            thumbColor: MaterialStateProperty.resolveWith((states) {
-              if (states.contains(MaterialState.selected)) return accentBlue;
+            thumbColor: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.selected)) return accentBlue;
               return Colors.grey.shade400;
             }),
-            trackColor: MaterialStateProperty.resolveWith((states) {
-              if (states.contains(MaterialState.selected)) return accentBlue.withOpacity(0.55);
+            trackColor: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.selected)) {
+                return accentBlue.withOpacity(0.55);
+              }
               return Colors.black.withOpacity(0.2);
             }),
           ),
@@ -123,8 +125,15 @@ class _AtlasAppState extends State<AtlasApp> {
             style: OutlinedButton.styleFrom(foregroundColor: accentBlue),
           ),
           textTheme: const TextTheme(
-            headlineLarge: TextStyle(fontSize: 36, fontWeight: FontWeight.w700, letterSpacing: 0.4),
-            headlineMedium: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
+            headlineLarge: TextStyle(
+              fontSize: 36,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
+            ),
+            headlineMedium: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w600,
+            ),
             titleLarge: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
             bodyLarge: TextStyle(fontSize: 16, height: 1.4),
             bodyMedium: TextStyle(fontSize: 14, height: 1.4),
@@ -154,12 +163,14 @@ class _AtlasAppState extends State<AtlasApp> {
             ),
           ),
           switchTheme: SwitchThemeData(
-            thumbColor: MaterialStateProperty.resolveWith((states) {
-              if (states.contains(MaterialState.selected)) return accentBlue;
+            thumbColor: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.selected)) return accentBlue;
               return Colors.white54;
             }),
-            trackColor: MaterialStateProperty.resolveWith((states) {
-              if (states.contains(MaterialState.selected)) return accentBlue.withOpacity(0.55);
+            trackColor: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.selected)) {
+                return accentBlue.withOpacity(0.55);
+              }
               return Colors.white24;
             }),
           ),
@@ -170,8 +181,15 @@ class _AtlasAppState extends State<AtlasApp> {
             style: OutlinedButton.styleFrom(foregroundColor: accentBlue),
           ),
           textTheme: const TextTheme(
-            headlineLarge: TextStyle(fontSize: 36, fontWeight: FontWeight.w700, letterSpacing: 0.4),
-            headlineMedium: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
+            headlineLarge: TextStyle(
+              fontSize: 36,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
+            ),
+            headlineMedium: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w600,
+            ),
             titleLarge: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
             bodyLarge: TextStyle(fontSize: 16, height: 1.4),
             bodyMedium: TextStyle(fontSize: 14, height: 1.4),
@@ -195,12 +213,12 @@ class _AtlasScrollBehavior extends MaterialScrollBehavior {
 
   @override
   Set<PointerDeviceKind> get dragDevices => {
-        PointerDeviceKind.mouse,
-        PointerDeviceKind.touch,
-        PointerDeviceKind.trackpad,
-        PointerDeviceKind.stylus,
-        PointerDeviceKind.unknown,
-      };
+    PointerDeviceKind.mouse,
+    PointerDeviceKind.touch,
+    PointerDeviceKind.trackpad,
+    PointerDeviceKind.stylus,
+    PointerDeviceKind.unknown,
+  };
 }
 
 class _SmoothScrollPhysics extends ScrollPhysics {
@@ -210,7 +228,10 @@ class _SmoothScrollPhysics extends ScrollPhysics {
 
   @override
   _SmoothScrollPhysics applyTo(ScrollPhysics? ancestor) {
-    return _SmoothScrollPhysics(parent: buildParent(ancestor), multiplier: multiplier);
+    return _SmoothScrollPhysics(
+      parent: buildParent(ancestor),
+      multiplier: multiplier,
+    );
   }
 
   @override
@@ -234,7 +255,10 @@ Future<T?> _showBlurDialog<T>({
       return SafeArea(child: Center(child: builder(context)));
     },
     transitionBuilder: (context, animation, secondaryAnimation, child) {
-      final curved = CurvedAnimation(parent: animation, curve: Curves.easeInOutSine);
+      final curved = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeInOutSine,
+      );
       final blurEnabled = appDialogBlurEnabled.value;
       final t = curved.value;
       final blurSigma = blurEnabled ? 2.6 * t : 0.0;
@@ -268,7 +292,8 @@ class AtlasHomePage extends StatefulWidget {
   State<AtlasHomePage> createState() => _AtlasHomePageState();
 }
 
-class _AtlasHomePageState extends State<AtlasHomePage> with WidgetsBindingObserver {
+class _AtlasHomePageState extends State<AtlasHomePage>
+    with WidgetsBindingObserver {
   late final BackendController _controller;
   bool _exitInProgress = false;
   bool _checkingUpdate = false;
@@ -283,8 +308,12 @@ class _AtlasHomePageState extends State<AtlasHomePage> with WidgetsBindingObserv
     _controller = BackendController()..startPolling();
     unawaited(_initStartup());
     unawaited(_loadBackendVersion());
-    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeCheckForUpdatesOnLaunch());
-    WidgetsBinding.instance.addPostFrameCallback((_) => UpdateBackupService.restoreIfNeeded(context));
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _maybeCheckForUpdatesOnLaunch(),
+    );
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => UpdateBackupService.restoreIfNeeded(context),
+    );
   }
 
   Future<void> _maybeCheckForUpdatesOnLaunch() async {
@@ -307,7 +336,8 @@ class _AtlasHomePageState extends State<AtlasHomePage> with WidgetsBindingObserv
     final packageFile = File(joinPath([getBackendRoot(), 'package.json']));
     if (!await packageFile.exists()) return;
     try {
-      final json = jsonDecode(await packageFile.readAsString()) as Map<String, dynamic>;
+      final json =
+          jsonDecode(await packageFile.readAsString()) as Map<String, dynamic>;
       final version = json['version']?.toString().trim();
       if (version == null || version.isEmpty) return;
       if (!mounted) return;
@@ -327,7 +357,9 @@ class _AtlasHomePageState extends State<AtlasHomePage> with WidgetsBindingObserv
     if (!mounted) return;
     if (info == null) {
       if (!silent) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No updates available.')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('No updates available.')));
       }
       return;
     }
@@ -348,21 +380,36 @@ class _AtlasHomePageState extends State<AtlasHomePage> with WidgetsBindingObserv
 
     final currentVersion = _normalizeVersion(_backendVersionLabel);
     final olderReleases = _releaseHistory
-        .where((release) => _compareVersions(_normalizeVersion(release.version), currentVersion) < 0)
+        .where(
+          (release) =>
+              _compareVersions(
+                _normalizeVersion(release.version),
+                currentVersion,
+              ) <
+              0,
+        )
         .toList();
 
     if (olderReleases.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No older versions available to downgrade.')),
+        const SnackBar(
+          content: Text('No older versions available to downgrade.'),
+        ),
       );
       return;
     }
 
-    final overlay = Overlay.of(anchorContext).context.findRenderObject() as RenderBox;
+    final overlay =
+        Overlay.of(anchorContext).context.findRenderObject() as RenderBox;
     final box = anchorContext.findRenderObject() as RenderBox;
     final offset = box.localToGlobal(Offset.zero, ancestor: overlay);
     final position = RelativeRect.fromRect(
-      Rect.fromLTWH(offset.dx, offset.dy + box.size.height, box.size.width, box.size.height),
+      Rect.fromLTWH(
+        offset.dx,
+        offset.dy + box.size.height,
+        box.size.width,
+        box.size.height,
+      ),
       Offset.zero & overlay.size,
     );
 
@@ -385,7 +432,9 @@ class _AtlasHomePageState extends State<AtlasHomePage> with WidgetsBindingObserv
         ),
         const PopupMenuDivider(),
         ...olderReleases.map((release) {
-          final dateLabel = release.publishedAt == null ? null : _formatReleaseDate(release.publishedAt!);
+          final dateLabel = release.publishedAt == null
+              ? null
+              : _formatReleaseDate(release.publishedAt!);
           return PopupMenuItem<ReleaseInfo>(
             value: release,
             child: Column(
@@ -395,7 +444,10 @@ class _AtlasHomePageState extends State<AtlasHomePage> with WidgetsBindingObserv
                 if (dateLabel != null)
                   Text(
                     dateLabel,
-                    style: TextStyle(fontSize: 12, color: _onSurface(context, 0.6)),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: _onSurface(context, 0.6),
+                    ),
                   ),
               ],
             ),
@@ -422,8 +474,11 @@ class _AtlasHomePageState extends State<AtlasHomePage> with WidgetsBindingObserv
     );
   }
 
-  Future<void> _showUpdateDialog(UpdateInfo info,
-      {String title = 'An update is available', String actionLabel = 'Update now'}) async {
+  Future<void> _showUpdateDialog(
+    UpdateInfo info, {
+    String title = 'An update is available',
+    String actionLabel = 'Update now',
+  }) async {
     final progress = ValueNotifier<double>(0);
     bool updating = false;
     String? error;
@@ -431,11 +486,16 @@ class _AtlasHomePageState extends State<AtlasHomePage> with WidgetsBindingObserv
       final exePath = Platform.resolvedExecutable;
       if (exePath.isNotEmpty) {
         try {
-          await Process.start(exePath, const [], mode: ProcessStartMode.detached);
+          await Process.start(
+            exePath,
+            const [],
+            mode: ProcessStartMode.detached,
+          );
         } catch (_) {}
       }
       exit(0);
     }
+
     await _showBlurDialog<void>(
       context: context,
       barrierDismissible: !updating,
@@ -461,17 +521,23 @@ class _AtlasHomePageState extends State<AtlasHomePage> with WidgetsBindingObserv
                   tagRow,
                   const SizedBox(height: 12),
                   if (info.notes != null && info.notes!.isNotEmpty)
-                    Text(info.notes!, style: Theme.of(context).textTheme.bodySmall),
+                    Text(
+                      info.notes!,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   if (updating) ...[
                     const SizedBox(height: 16),
                     ValueListenableBuilder<double>(
                       valueListenable: progress,
                       builder: (context, value, _) {
-                        final pct = (value.clamp(0.0, 1.0) * 100).toStringAsFixed(0);
+                        final pct = (value.clamp(0.0, 1.0) * 100)
+                            .toStringAsFixed(0);
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            LinearProgressIndicator(value: value > 0 && value < 1 ? value : null),
+                            LinearProgressIndicator(
+                              value: value > 0 && value < 1 ? value : null,
+                            ),
                             const SizedBox(height: 6),
                             Text('Downloading... $pct%'),
                           ],
@@ -481,7 +547,10 @@ class _AtlasHomePageState extends State<AtlasHomePage> with WidgetsBindingObserv
                   ],
                   if (error != null) ...[
                     const SizedBox(height: 12),
-                    Text(error!, style: const TextStyle(color: Colors.redAccent)),
+                    Text(
+                      error!,
+                      style: const TextStyle(color: Colors.redAccent),
+                    ),
                   ],
                 ],
               ),
@@ -505,13 +574,22 @@ class _AtlasHomePageState extends State<AtlasHomePage> with WidgetsBindingObserv
                           try {
                             await _controller.stopBackend();
                             await UpdateBackupService.backupBeforeUpdate();
-                            await UpdateService.downloadAndApply(info, progress);
+                            await UpdateService.downloadAndApply(
+                              info,
+                              progress,
+                            );
                             if (!mounted) return;
                             Navigator.pop(context);
                             ScaffoldMessenger.of(this.context).showSnackBar(
-                              SnackBar(content: Text('Updated to ${info.latestLabel}. Restarting...')),
+                              SnackBar(
+                                content: Text(
+                                  'Updated to ${info.latestLabel}. Restarting...',
+                                ),
+                              ),
                             );
-                            await Future<void>.delayed(const Duration(milliseconds: 600));
+                            await Future<void>.delayed(
+                              const Duration(milliseconds: 600),
+                            );
                             await restartApp();
                           } catch (err) {
                             setState(() {
@@ -570,9 +648,18 @@ class _AtlasHomePageState extends State<AtlasHomePage> with WidgetsBindingObserv
       icon: Icons.tune,
       accent: Color(0xFF6BE7FF),
       actions: [
-        MenuAction(title: 'Toggle Straight Bloom', description: 'Enable or disable straight bloom.'),
-        MenuAction(title: 'Toggle CurveTables', description: 'Enable or disable all CurveTables.'),
-        MenuAction(title: 'CurveTable Settings', description: 'Manage individual tables.'),
+        MenuAction(
+          title: 'Toggle Straight Bloom',
+          description: 'Enable or disable straight bloom.',
+        ),
+        MenuAction(
+          title: 'Toggle CurveTables',
+          description: 'Enable or disable all CurveTables.',
+        ),
+        MenuAction(
+          title: 'CurveTable Settings',
+          description: 'Manage individual tables.',
+        ),
       ],
     ),
     MenuItemData(
@@ -582,8 +669,14 @@ class _AtlasHomePageState extends State<AtlasHomePage> with WidgetsBindingObserv
       accent: Color(0xFFFF6A8C),
       enabled: false,
       actions: [
-        MenuAction(title: 'Arena Leaderboard', description: 'View top profiles.'),
-        MenuAction(title: 'Save Arena Points', description: 'Toggle saving points.'),
+        MenuAction(
+          title: 'Arena Leaderboard',
+          description: 'View top profiles.',
+        ),
+        MenuAction(
+          title: 'Save Arena Points',
+          description: 'Toggle saving points.',
+        ),
       ],
     ),
     MenuItemData(
@@ -603,8 +696,14 @@ class _AtlasHomePageState extends State<AtlasHomePage> with WidgetsBindingObserv
       icon: Icons.people_alt_rounded,
       accent: Color(0xFF7EE081),
       actions: [
-        MenuAction(title: 'View Profiles', description: 'See all local profiles.'),
-        MenuAction(title: 'Apply Preset', description: 'Replace a profile with a preset.'),
+        MenuAction(
+          title: 'View Profiles',
+          description: 'See all local profiles.',
+        ),
+        MenuAction(
+          title: 'Apply Preset',
+          description: 'Replace a profile with a preset.',
+        ),
       ],
     ),
   ];
@@ -631,7 +730,9 @@ class _AtlasHomePageState extends State<AtlasHomePage> with WidgetsBindingObserv
                       statusColor: _controller.statusColor,
                       versionLabel: _backendVersionLabel,
                       onVersionPressed: _showVersionHistoryMenu,
-                      onSettingsPressed: () => Navigator.of(context).push(_buildRoute(const SettingsScreen())),
+                      onSettingsPressed: () => Navigator.of(
+                        context,
+                      ).push(_buildRoute(const SettingsScreen())),
                       onCheckUpdates: () => _checkForUpdates(silent: false),
                       height: 110,
                     ),
@@ -641,16 +742,14 @@ class _AtlasHomePageState extends State<AtlasHomePage> with WidgetsBindingObserv
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          flex: 3,
-                          child: _MenuGrid(items: _menuItems),
-                        ),
+                        Expanded(flex: 3, child: _MenuGrid(items: _menuItems)),
                         const SizedBox(width: 28),
                         Expanded(
                           flex: 2,
                           child: AnimatedBuilder(
                             animation: _controller,
-                            builder: (_, __) => _SidePanel(controller: _controller),
+                            builder: (_, __) =>
+                                _SidePanel(controller: _controller),
                           ),
                         ),
                       ],
@@ -704,11 +803,7 @@ class _TopBar extends StatelessWidget {
           GestureDetector(
             onTap: () => _showAboutDialog(context),
             child: bannerFile.existsSync()
-                ? Image.file(
-                    bannerFile,
-                    height: 100,
-                    fit: BoxFit.contain,
-                  )
+                ? Image.file(bannerFile, height: 100, fit: BoxFit.contain)
                 : Row(
                     children: [
                       Image.asset(
@@ -726,7 +821,9 @@ class _TopBar extends StatelessWidget {
                           const SizedBox(height: 4),
                           Text(
                             'Backend control center',
-                            style: textTheme.bodyMedium?.copyWith(color: _onSurface(context, 0.7)),
+                            style: textTheme.bodyMedium?.copyWith(
+                              color: _onSurface(context, 0.7),
+                            ),
                           ),
                         ],
                       ),
@@ -754,7 +851,9 @@ class _TopBar extends StatelessWidget {
             builder: (pillContext) => _HoverScale(
               enabled: onVersionPressed != null,
               child: GestureDetector(
-                onTap: onVersionPressed == null ? null : () => onVersionPressed!(pillContext),
+                onTap: onVersionPressed == null
+                    ? null
+                    : () => onVersionPressed!(pillContext),
                 child: _StatusPill(
                   label: 'Version',
                   value: versionLabel,
@@ -813,16 +912,17 @@ class _StatusPill extends StatelessWidget {
         children: [
           Text(
             '$label: ',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: _onSurface(context, 0.7)),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: _onSurface(context, 0.7)),
           ),
           Text(
             value,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
           ),
-          if (trailing != null) ...[
-            const SizedBox(width: 6),
-            trailing!,
-          ],
+          if (trailing != null) ...[const SizedBox(width: 6), trailing!],
         ],
       ),
     );
@@ -847,9 +947,9 @@ class _VersionTag extends StatelessWidget {
       child: Text(
         label,
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: color,
-              fontWeight: FontWeight.w600,
-            ),
+          color: color,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
@@ -877,7 +977,9 @@ class _MenuGrid extends StatelessWidget {
           data: item,
           onTap: item.enabled
               ? () {
-                  Navigator.of(context).push(_buildRoute(_pageForMenu(item.title)));
+                  Navigator.of(
+                    context,
+                  ).push(_buildRoute(_pageForMenu(item.title)));
                 }
               : null,
         );
@@ -929,7 +1031,9 @@ class _MenuCardState extends State<MenuCard> {
                   end: Alignment.bottomRight,
                 ),
                 border: Border.all(
-                  color: _hovered && isEnabled ? accent.withOpacity(0.8) : _onSurface(context, 0.12),
+                  color: _hovered && isEnabled
+                      ? accent.withOpacity(0.8)
+                      : _onSurface(context, 0.12),
                   width: 1.2,
                 ),
                 boxShadow: [
@@ -967,15 +1071,23 @@ class _MenuCardState extends State<MenuCard> {
                         child: Icon(widget.data.icon, color: accent, size: 26),
                       ),
                       const Spacer(),
-                      Icon(Icons.arrow_forward_rounded, color: _onSurface(context, 0.7)),
+                      Icon(
+                        Icons.arrow_forward_rounded,
+                        color: _onSurface(context, 0.7),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 16),
-                  Text(widget.data.title, style: Theme.of(context).textTheme.titleLarge),
+                  Text(
+                    widget.data.title,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
                   const SizedBox(height: 4),
                   Text(
                     widget.data.subtitle,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: _onSurface(context, 0.7)),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: _onSurface(context, 0.7),
+                    ),
                   ),
                   const SizedBox(height: 4),
                 ],
@@ -1035,40 +1147,58 @@ class _SidePanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Quick Actions', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              'Quick Actions',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 16),
             _ActionButton(
               label: controller.isStarting ? 'Starting...' : 'Start Backend',
               icon: Icons.play_arrow_rounded,
               color: const Color(0xFF5BE0B3),
-              onPressed: (controller.isRunning || controller.isStarting || controller.isStopping || controller.isRestarting) 
-                ? null 
-                : controller.startBackend,
+              onPressed:
+                  (controller.isRunning ||
+                      controller.isStarting ||
+                      controller.isStopping ||
+                      controller.isRestarting)
+                  ? null
+                  : controller.startBackend,
             ),
             const SizedBox(height: 12),
             _ActionButton(
-              label: controller.isRestarting ? 'Restarting...' : 'Restart Backend',
+              label: controller.isRestarting
+                  ? 'Restarting...'
+                  : 'Restart Backend',
               icon: Icons.refresh_rounded,
               color: const Color(0xFF7CC0FF),
-              onPressed: (!controller.isRunning || controller.isStarting || controller.isStopping || controller.isRestarting)
-                ? null 
-                : controller.restartBackend,
+              onPressed:
+                  (!controller.isRunning ||
+                      controller.isStarting ||
+                      controller.isStopping ||
+                      controller.isRestarting)
+                  ? null
+                  : controller.restartBackend,
             ),
             const SizedBox(height: 12),
             _ActionButton(
               label: controller.isStopping ? 'Stopping...' : 'Stop Backend',
               icon: Icons.stop_circle_outlined,
               color: const Color(0xFFFF6A8C),
-              onPressed: (!controller.isRunning || controller.isStarting || controller.isStopping || controller.isRestarting)
-                ? null 
-                : controller.stopBackend,
+              onPressed:
+                  (!controller.isRunning ||
+                      controller.isStarting ||
+                      controller.isStopping ||
+                      controller.isRestarting)
+                  ? null
+                  : controller.stopBackend,
             ),
             const SizedBox(height: 12),
             _ActionButton(
               label: 'Open Logs',
               icon: Icons.receipt_long,
               color: const Color(0xFF7CC0FF),
-              onPressed: () => Navigator.of(context).push(_buildRoute(const LogsScreen())),
+              onPressed: () =>
+                  Navigator.of(context).push(_buildRoute(const LogsScreen())),
             ),
             const SizedBox(height: 16),
             Text('Live Logs', style: Theme.of(context).textTheme.titleLarge),
@@ -1090,7 +1220,9 @@ class _SidePanel extends StatelessWidget {
                       padding: const EdgeInsets.only(bottom: 6),
                       child: SelectableText(
                         log,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: _onSurface(context, 0.7)),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: _onSurface(context, 0.7),
+                        ),
                       ),
                     );
                   },
@@ -1100,7 +1232,9 @@ class _SidePanel extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               'Welcome to ATLAS Backend! - @cipherfps',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: _onSurface(context, 0.6)),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: _onSurface(context, 0.6)),
             ),
           ],
         ),
@@ -1110,7 +1244,12 @@ class _SidePanel extends StatelessWidget {
 }
 
 class _ActionButton extends StatelessWidget {
-  const _ActionButton({required this.label, required this.icon, required this.color, this.onPressed});
+  const _ActionButton({
+    required this.label,
+    required this.icon,
+    required this.color,
+    this.onPressed,
+  });
 
   final String label;
   final IconData icon;
@@ -1127,7 +1266,9 @@ class _ActionButton extends StatelessWidget {
       child: ElevatedButton.icon(
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(
-          backgroundColor: isEnabled ? color.withOpacity(isDark ? 0.28 : 0.35) : _onSurface(context, isDark ? 0.14 : 0.06),
+          backgroundColor: isEnabled
+              ? color.withOpacity(isDark ? 0.28 : 0.35)
+              : _onSurface(context, isDark ? 0.14 : 0.06),
           foregroundColor: isEnabled ? fgColor : _onSurface(context, 0.35),
           disabledBackgroundColor: _onSurface(context, isDark ? 0.14 : 0.06),
           disabledForegroundColor: _onSurface(context, 0.35),
@@ -1160,9 +1301,19 @@ class _InfoTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text(label, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: _onSurface(context, 0.7))),
+        Text(
+          label,
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: _onSurface(context, 0.7)),
+        ),
         const Spacer(),
-        Text(value, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+        Text(
+          value,
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+        ),
       ],
     );
   }
@@ -1205,9 +1356,16 @@ class FeatureScreen extends StatelessWidget {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(data.title, style: Theme.of(context).textTheme.headlineMedium),
+                        Text(
+                          data.title,
+                          style: Theme.of(context).textTheme.headlineMedium,
+                        ),
                         const SizedBox(height: 4),
-                        Text(data.subtitle, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: _onSurface(context, 0.7))),
+                        Text(
+                          data.subtitle,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: _onSurface(context, 0.7)),
+                        ),
                       ],
                     ),
                   ],
@@ -1220,32 +1378,52 @@ class FeatureScreen extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Actions', style: Theme.of(context).textTheme.titleLarge),
+                          Text(
+                            'Actions',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
                           const SizedBox(height: 16),
                           Expanded(
                             child: ListView.separated(
                               itemCount: data.actions.length,
-                              separatorBuilder: (_, __) => const SizedBox(height: 12),
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 12),
                               itemBuilder: (context, index) {
                                 final action = data.actions[index];
                                 return ListTile(
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
                                   tileColor: Colors.white10,
-                                  leading: Icon(Icons.chevron_right_rounded, color: data.accent),
+                                  leading: Icon(
+                                    Icons.chevron_right_rounded,
+                                    color: data.accent,
+                                  ),
                                   title: Text(action.title),
                                   subtitle: Text(action.description),
                                   trailing: _HoverScale(
                                     child: ElevatedButton(
                                       onPressed: () {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(content: Text('${action.title} (coming soon)')),
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              '${action.title} (coming soon)',
+                                            ),
+                                          ),
                                         );
                                       },
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: data.accent.withOpacity(0.15),
+                                        backgroundColor: data.accent
+                                            .withOpacity(0.15),
                                         foregroundColor: data.accent,
                                         elevation: 0,
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
                                       ),
                                       child: const Text('Open'),
                                     ),
@@ -1282,7 +1460,9 @@ class GlassPanel extends StatelessWidget {
         filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
         child: Container(
           decoration: BoxDecoration(
-            color: isDark ? Colors.white.withOpacity(0.06) : Colors.white.withOpacity(0.5),
+            color: isDark
+                ? Colors.white.withOpacity(0.06)
+                : Colors.white.withOpacity(0.5),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(color: _onSurface(context, 0.08)),
           ),
@@ -1321,7 +1501,10 @@ class AtlasBackground extends StatelessWidget {
             if (customBackground != null) {
               return Positioned.fill(
                 child: ImageFiltered(
-                  imageFilter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+                  imageFilter: ImageFilter.blur(
+                    sigmaX: blurSigma,
+                    sigmaY: blurSigma,
+                  ),
                   child: Image.file(
                     customBackground,
                     fit: BoxFit.cover,
@@ -1333,7 +1516,10 @@ class AtlasBackground extends StatelessWidget {
             if (imageFile.existsSync()) {
               return Positioned.fill(
                 child: ImageFiltered(
-                  imageFilter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+                  imageFilter: ImageFilter.blur(
+                    sigmaX: blurSigma,
+                    sigmaY: blurSigma,
+                  ),
                   child: Image.file(
                     imageFile,
                     fit: BoxFit.cover,
@@ -1357,8 +1543,14 @@ class AtlasBackground extends StatelessWidget {
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: isDark
-                  ? [Colors.black.withOpacity(0.65), Colors.black.withOpacity(0.35)]
-                  : [Colors.white.withOpacity(0.55), Colors.white.withOpacity(0.2)],
+                  ? [
+                      Colors.black.withOpacity(0.65),
+                      Colors.black.withOpacity(0.35),
+                    ]
+                  : [
+                      Colors.white.withOpacity(0.55),
+                      Colors.white.withOpacity(0.2),
+                    ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -1373,8 +1565,8 @@ class _HoverScale extends StatefulWidget {
   const _HoverScale({
     required this.child,
     this.enabled = true,
-    this.scale = 1.03,
-    this.duration = const Duration(milliseconds: 140),
+    this.scale = 1.05,
+    this.duration = const Duration(milliseconds: 200),
   });
 
   final Widget child;
@@ -1431,7 +1623,10 @@ class _ImageDropShadow extends StatelessWidget {
           child: ImageFiltered(
             imageFilter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
             child: ColorFiltered(
-              colorFilter: ColorFilter.mode(Colors.black.withOpacity(opacity), BlendMode.srcIn),
+              colorFilter: ColorFilter.mode(
+                Colors.black.withOpacity(opacity),
+                BlendMode.srcIn,
+              ),
               child: child,
             ),
           ),
@@ -1527,10 +1722,7 @@ Color _onSurface(BuildContext context, double opacity) {
 Future<void> _applyAcrylicForBackground(String path) async {
   if (!Platform.isWindows) return;
   final color = await _computeAcrylicTint(path);
-  await Window.setEffect(
-    effect: WindowEffect.acrylic,
-    color: color,
-  );
+  await Window.setEffect(effect: WindowEffect.acrylic, color: color);
 }
 
 Future<Color> _computeAcrylicTint(String path) async {
@@ -1662,7 +1854,10 @@ Future<void> _showAboutDialog(BuildContext context) async {
       ),
       actions: [
         _HoverScale(
-          child: TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+          child: TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
         ),
       ],
     ),
@@ -1686,7 +1881,10 @@ PageRouteBuilder<void> _buildRoute(Widget page) {
     transitionDuration: const Duration(milliseconds: 260),
     pageBuilder: (_, __, ___) => page,
     transitionsBuilder: (_, animation, __, child) {
-      final curve = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+      final curve = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+      );
       return FadeTransition(opacity: curve, child: child);
     },
   );
@@ -1738,7 +1936,12 @@ Widget _pageForMenu(String title) {
           subtitle: 'Coming soon',
           icon: Icons.dashboard_customize,
           accent: const Color(0xFF6BE7FF),
-          actions: const [MenuAction(title: 'Coming soon', description: 'This menu is being built.')],
+          actions: const [
+            MenuAction(
+              title: 'Coming soon',
+              description: 'This menu is being built.',
+            ),
+          ],
         ),
       );
   }
@@ -1811,7 +2014,10 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     final source = File(path);
     if (!await source.exists()) return;
     final importContent = await source.readAsString();
-    final regex = RegExp('^\\+CurveTable=(.+?);RowUpdate;(.+?);(\\d+);(.+)\$', multiLine: true);
+    final regex = RegExp(
+      '^\\+CurveTable=(.+?);RowUpdate;(.+?);(\\d+);(.+)\$',
+      multiLine: true,
+    );
     final matches = regex.allMatches(importContent).toList();
     if (matches.isEmpty) return;
 
@@ -1826,7 +2032,10 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
 
     final existing = await CurveTableService.loadCurves();
     final existingKeys = existing
-        .map((entry) => '${entry.pathPart ?? BackendPaths.defaultCurvePath}|||${entry.key}')
+        .map(
+          (entry) =>
+              '${entry.pathPart ?? BackendPaths.defaultCurvePath}|||${entry.key}',
+        )
         .toSet();
 
     final missing = <_ImportCurveDraft>[];
@@ -1853,7 +2062,11 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     }
 
     if (missing.isNotEmpty) {
-      final inputs = await _promptImportMissingCurves(context, missing, _groupInfosForPrompt(_curves));
+      final inputs = await _promptImportMissingCurves(
+        context,
+        missing,
+        _groupInfosForPrompt(_curves),
+      );
       if (inputs != null && inputs.isNotEmpty) {
         await CurveTableService.addCustomCurves(inputs);
       }
@@ -1873,9 +2086,17 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
         final promptedValue = await _promptValue(context, entry.name);
         if (promptedValue == null) return;
         controller?.text = promptedValue;
-        await CurveTableService.setCurveEnabled(entry, value, customValue: promptedValue);
+        await CurveTableService.setCurveEnabled(
+          entry,
+          value,
+          customValue: promptedValue,
+        );
       } else {
-        await CurveTableService.setCurveEnabled(entry, value, customValue: valueText);
+        await CurveTableService.setCurveEnabled(
+          entry,
+          value,
+          customValue: valueText,
+        );
       }
     } else {
       await CurveTableService.setCurveEnabled(entry, value);
@@ -1893,25 +2114,33 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
 
   List<CurveGroup> get _groups {
     final builtinIds = _baseCurveGroups.map((group) => group.id).toSet();
-    final customGroups = _customGroupsFromCurves(_curves, excludeIds: builtinIds).map((group) {
-      return CurveGroup(
-        id: group.id,
-        title: group.name,
-        imagePath: group.imagePath,
-        icon: Icons.auto_awesome,
-        keywords: const [],
-        isCustom: true,
-      );
-    }).toList();
+    final customGroups =
+        _customGroupsFromCurves(_curves, excludeIds: builtinIds).map((group) {
+          return CurveGroup(
+            id: group.id,
+            title: group.name,
+            imagePath: group.imagePath,
+            icon: Icons.auto_awesome,
+            keywords: const [],
+            isCustom: true,
+          );
+        }).toList();
 
     return [..._baseCurveGroups, ...customGroups];
   }
 
-  List<CurveEntry> _entriesForGroup(CurveGroup group, List<CurveEntry> entries) {
+  List<CurveEntry> _entriesForGroup(
+    CurveGroup group,
+    List<CurveEntry> entries,
+  ) {
     final scopedEntries = group.isCustom
         ? entries.where((entry) => entry.isCustom).toList()
-        : entries.where((entry) => !entry.isCustom || entry.groupId == group.id).toList();
-    final groupMatches = scopedEntries.where((entry) => group.matches(entry)).toList();
+        : entries
+              .where((entry) => !entry.isCustom || entry.groupId == group.id)
+              .toList();
+    final groupMatches = scopedEntries
+        .where((entry) => group.matches(entry))
+        .toList();
     if (!group.isCustom && group.id == 'glider') {
       return groupMatches.where((entry) {
         final name = entry.name.toLowerCase();
@@ -1939,7 +2168,10 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
   }
 
   Future<void> _addCustomCurve() async {
-    final inputs = await _promptCustomCurves(context, _groupInfosForPrompt(_curves));
+    final inputs = await _promptCustomCurves(
+      context,
+      _groupInfosForPrompt(_curves),
+    );
     if (inputs == null || inputs.isEmpty) return;
     await CurveTableService.addCustomCurves(inputs);
     await _load();
@@ -1952,7 +2184,8 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
         .toList();
     final selectedGroup = visibleGroups.firstWhere(
       (group) => group.id == _selectedGroupId,
-      orElse: () => visibleGroups.isNotEmpty ? visibleGroups.first : _groups.first,
+      orElse: () =>
+          visibleGroups.isNotEmpty ? visibleGroups.first : _groups.first,
     );
     return _BaseScreen(
       title: 'Modifications',
@@ -1965,14 +2198,20 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                   value: _straightBloom,
                   onChanged: _toggleStraightBloom,
                   title: const Text('Straight Bloom (Sniper)'),
-                  subtitle: const Text('Toggle straight bloom lines in DefaultGame.ini'),
+                  subtitle: const Text(
+                    'Toggle straight bloom lines in DefaultGame.ini',
+                  ),
                 ),
                 const SizedBox(height: 20),
                 const _SectionTitle(title: 'CurveTables'),
                 SwitchListTile(
                   value: _curveTablesEnabled,
                   onChanged: (_) => _toggleCurveTables(),
-                  title: Text(_curveTablesEnabled ? 'CurveTables Enabled' : 'CurveTables Disabled'),
+                  title: Text(
+                    _curveTablesEnabled
+                        ? 'CurveTables Enabled'
+                        : 'CurveTables Disabled',
+                  ),
                   subtitle: const Text('Toggle all CurveTable entries on/off'),
                 ),
                 const SizedBox(height: 8),
@@ -1991,32 +2230,49 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                               children: visibleGroups.map((group) {
                                 final isSelected = selectedGroup.id == group.id;
                                 final imageFile = File(_groupImagePath(group));
-                                final isDark = Theme.of(context).brightness == Brightness.dark;
+                                final isDark =
+                                    Theme.of(context).brightness ==
+                                    Brightness.dark;
                                 return GestureDetector(
-                                  onTap: () => setState(() => _selectedGroupId = group.id),
+                                  onTap: () => setState(
+                                    () => _selectedGroupId = group.id,
+                                  ),
                                   child: _HoverRegion(
                                     builder: (context, hovered) => AnimatedScale(
-                                      duration: const Duration(milliseconds: 140),
+                                      duration: const Duration(
+                                        milliseconds: 140,
+                                      ),
                                       curve: Curves.easeOutCubic,
                                       scale: hovered ? 1.03 : 1,
                                       child: AnimatedContainer(
-                                        duration: const Duration(milliseconds: 180),
+                                        duration: const Duration(
+                                          milliseconds: 180,
+                                        ),
                                         width: 140,
                                         height: 110,
                                         padding: const EdgeInsets.all(10),
                                         decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(16),
+                                          borderRadius: BorderRadius.circular(
+                                            16,
+                                          ),
                                           color: isSelected
-                                              ? Theme.of(context).colorScheme.secondary.withOpacity(0.18)
+                                              ? Theme.of(context)
+                                                    .colorScheme
+                                                    .secondary
+                                                    .withOpacity(0.18)
                                               : Colors.black.withOpacity(0.08),
                                           border: Border.all(
                                             color: isSelected
-                                                ? Theme.of(context).colorScheme.secondary.withOpacity(0.6)
+                                                ? Theme.of(context)
+                                                      .colorScheme
+                                                      .secondary
+                                                      .withOpacity(0.6)
                                                 : _onSurface(context, 0.12),
                                           ),
                                         ),
                                         child: Column(
-                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
                                           children: [
                                             if (imageFile.existsSync())
                                               _HoverShadow(
@@ -2027,10 +2283,14 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                                                 hovered: hovered,
                                                 child: (group.id == 'fall'
                                                     ? ColorFiltered(
-                                                        colorFilter: ColorFilter.mode(
-                                                          isDark ? Colors.white : Colors.black,
-                                                          BlendMode.srcIn,
-                                                        ),
+                                                        colorFilter:
+                                                            ColorFilter.mode(
+                                                              isDark
+                                                                  ? Colors.white
+                                                                  : Colors
+                                                                        .black,
+                                                              BlendMode.srcIn,
+                                                            ),
                                                         child: Image.file(
                                                           imageFile,
                                                           width: 52,
@@ -2038,7 +2298,12 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                                                           fit: BoxFit.contain,
                                                         ),
                                                       )
-                                                    : Image.file(imageFile, width: 52, height: 52, fit: BoxFit.contain)),
+                                                    : Image.file(
+                                                        imageFile,
+                                                        width: 52,
+                                                        height: 52,
+                                                        fit: BoxFit.contain,
+                                                      )),
                                               )
                                             else
                                               _HoverShadow(
@@ -2050,14 +2315,18 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                                                 child: Icon(
                                                   group.icon,
                                                   size: 38,
-                                                  color: Theme.of(context).colorScheme.secondary,
+                                                  color: Theme.of(
+                                                    context,
+                                                  ).colorScheme.secondary,
                                                 ),
                                               ),
                                             const SizedBox(height: 8),
                                             Text(
                                               group.title,
                                               textAlign: TextAlign.center,
-                                              style: Theme.of(context).textTheme.bodySmall,
+                                              style: Theme.of(
+                                                context,
+                                              ).textTheme.bodySmall,
                                             ),
                                           ],
                                         ),
@@ -2070,17 +2339,21 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                             const SizedBox(height: 16),
                             Row(
                               children: [
-                                Text(selectedGroup.title, style: Theme.of(context).textTheme.titleLarge),
+                                Text(
+                                  selectedGroup.title,
+                                  style: Theme.of(context).textTheme.titleLarge,
+                                ),
                                 const Spacer(),
                                 if (selectedGroup.isCustom)
                                   _HoverScale(
                                     child: OutlinedButton.icon(
                                       onPressed: () async {
-                                        final updated = await _promptEditCustomGroup(
-                                          context,
-                                          selectedGroup.id,
-                                          selectedGroup.title,
-                                        );
+                                        final updated =
+                                            await _promptEditCustomGroup(
+                                              context,
+                                              selectedGroup.id,
+                                              selectedGroup.title,
+                                            );
                                         if (updated == null) return;
                                         await CurveTableService.updateCustomGroup(
                                           selectedGroup.id,
@@ -2093,25 +2366,35 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                                       label: const Text('Edit Group'),
                                     ),
                                   ),
-                                if (selectedGroup.isCustom) const SizedBox(width: 8),
+                                if (selectedGroup.isCustom)
+                                  const SizedBox(width: 8),
                                 if (selectedGroup.isCustom)
                                   _HoverScale(
                                     child: OutlinedButton.icon(
                                       onPressed: () async {
-                                        final confirm = await DataService._confirmDialog(
-                                          context,
-                                          'Delete group "${selectedGroup.title}" and all its custom curves?',
-                                        );
+                                        final confirm =
+                                            await DataService._confirmDialog(
+                                              context,
+                                              'Delete group "${selectedGroup.title}" and all its custom curves?',
+                                            );
                                         if (!confirm) return;
-                                        await CurveTableService.deleteCustomGroup(selectedGroup.id);
+                                        await CurveTableService.deleteCustomGroup(
+                                          selectedGroup.id,
+                                        );
                                         await _load();
                                       },
-                                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                      icon: const Icon(
+                                        Icons.delete_outline,
+                                        color: Colors.redAccent,
+                                      ),
                                       label: const Text('Delete Group'),
-                                      style: OutlinedButton.styleFrom(foregroundColor: Colors.redAccent),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.redAccent,
+                                      ),
                                     ),
                                   ),
-                                if (selectedGroup.isCustom) const SizedBox(width: 8),
+                                if (selectedGroup.isCustom)
+                                  const SizedBox(width: 8),
                                 _HoverScale(
                                   enabled: _curveTablesEnabled,
                                   child: OutlinedButton.icon(
@@ -2128,7 +2411,9 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                                   enabled: _curveTablesEnabled,
                                   child: OutlinedButton.icon(
                                     onPressed: _importCurvesInModifications,
-                                    icon: const Icon(Icons.file_upload_outlined),
+                                    icon: const Icon(
+                                      Icons.file_upload_outlined,
+                                    ),
                                     label: const Text('Import INI'),
                                     style: OutlinedButton.styleFrom(
                                       foregroundColor: const Color(0xFF1E88E5),
@@ -2140,15 +2425,18 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                                   enabled: _curveTablesEnabled,
                                   child: OutlinedButton.icon(
                                     onPressed: () async {
-                                      final confirm = await DataService._confirmDialog(
-                                        context,
-                                        'Clear all CurveTables from DefaultGame.ini?',
-                                      );
+                                      final confirm =
+                                          await DataService._confirmDialog(
+                                            context,
+                                            'Clear all CurveTables from DefaultGame.ini?',
+                                          );
                                       if (!confirm) return;
                                       await CurveTableService.clearAllCurveTables();
                                       await _load();
                                     },
-                                    icon: const Icon(Icons.delete_sweep_outlined),
+                                    icon: const Icon(
+                                      Icons.delete_sweep_outlined,
+                                    ),
                                     label: const Text('Clear All CurveTables'),
                                     style: OutlinedButton.styleFrom(
                                       foregroundColor: const Color(0xFF1E88E5),
@@ -2158,38 +2446,52 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                               ],
                             ),
                             const SizedBox(height: 12),
-                            ..._entriesForGroup(
-                              selectedGroup,
-                              _curves,
-                            ).map((entry) {
-                              final controller = _valueControllers.putIfAbsent(entry.id, () => TextEditingController());
+                            ..._entriesForGroup(selectedGroup, _curves).map((
+                              entry,
+                            ) {
+                              final controller = _valueControllers.putIfAbsent(
+                                entry.id,
+                                () => TextEditingController(),
+                              );
                               return _CurveEntryTile(
                                 entry: entry,
                                 enabled: _curveTablesEnabled,
                                 valueController: controller,
                                 onToggle: (value) => _toggleCurve(entry, value),
-                                onSubmit: (value) => _updateCurveValue(entry, value),
+                                onSubmit: (value) =>
+                                    _updateCurveValue(entry, value),
                                 onEdit: entry.isCustom
                                     ? () async {
-                                        final updated = await _promptEditCustomCurve(context, entry, _groupInfosForPrompt(_curves));
+                                        final updated =
+                                            await _promptEditCustomCurve(
+                                              context,
+                                              entry,
+                                              _groupInfosForPrompt(_curves),
+                                            );
                                         if (updated == null) return;
-                                        await CurveTableService.updateCustomCurve(entry.id, updated);
+                                        await CurveTableService.updateCustomCurve(
+                                          entry.id,
+                                          updated,
+                                        );
                                         await _load();
                                       }
                                     : null,
                                 onDelete: entry.isCustom
                                     ? () async {
-                                        final confirm = await DataService._confirmDialog(
-                                          context,
-                                          'Delete custom curve "${entry.name}"?',
-                                        );
+                                        final confirm =
+                                            await DataService._confirmDialog(
+                                              context,
+                                              'Delete custom curve "${entry.name}"?',
+                                            );
                                         if (!confirm) return;
-                                        await CurveTableService.deleteCustomCurve(entry.id);
+                                        await CurveTableService.deleteCustomCurve(
+                                          entry.id,
+                                        );
                                         await _load();
                                       }
                                     : null,
                               );
-                            }).toList(),
+                            }),
                           ],
                         ),
                 ],
@@ -2247,9 +2549,17 @@ class _CurveTablesScreenState extends State<CurveTablesScreen> {
         final promptedValue = await _promptValue(context, entry.name);
         if (promptedValue == null) return;
         controller?.text = promptedValue;
-        await CurveTableService.setCurveEnabled(entry, value, customValue: promptedValue);
+        await CurveTableService.setCurveEnabled(
+          entry,
+          value,
+          customValue: promptedValue,
+        );
       } else {
-        await CurveTableService.setCurveEnabled(entry, value, customValue: valueText);
+        await CurveTableService.setCurveEnabled(
+          entry,
+          value,
+          customValue: valueText,
+        );
       }
     } else {
       await CurveTableService.setCurveEnabled(entry, value);
@@ -2266,7 +2576,10 @@ class _CurveTablesScreenState extends State<CurveTablesScreen> {
   }
 
   Future<void> _addCustomCurve() async {
-    final inputs = await _promptCustomCurves(context, _groupInfosForPrompt(_curves));
+    final inputs = await _promptCustomCurves(
+      context,
+      _groupInfosForPrompt(_curves),
+    );
     if (inputs == null || inputs.isEmpty) return;
     await CurveTableService.addCustomCurves(inputs);
     await _load();
@@ -2288,7 +2601,8 @@ class _CurveTablesScreenState extends State<CurveTablesScreen> {
     final filtered = _curves.where((entry) {
       if (_search.trim().isEmpty) return true;
       final query = _search.toLowerCase();
-      return entry.name.toLowerCase().contains(query) || entry.key.toLowerCase().contains(query);
+      return entry.name.toLowerCase().contains(query) ||
+          entry.key.toLowerCase().contains(query);
     }).toList();
 
     return _BaseScreen(
@@ -2331,7 +2645,9 @@ class _CurveTablesScreenState extends State<CurveTablesScreen> {
                 if (!_globalEnabled)
                   const Padding(
                     padding: EdgeInsets.only(bottom: 12),
-                    child: Text('CurveTables are disabled. Enable them in Modifications to edit.'),
+                    child: Text(
+                      'CurveTables are disabled. Enable them in Modifications to edit.',
+                    ),
                   ),
                 Expanded(
                   child: ListView.separated(
@@ -2339,14 +2655,24 @@ class _CurveTablesScreenState extends State<CurveTablesScreen> {
                     separatorBuilder: (_, __) => const SizedBox(height: 8),
                     itemBuilder: (context, index) {
                       final entry = filtered[index];
-                      _valueControllers.putIfAbsent(entry.id, () => TextEditingController());
+                      _valueControllers.putIfAbsent(
+                        entry.id,
+                        () => TextEditingController(),
+                      );
                       return FutureBuilder<Map<String, dynamic>>(
-                        future: Future.wait([
-                          CurveTableService.isCurveEnabled(entry),
-                          CurveTableService.getCurrentValue(entry),
-                        ]).then((results) => {'enabled': results[0], 'value': results[1]}),
+                        future:
+                            Future.wait([
+                              CurveTableService.isCurveEnabled(entry),
+                              CurveTableService.getCurrentValue(entry),
+                            ]).then(
+                              (results) => {
+                                'enabled': results[0],
+                                'value': results[1],
+                              },
+                            ),
                         builder: (context, snapshot) {
-                          final enabled = snapshot.data?['enabled'] as bool? ?? false;
+                          final enabled =
+                              snapshot.data?['enabled'] as bool? ?? false;
                           final value = snapshot.data?['value'] as String?;
                           final controller = _valueControllers[entry.id]!;
                           if (!enabled) {
@@ -2358,32 +2684,47 @@ class _CurveTablesScreenState extends State<CurveTablesScreen> {
                               controller.text = value;
                             }
                           }
-                          final canEdit = entry.type == 'amount' || (entry.type == 'static' && entry.staticValue == null);
+                          final canEdit =
+                              entry.type == 'amount' ||
+                              (entry.type == 'static' &&
+                                  entry.staticValue == null);
                           return Container(
                             decoration: BoxDecoration(
                               color: Colors.white.withOpacity(0.03),
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: enabled ? const Color(0xFF6BE7FF).withOpacity(0.3) : Colors.white10,
+                                color: enabled
+                                    ? const Color(0xFF6BE7FF).withOpacity(0.3)
+                                    : Colors.white10,
                                 width: 1,
                               ),
                             ),
                             child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
                               child: Row(
                                 children: [
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           entry.name,
-                                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                                          style: const TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w500,
+                                          ),
                                         ),
                                         const SizedBox(height: 4),
                                         Text(
                                           entry.key,
-                                          style: TextStyle(fontSize: 12, color: _onSurface(context, 0.75)),
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: _onSurface(context, 0.75),
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -2394,10 +2735,14 @@ class _CurveTablesScreenState extends State<CurveTablesScreen> {
                                       width: 140,
                                       height: 42,
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFF6BE7FF).withOpacity(0.08),
+                                        color: const Color(
+                                          0xFF6BE7FF,
+                                        ).withOpacity(0.08),
                                         borderRadius: BorderRadius.circular(8),
                                         border: Border.all(
-                                          color: const Color(0xFF6BE7FF).withOpacity(0.4),
+                                          color: const Color(
+                                            0xFF6BE7FF,
+                                          ).withOpacity(0.4),
                                           width: 1.5,
                                         ),
                                       ),
@@ -2411,7 +2756,10 @@ class _CurveTablesScreenState extends State<CurveTablesScreen> {
                                           fontWeight: FontWeight.w500,
                                         ),
                                         decoration: const InputDecoration(
-                                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                          contentPadding: EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 10,
+                                          ),
                                           border: InputBorder.none,
                                           hintText: 'Value...',
                                           hintStyle: TextStyle(
@@ -2420,14 +2768,17 @@ class _CurveTablesScreenState extends State<CurveTablesScreen> {
                                           ),
                                         ),
                                         textAlign: TextAlign.center,
-                                        onSubmitted: (newValue) => _updateCurveValue(entry, newValue),
+                                        onSubmitted: (newValue) =>
+                                            _updateCurveValue(entry, newValue),
                                       ),
                                     ),
                                   ],
                                   const SizedBox(width: 8),
                                   Switch(
                                     value: enabled,
-                                    onChanged: _globalEnabled ? (value) => _toggleCurve(entry, value) : null,
+                                    onChanged: _globalEnabled
+                                        ? (value) => _toggleCurve(entry, value)
+                                        : null,
                                   ),
                                   if (entry.isCustom) ...[
                                     const SizedBox(width: 8),
@@ -2435,13 +2786,17 @@ class _CurveTablesScreenState extends State<CurveTablesScreen> {
                                       child: IconButton(
                                         tooltip: 'Edit Curve',
                                         onPressed: () async {
-                                          final updated = await _promptEditCustomCurve(
-                                            context,
-                                            entry,
-                                            _groupInfosForPrompt(_curves),
-                                          );
+                                          final updated =
+                                              await _promptEditCustomCurve(
+                                                context,
+                                                entry,
+                                                _groupInfosForPrompt(_curves),
+                                              );
                                           if (updated == null) return;
-                                          await CurveTableService.updateCustomCurve(entry.id, updated);
+                                          await CurveTableService.updateCustomCurve(
+                                            entry.id,
+                                            updated,
+                                          );
                                           await _load();
                                         },
                                         icon: const Icon(Icons.edit_outlined),
@@ -2451,15 +2806,21 @@ class _CurveTablesScreenState extends State<CurveTablesScreen> {
                                       child: IconButton(
                                         tooltip: 'Delete Curve',
                                         onPressed: () async {
-                                          final confirm = await DataService._confirmDialog(
-                                            context,
-                                            'Delete custom curve "${entry.name}"?',
-                                          );
+                                          final confirm =
+                                              await DataService._confirmDialog(
+                                                context,
+                                                'Delete custom curve "${entry.name}"?',
+                                              );
                                           if (!confirm) return;
-                                          await CurveTableService.deleteCustomCurve(entry.id);
+                                          await CurveTableService.deleteCustomCurve(
+                                            entry.id,
+                                          );
                                           await _load();
                                         },
-                                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                        icon: const Icon(
+                                          Icons.delete_outline,
+                                          color: Colors.redAccent,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -2533,7 +2894,9 @@ class _ArenaScreenState extends State<ArenaScreen> {
                     children: [
                       Icon(Icons.info_outline, color: Colors.orangeAccent),
                       SizedBox(width: 8),
-                      Text('Arena leaderboard is coming soon. Points saving is live.'),
+                      Text(
+                        'Arena leaderboard is coming soon. Points saving is live.',
+                      ),
                     ],
                   ),
                 ),
@@ -2570,7 +2933,8 @@ class GameConfigurationScreen extends StatefulWidget {
   const GameConfigurationScreen({super.key});
 
   @override
-  State<GameConfigurationScreen> createState() => _GameConfigurationScreenState();
+  State<GameConfigurationScreen> createState() =>
+      _GameConfigurationScreenState();
 }
 
 class _GameConfigurationScreenState extends State<GameConfigurationScreen> {
@@ -2647,46 +3011,61 @@ class _GameConfigurationScreenState extends State<GameConfigurationScreen> {
                 final controls = Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const _SectionTitleWithTag(title: 'Rufus Week Stage', tag: 'v27.11'),
+                    const _SectionTitleWithTag(
+                      title: 'Rufus Week Stage',
+                      tag: 'v27.11',
+                    ),
                     MouseRegion(
-                      onEnter: (_) => setState(() => _preview = _GameConfigPreview.rufusStage),
+                      onEnter: (_) => setState(
+                        () => _preview = _GameConfigPreview.rufusStage,
+                      ),
                       child: Slider(
                         value: _rufusStage.toDouble(),
                         min: 1,
                         max: 4,
                         divisions: 3,
-                      label: 'Stage $_rufusStage',
-                      onChanged: (value) => setState(() {
-                        _rufusStage = value.round();
-                        _preview = _GameConfigPreview.rufusStage;
-                        _scheduleSave();
-                      }),
-                    ),
+                        label: 'Stage $_rufusStage',
+                        onChanged: (value) => setState(() {
+                          _rufusStage = value.round();
+                          _preview = _GameConfigPreview.rufusStage;
+                          _scheduleSave();
+                        }),
+                      ),
                     ),
                     const SizedBox(height: 12),
-                    const _SectionTitleWithTag(title: 'Water Level', tag: 'v13.X'),
+                    const _SectionTitleWithTag(
+                      title: 'Water Level',
+                      tag: 'v13.X',
+                    ),
                     MouseRegion(
-                      onEnter: (_) => setState(() => _preview = _GameConfigPreview.waterLevel),
+                      onEnter: (_) => setState(
+                        () => _preview = _GameConfigPreview.waterLevel,
+                      ),
                       child: Slider(
                         value: _waterLevel.toDouble(),
                         min: 1,
                         max: 8,
                         divisions: 7,
-                      label: 'Level $_waterLevel',
-                      onChanged: (value) => setState(() {
-                        _waterLevel = value.round();
-                        _preview = _GameConfigPreview.waterLevel;
-                        _scheduleSave();
-                      }),
-                    ),
+                        label: 'Level $_waterLevel',
+                        onChanged: (value) => setState(() {
+                          _waterLevel = value.round();
+                          _preview = _GameConfigPreview.waterLevel;
+                          _scheduleSave();
+                        }),
+                      ),
                     ),
                     const SizedBox(height: 12),
                     MouseRegion(
-                      onEnter: (_) => setState(() => _preview = _GameConfigPreview.waterStorm),
+                      onEnter: (_) => setState(
+                        () => _preview = _GameConfigPreview.waterStorm,
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const _SectionTitleWithTag(title: 'Water Storm', tag: 'v12.61'),
+                          const _SectionTitleWithTag(
+                            title: 'Water Storm',
+                            tag: 'v12.61',
+                          ),
                           SwitchListTile(
                             contentPadding: EdgeInsets.zero,
                             value: _useWaterStorm,
@@ -2695,7 +3074,9 @@ class _GameConfigurationScreenState extends State<GameConfigurationScreen> {
                               _preview = _GameConfigPreview.waterStorm;
                               _scheduleSave();
                             }),
-                            title: const Text('Toggle the water storm in Chapter 2 Season 2'),
+                            title: const Text(
+                              'Toggle the water storm in Chapter 2 Season 2',
+                            ),
                             subtitle: const SizedBox.shrink(),
                           ),
                         ],
@@ -2713,11 +3094,7 @@ class _GameConfigurationScreenState extends State<GameConfigurationScreen> {
                 if (!isWide) {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      preview,
-                      const SizedBox(height: 16),
-                      controls,
-                    ],
+                    children: [preview, const SizedBox(height: 16), controls],
                   );
                 }
                 return Row(
@@ -2739,7 +3116,9 @@ class _GameConfigurationScreenState extends State<GameConfigurationScreen> {
       case _GameConfigPreview.rufusStage:
         if (_rufusStage == 4) {
           final week4 = joinPath([base, 'week4.webp']);
-          return File(week4).existsSync() ? week4 : joinPath([base, 'stage4.webp']);
+          return File(week4).existsSync()
+              ? week4
+              : joinPath([base, 'stage4.webp']);
         }
         return joinPath([base, 'stage$_rufusStage.webp']);
       case _GameConfigPreview.waterLevel:
@@ -2783,7 +3162,9 @@ class _GameConfigPreviewImage extends StatelessWidget {
               switchOutCurve: Curves.easeInOutCubic,
               layoutBuilder: (currentChild, previousChildren) {
                 final currentKey = currentChild?.key;
-                final filteredPrevious = previousChildren.where((child) => child.key != currentKey).toList();
+                final filteredPrevious = previousChildren
+                    .where((child) => child.key != currentKey)
+                    .toList();
                 return SizedBox.expand(
                   child: Stack(
                     fit: StackFit.expand,
@@ -2794,10 +3175,8 @@ class _GameConfigPreviewImage extends StatelessWidget {
                   ),
                 );
               },
-              transitionBuilder: (child, animation) => FadeTransition(
-                opacity: animation,
-                child: child,
-              ),
+              transitionBuilder: (child, animation) =>
+                  FadeTransition(opacity: animation, child: child),
               child: isDefault
                   ? ImageFiltered(
                       imageFilter: ImageFilter.blur(sigmaX: 3.5, sigmaY: 3.5),
@@ -2816,7 +3195,9 @@ class _GameConfigPreviewImage extends StatelessWidget {
             IgnorePointer(
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  border: Border.all(color: _onSurface(context, isDark ? 0.2 : 0.1)),
+                  border: Border.all(
+                    color: _onSurface(context, isDark ? 0.2 : 0.1),
+                  ),
                 ),
               ),
             ),
@@ -2859,7 +3240,9 @@ class CurveGroup {
     }
     final name = entry.name.toLowerCase();
     final key = entry.key.toLowerCase();
-    return keywords.any((keyword) => name.contains(keyword) || key.contains(keyword));
+    return keywords.any(
+      (keyword) => name.contains(keyword) || key.contains(keyword),
+    );
   }
 }
 
@@ -2884,7 +3267,9 @@ class _CurveEntryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final canEdit = entry.type == 'amount' || (entry.type == 'static' && entry.staticValue == null);
+    final canEdit =
+        entry.type == 'amount' ||
+        (entry.type == 'static' && entry.staticValue == null);
     return FutureBuilder<Map<String, dynamic>>(
       future: Future.wait([
         CurveTableService.isCurveEnabled(entry),
@@ -2908,7 +3293,9 @@ class _CurveEntryTile extends StatelessWidget {
             color: Colors.white.withOpacity(0.03),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: isEnabled ? const Color(0xFF6BE7FF).withOpacity(0.3) : _onSurface(context, 0.12),
+              color: isEnabled
+                  ? const Color(0xFF6BE7FF).withOpacity(0.3)
+                  : _onSurface(context, 0.12),
               width: 1,
             ),
           ),
@@ -2922,12 +3309,18 @@ class _CurveEntryTile extends StatelessWidget {
                     children: [
                       Text(
                         entry.name,
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         entry.key,
-                        style: TextStyle(fontSize: 12, color: _onSurface(context, 0.75)),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: _onSurface(context, 0.75),
+                        ),
                       ),
                     ],
                   ),
@@ -2955,7 +3348,10 @@ class _CurveEntryTile extends StatelessWidget {
                         fontWeight: FontWeight.w500,
                       ),
                       decoration: const InputDecoration(
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
                         border: InputBorder.none,
                         hintText: 'Value...',
                         hintStyle: TextStyle(
@@ -2969,10 +3365,7 @@ class _CurveEntryTile extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(width: 8),
-                Switch(
-                  value: isEnabled,
-                  onChanged: enabled ? onToggle : null,
-                ),
+                Switch(value: isEnabled, onChanged: enabled ? onToggle : null),
                 if (entry.isCustom) ...[
                   const SizedBox(width: 8),
                   _HoverScale(
@@ -2986,7 +3379,10 @@ class _CurveEntryTile extends StatelessWidget {
                     child: IconButton(
                       tooltip: 'Delete Curve',
                       onPressed: onDelete,
-                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        color: Colors.redAccent,
+                      ),
                     ),
                   ),
                 ],
@@ -3099,11 +3495,15 @@ class _DataManagementPanelState extends State<DataManagementPanel> {
         const _SectionTitle(title: 'Export & Import'),
         ListTile(
           title: const Text('Export Backend Settings'),
-          subtitle: const Text('Write DefaultGame.ini, profiles, client settings to exports/'),
+          subtitle: const Text(
+            'Write DefaultGame.ini, profiles, client settings to exports/',
+          ),
           trailing: _HoverScale(
             enabled: !_busy,
             child: ElevatedButton(
-              onPressed: _busy ? null : () => _run(() => DataService.exportData(context)),
+              onPressed: _busy
+                  ? null
+                  : () => _run(() => DataService.exportData(context)),
               child: const Text('Export'),
             ),
           ),
@@ -3115,7 +3515,9 @@ class _DataManagementPanelState extends State<DataManagementPanel> {
           trailing: _HoverScale(
             enabled: !_busy,
             child: ElevatedButton(
-              onPressed: _busy ? null : () => _run(() => DataService.importData(context)),
+              onPressed: _busy
+                  ? null
+                  : () => _run(() => DataService.importData(context)),
               child: const Text('Import'),
             ),
           ),
@@ -3123,11 +3525,15 @@ class _DataManagementPanelState extends State<DataManagementPanel> {
         const SizedBox(height: 8),
         ListTile(
           title: const Text('Clear Exported Data'),
-          subtitle: const Text('Remove DefaultGame, profiles, and client settings from exports/'),
+          subtitle: const Text(
+            'Remove DefaultGame, profiles, and client settings from exports/',
+          ),
           trailing: _HoverScale(
             enabled: !_busy,
             child: ElevatedButton(
-              onPressed: _busy ? null : () => _run(() => DataService.clearExportedData(context)),
+              onPressed: _busy
+                  ? null
+                  : () => _run(() => DataService.clearExportedData(context)),
               child: const Text('Clear'),
             ),
           ),
@@ -3136,7 +3542,9 @@ class _DataManagementPanelState extends State<DataManagementPanel> {
         const _SectionTitle(title: 'Reset'),
         ListTile(
           title: const Text('Clear Backend Data'),
-          subtitle: const Text('Reset profiles, client settings, CurveTables, and straight bloom'),
+          subtitle: const Text(
+            'Reset profiles, client settings, CurveTables, and straight bloom',
+          ),
           trailing: _HoverScale(
             enabled: !_busy,
             child: ElevatedButton(
@@ -3144,7 +3552,9 @@ class _DataManagementPanelState extends State<DataManagementPanel> {
                 backgroundColor: Colors.redAccent,
                 foregroundColor: Colors.white,
               ),
-              onPressed: _busy ? null : () => _run(() => DataService.clearBackendData(context)),
+              onPressed: _busy
+                  ? null
+                  : () => _run(() => DataService.clearBackendData(context)),
               child: const Text('Clear'),
             ),
           ),
@@ -3182,7 +3592,9 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       setState(() {
         _profiles = profiles;
         _presets = presets;
-        _selectedProfile = profiles.isNotEmpty ? profiles.first.accountId : null;
+        _selectedProfile = profiles.isNotEmpty
+            ? profiles.first.accountId
+            : null;
         _selectedPreset = presets.isNotEmpty ? presets.first.folder : null;
         _loading = false;
       });
@@ -3208,7 +3620,11 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     }
     if (preset == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Selected preset no longer exists. Refresh and try again.')),
+        const SnackBar(
+          content: Text(
+            'Selected preset no longer exists. Refresh and try again.',
+          ),
+        ),
       );
       return;
     }
@@ -3221,13 +3637,15 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       await ProfileService.applyPreset(profileId, presetFolder);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Applied "${preset.displayName}" to $profileId')),
+        SnackBar(
+          content: Text('Applied "${preset.displayName}" to $profileId'),
+        ),
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to apply preset: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to apply preset: $error')));
     }
   }
 
@@ -3243,7 +3661,11 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     }
     if (preset == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Selected preset no longer exists. Refresh and try again.')),
+        const SnackBar(
+          content: Text(
+            'Selected preset no longer exists. Refresh and try again.',
+          ),
+        ),
       );
       return;
     }
@@ -3256,12 +3678,18 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       final applied = await ProfileService.applyPresetToAll(presetFolder);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Applied "${preset.displayName}" to $applied profile(s).')),
+        SnackBar(
+          content: Text(
+            'Applied "${preset.displayName}" to $applied profile(s).',
+          ),
+        ),
       );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to apply preset to all profiles: $error')),
+        SnackBar(
+          content: Text('Failed to apply preset to all profiles: $error'),
+        ),
       );
     }
   }
@@ -3278,9 +3706,9 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       await ProfileService.deleteProfile(profileId);
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Deleted profile "$profileId".')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Deleted profile "$profileId".')));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -3299,9 +3727,9 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       await ProfileService.deleteAllProfiles();
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Deleted all profiles.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Deleted all profiles.')));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -3318,8 +3746,13 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     final profileItems = {
       for (final profile in _profiles) profile.accountId: profile,
     }.values.toList();
-    final presetValue = presetItems.any((p) => p.folder == _selectedPreset) ? _selectedPreset : null;
-    final profileValue = profileItems.any((p) => p.accountId == _selectedProfile) ? _selectedProfile : null;
+    final presetValue = presetItems.any((p) => p.folder == _selectedPreset)
+        ? _selectedPreset
+        : null;
+    final profileValue =
+        profileItems.any((p) => p.accountId == _selectedProfile)
+        ? _selectedProfile
+        : null;
     return _BaseScreen(
       title: 'Profiles',
       trailing: _HoverScale(
@@ -3352,20 +3785,38 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                               ? const Center(child: Text('No profiles found.'))
                               : ListView.separated(
                                   itemCount: _profiles.length,
-                                  separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.white12),
+                                  separatorBuilder: (_, __) => const Divider(
+                                    height: 1,
+                                    color: Colors.white12,
+                                  ),
                                   itemBuilder: (context, index) {
                                     final profile = _profiles[index];
-                                    final selected = profile.accountId == _selectedProfile;
+                                    final selected =
+                                        profile.accountId == _selectedProfile;
                                     return ListTile(
                                       selected: selected,
                                       selectedTileColor: Colors.white10,
                                       title: Text(profile.accountId),
                                       subtitle: Text(
-                                        profile.hasAthena ? 'profile_athena.json found' : 'Missing profile_athena.json',
-                                        style: TextStyle(color: Theme.of(context).colorScheme.secondary),
+                                        profile.hasAthena
+                                            ? 'profile_athena.json found'
+                                            : 'Missing profile_athena.json',
+                                        style: TextStyle(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.secondary,
+                                        ),
                                       ),
-                                      trailing: selected ? const Icon(Icons.check_circle, color: Colors.greenAccent) : null,
-                                      onTap: () => setState(() => _selectedProfile = profile.accountId),
+                                      trailing: selected
+                                          ? const Icon(
+                                              Icons.check_circle,
+                                              color: Colors.greenAccent,
+                                            )
+                                          : null,
+                                      onTap: () => setState(
+                                        () => _selectedProfile =
+                                            profile.accountId,
+                                      ),
                                     );
                                   },
                                 ),
@@ -3376,15 +3827,22 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const _SectionTitle(title: 'Custom Cosmetic Presets'),
+                            const _SectionTitle(
+                              title: 'Custom Cosmetic Presets',
+                            ),
                             const SizedBox(height: 12),
                             DropdownButtonFormField<String>(
-                              value: presetValue,
+                              initialValue: presetValue,
                               decoration: InputDecoration(
                                 labelText: 'Preset',
                                 border: const OutlineInputBorder(),
                                 focusedBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(color: Theme.of(context).colorScheme.secondary, width: 1.6),
+                                  borderSide: BorderSide(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.secondary,
+                                    width: 1.6,
+                                  ),
                                 ),
                               ),
                               items: presetItems
@@ -3406,16 +3864,22 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                                     ),
                                   )
                                   .toList(),
-                              onChanged: (value) => setState(() => _selectedPreset = value),
+                              onChanged: (value) =>
+                                  setState(() => _selectedPreset = value),
                             ),
                             const SizedBox(height: 16),
                             DropdownButtonFormField<String>(
-                              value: profileValue,
+                              initialValue: profileValue,
                               decoration: InputDecoration(
                                 labelText: 'Profile',
                                 border: const OutlineInputBorder(),
                                 focusedBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(color: Theme.of(context).colorScheme.secondary, width: 1.6),
+                                  borderSide: BorderSide(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.secondary,
+                                    width: 1.6,
+                                  ),
                                 ),
                               ),
                               items: profileItems
@@ -3426,31 +3890,46 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                                     ),
                                   )
                                   .toList(),
-                              onChanged: (value) => setState(() => _selectedProfile = value),
+                              onChanged: (value) =>
+                                  setState(() => _selectedProfile = value),
                             ),
                             const SizedBox(height: 16),
                             Row(
                               children: [
                                 Expanded(
                                   child: _HoverScale(
-                                    enabled: _selectedProfile != null && _selectedPreset != null,
+                                    enabled:
+                                        _selectedProfile != null &&
+                                        _selectedPreset != null,
                                     child: ElevatedButton.icon(
-                                      onPressed: (_selectedProfile != null && _selectedPreset != null) ? _applyPreset : null,
+                                      onPressed:
+                                          (_selectedProfile != null &&
+                                              _selectedPreset != null)
+                                          ? _applyPreset
+                                          : null,
                                       icon: const Icon(Icons.auto_fix_high),
-                                      label: const Text('Apply preset to profile'),
+                                      label: const Text(
+                                        'Apply preset to profile',
+                                      ),
                                     ),
                                   ),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: _HoverScale(
-                                    enabled: _selectedPreset != null && _profiles.isNotEmpty,
+                                    enabled:
+                                        _selectedPreset != null &&
+                                        _profiles.isNotEmpty,
                                     child: ElevatedButton.icon(
-                                      onPressed: (_selectedPreset != null && _profiles.isNotEmpty)
+                                      onPressed:
+                                          (_selectedPreset != null &&
+                                              _profiles.isNotEmpty)
                                           ? _applyPresetToAll
                                           : null,
                                       icon: const Icon(Icons.group_rounded),
-                                      label: const Text('Apply preset to all profiles'),
+                                      label: const Text(
+                                        'Apply preset to all profiles',
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -3459,26 +3938,41 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                             const SizedBox(height: 8),
                             Text(
                               'This replaces profile_athena.json for the selected account.',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: _onSurface(context, 0.6)),
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: _onSurface(context, 0.6)),
                             ),
                             const SizedBox(height: 20),
                             _HoverScale(
                               enabled: _selectedProfile != null,
                               child: OutlinedButton.icon(
-                                onPressed: _selectedProfile != null ? _deleteProfile : null,
-                                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                onPressed: _selectedProfile != null
+                                    ? _deleteProfile
+                                    : null,
+                                icon: const Icon(
+                                  Icons.delete_outline,
+                                  color: Colors.redAccent,
+                                ),
                                 label: const Text('Delete profile'),
-                                style: OutlinedButton.styleFrom(foregroundColor: Colors.redAccent),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.redAccent,
+                                ),
                               ),
                             ),
                             const SizedBox(height: 8),
                             _HoverScale(
                               enabled: _profiles.isNotEmpty,
                               child: OutlinedButton.icon(
-                                onPressed: _profiles.isNotEmpty ? _deleteAllProfiles : null,
-                                icon: const Icon(Icons.delete_sweep, color: Colors.redAccent),
+                                onPressed: _profiles.isNotEmpty
+                                    ? _deleteAllProfiles
+                                    : null,
+                                icon: const Icon(
+                                  Icons.delete_sweep,
+                                  color: Colors.redAccent,
+                                ),
                                 label: const Text('Delete all profiles'),
-                                style: OutlinedButton.styleFrom(foregroundColor: Colors.redAccent),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.redAccent,
+                                ),
                               ),
                             ),
                           ],
@@ -3519,7 +4013,9 @@ class LogsScreen extends StatelessWidget {
                   padding: const EdgeInsets.only(bottom: 6),
                   child: SelectableText(
                     log,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: _onSurface(context, 0.7)),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: _onSurface(context, 0.7),
+                    ),
                   ),
                 );
               },
@@ -3558,7 +4054,10 @@ class _BaseScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Text(title, style: Theme.of(context).textTheme.headlineMedium),
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
                     const Spacer(),
                     if (trailing != null) trailing!,
                   ],
@@ -3615,9 +4114,9 @@ class _SectionTitleWithTag extends StatelessWidget {
           child: Text(
             tag,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: accent,
-                  fontWeight: FontWeight.w600,
-                ),
+              color: accent,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ],
@@ -3639,10 +4138,7 @@ class _PresetLabel extends StatelessWidget {
       children: [
         Flexible(
           fit: FlexFit.loose,
-          child: Text(
-            name,
-            overflow: TextOverflow.ellipsis,
-          ),
+          child: Text(name, overflow: TextOverflow.ellipsis),
         ),
         if (tag != null) ...[
           const SizedBox(width: 8),
@@ -3656,9 +4152,9 @@ class _PresetLabel extends StatelessWidget {
             child: Text(
               tag!,
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: accent,
-                    fontWeight: FontWeight.w600,
-                  ),
+                color: accent,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
@@ -3676,18 +4172,31 @@ class ArenaEntry {
 
 class ArenaService {
   static Future<List<ArenaEntry>> loadLeaderboard() async {
-    final profilesDir = Directory(joinPath([getBackendRoot(), 'static', 'profiles']));
+    final profilesDir = Directory(
+      joinPath([getBackendRoot(), 'static', 'profiles']),
+    );
     if (!await profilesDir.exists()) return [];
     final entries = <ArenaEntry>[];
     await for (final entity in profilesDir.list()) {
       if (entity is Directory) {
-        final profilePath = File(joinPath([entity.path, 'profile_athena.json']));
+        final profilePath = File(
+          joinPath([entity.path, 'profile_athena.json']),
+        );
         if (await profilePath.exists()) {
           try {
-            final data = jsonDecode(await profilePath.readAsString()) as Map<String, dynamic>;
-            final stats = (data['stats'] as Map<String, dynamic>?)?['attributes'] as Map<String, dynamic>?;
+            final data =
+                jsonDecode(await profilePath.readAsString())
+                    as Map<String, dynamic>;
+            final stats =
+                (data['stats'] as Map<String, dynamic>?)?['attributes']
+                    as Map<String, dynamic>?;
             final hype = stats?['arena_hype'] ?? 0;
-            entries.add(ArenaEntry(accountId: entity.uri.pathSegments.last, hype: hype is int ? hype : int.tryParse(hype.toString()) ?? 0));
+            entries.add(
+              ArenaEntry(
+                accountId: entity.uri.pathSegments.last,
+                hype: hype is int ? hype : int.tryParse(hype.toString()) ?? 0,
+              ),
+            );
           } catch (_) {}
         }
       }
@@ -3800,7 +4309,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _updateDisableBackendUpdateCheck(bool value) async {
     setState(() => _disableBackendUpdateCheck = value);
     final existing = await ConfigService.load();
-    await ConfigService.save(existing.copyWith(disableBackendUpdateCheck: value));
+    await ConfigService.save(
+      existing.copyWith(disableBackendUpdateCheck: value),
+    );
   }
 
   String _backgroundSubtitle() {
@@ -3911,7 +4422,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _HoverScale(
                     enabled: _backgroundImagePath.isNotEmpty,
                     child: TextButton(
-                      onPressed: _backgroundImagePath.isEmpty ? null : _clearBackgroundImage,
+                      onPressed: _backgroundImagePath.isEmpty
+                          ? null
+                          : _clearBackgroundImage,
                       child: const Text('Reset'),
                     ),
                   ),
@@ -3991,14 +4504,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
               value: _startBackendOnLaunch,
               onChanged: _updateStartOnLaunch,
               title: const Text('Start backend on launch'),
-              subtitle: const Text('Automatically start the backend when the GUI opens.'),
+              subtitle: const Text(
+                'Automatically start the backend when the GUI opens.',
+              ),
             ),
             const SizedBox(height: 8),
             SwitchListTile(
               value: _disableBackendUpdateCheck,
               onChanged: _updateDisableBackendUpdateCheck,
               title: const Text('Disable Update Checks'),
-              subtitle: const Text('Skip update checks when launching the backend.'),
+              subtitle: const Text(
+                'Skip update checks when launching the backend.',
+              ),
             ),
           ],
         );
@@ -4023,12 +4540,17 @@ class _SettingsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? Theme.of(context).colorScheme.secondary : _onSurface(context, 0.7);
+    final color = selected
+        ? Theme.of(context).colorScheme.secondary
+        : _onSurface(context, 0.7);
     return ListTile(
       selected: selected,
       selectedTileColor: Colors.white10,
       leading: Icon(icon, color: color),
-      title: Text(label, style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: color)),
+      title: Text(
+        label,
+        style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: color),
+      ),
       onTap: onTap,
     );
   }
@@ -4042,13 +4564,18 @@ class ProfileSummary {
 }
 
 class ProfilePreset {
-  const ProfilePreset({required this.name, required this.folder, this.versionTag});
+  const ProfilePreset({
+    required this.name,
+    required this.folder,
+    this.versionTag,
+  });
 
   final String name;
   final String folder;
   final String? versionTag;
 
-  String get displayName => versionTag == null ? name : '$name (${versionTag!})';
+  String get displayName =>
+      versionTag == null ? name : '$name (${versionTag!})';
 }
 
 class ProfileService {
@@ -4063,25 +4590,40 @@ class ProfileService {
   }
 
   static Future<List<ProfileSummary>> listProfiles() async {
-    final profilesDir = Directory(joinPath([getBackendRoot(), 'static', 'profiles']));
+    final profilesDir = Directory(
+      joinPath([getBackendRoot(), 'static', 'profiles']),
+    );
     if (!await profilesDir.exists()) return [];
     final profiles = <ProfileSummary>[];
     await for (final entity in profilesDir.list(recursive: false)) {
       if (entity is! Directory) continue;
       final accountId = _basename(entity.path);
       if (accountId.trim().isEmpty) continue;
-      if (accountId == _profileTemplateBackupDirName || accountId.startsWith('.')) {
+      if (accountId == _profileTemplateBackupDirName ||
+          accountId.startsWith('.')) {
         continue;
       }
       final profilePath = File(joinPath([entity.path, 'profile_athena.json']));
-      profiles.add(ProfileSummary(accountId: accountId, hasAthena: await profilePath.exists()));
+      profiles.add(
+        ProfileSummary(
+          accountId: accountId,
+          hasAthena: await profilePath.exists(),
+        ),
+      );
     }
     profiles.sort((a, b) => a.accountId.compareTo(b.accountId));
     return profiles;
   }
 
   static Future<List<ProfilePreset>> listPresets() async {
-    final presetsDir = Directory(joinPath([getBackendRoot(), 'static', 'athenaprofiles', 'Profile Presets']));
+    final presetsDir = Directory(
+      joinPath([
+        getBackendRoot(),
+        'static',
+        'athenaprofiles',
+        'Profile Presets',
+      ]),
+    );
     if (!await presetsDir.exists()) return [];
     final presets = <ProfilePreset>[];
     await for (final entity in presetsDir.list(recursive: false)) {
@@ -4091,7 +4633,13 @@ class ProfileService {
       final presetPath = File(joinPath([entity.path, 'profile_athena.json']));
       if (!await presetPath.exists()) continue;
       final labelParts = _presetLabelParts(folder);
-      presets.add(ProfilePreset(name: labelParts.$1, folder: folder, versionTag: labelParts.$2));
+      presets.add(
+        ProfilePreset(
+          name: labelParts.$1,
+          folder: folder,
+          versionTag: labelParts.$2,
+        ),
+      );
     }
     presets.sort((a, b) => a.name.compareTo(b.name));
     return presets;
@@ -4114,10 +4662,23 @@ class ProfileService {
 
   static Future<void> applyPreset(String accountId, String presetFolder) async {
     final presetPath = File(
-      joinPath([getBackendRoot(), 'static', 'athenaprofiles', 'Profile Presets', presetFolder, 'profile_athena.json']),
+      joinPath([
+        getBackendRoot(),
+        'static',
+        'athenaprofiles',
+        'Profile Presets',
+        presetFolder,
+        'profile_athena.json',
+      ]),
     );
     final profilePath = File(
-      joinPath([getBackendRoot(), 'static', 'profiles', accountId, 'profile_athena.json']),
+      joinPath([
+        getBackendRoot(),
+        'static',
+        'profiles',
+        accountId,
+        'profile_athena.json',
+      ]),
     );
     if (!await presetPath.exists()) {
       throw Exception('Preset profile not found.');
@@ -4126,7 +4687,9 @@ class ProfileService {
     await presetPath.copy(profilePath.path);
     try {
       final client = HttpClient();
-      final request = await client.postUrl(Uri.parse('http://127.0.0.1:3551/atlas/clear-profile-cache'));
+      final request = await client.postUrl(
+        Uri.parse('http://127.0.0.1:3551/atlas/clear-profile-cache'),
+      );
       await request.close();
       client.close();
     } catch (_) {}
@@ -4134,7 +4697,14 @@ class ProfileService {
 
   static Future<int> applyPresetToAll(String presetFolder) async {
     final presetPath = File(
-      joinPath([getBackendRoot(), 'static', 'athenaprofiles', 'Profile Presets', presetFolder, 'profile_athena.json']),
+      joinPath([
+        getBackendRoot(),
+        'static',
+        'athenaprofiles',
+        'Profile Presets',
+        presetFolder,
+        'profile_athena.json',
+      ]),
     );
     if (!await presetPath.exists()) {
       throw Exception('Preset profile not found.');
@@ -4146,7 +4716,13 @@ class ProfileService {
     var appliedCount = 0;
     for (final profile in profiles) {
       final profilePath = File(
-        joinPath([getBackendRoot(), 'static', 'profiles', profile.accountId, 'profile_athena.json']),
+        joinPath([
+          getBackendRoot(),
+          'static',
+          'profiles',
+          profile.accountId,
+          'profile_athena.json',
+        ]),
       );
       await profilePath.parent.create(recursive: true);
       await presetPath.copy(profilePath.path);
@@ -4154,7 +4730,9 @@ class ProfileService {
     }
     try {
       final client = HttpClient();
-      final request = await client.postUrl(Uri.parse('http://127.0.0.1:3551/atlas/clear-profile-cache'));
+      final request = await client.postUrl(
+        Uri.parse('http://127.0.0.1:3551/atlas/clear-profile-cache'),
+      );
       await request.close();
       client.close();
     } catch (_) {}
@@ -4162,8 +4740,12 @@ class ProfileService {
   }
 
   static Future<void> deleteProfile(String accountId) async {
-    final profilesDir = Directory(joinPath([getBackendRoot(), 'static', 'profiles', accountId]));
-    final clientSettingsDir = Directory(joinPath([getBackendRoot(), 'static', 'ClientSettings', accountId]));
+    final profilesDir = Directory(
+      joinPath([getBackendRoot(), 'static', 'profiles', accountId]),
+    );
+    final clientSettingsDir = Directory(
+      joinPath([getBackendRoot(), 'static', 'ClientSettings', accountId]),
+    );
     if (await profilesDir.exists()) {
       await profilesDir.delete(recursive: true);
     }
@@ -4172,15 +4754,21 @@ class ProfileService {
     }
     try {
       final client = HttpClient();
-      final request = await client.postUrl(Uri.parse('http://127.0.0.1:3551/atlas/clear-profile-cache'));
+      final request = await client.postUrl(
+        Uri.parse('http://127.0.0.1:3551/atlas/clear-profile-cache'),
+      );
       await request.close();
       client.close();
     } catch (_) {}
   }
 
   static Future<void> deleteAllProfiles() async {
-    final profilesRoot = Directory(joinPath([getBackendRoot(), 'static', 'profiles']));
-    final clientSettingsRoot = Directory(joinPath([getBackendRoot(), 'static', 'ClientSettings']));
+    final profilesRoot = Directory(
+      joinPath([getBackendRoot(), 'static', 'profiles']),
+    );
+    final clientSettingsRoot = Directory(
+      joinPath([getBackendRoot(), 'static', 'ClientSettings']),
+    );
     if (await profilesRoot.exists()) {
       await for (final entity in profilesRoot.list(recursive: false)) {
         if (entity is! Directory) continue;
@@ -4200,7 +4788,9 @@ class ProfileService {
     }
     try {
       final client = HttpClient();
-      final request = await client.postUrl(Uri.parse('http://127.0.0.1:3551/atlas/clear-profile-cache'));
+      final request = await client.postUrl(
+        Uri.parse('http://127.0.0.1:3551/atlas/clear-profile-cache'),
+      );
       await request.close();
       client.close();
     } catch (_) {}
@@ -4215,9 +4805,13 @@ class LogStore extends ChangeNotifier {
   final List<String> _logs = [];
 
   List<String> get allLogs => List.unmodifiable(_logs);
-  List<String> get recentLogs => _logs.length > 16 ? _logs.sublist(_logs.length - 16) : _logs;
+  List<String> get recentLogs =>
+      _logs.length > 16 ? _logs.sublist(_logs.length - 16) : _logs;
 
-  void addOrReplaceLines(List<String> lines, String Function(String) normalizer) {
+  void addOrReplaceLines(
+    List<String> lines,
+    String Function(String) normalizer,
+  ) {
     for (final line in lines) {
       final baseLine = normalizer(line);
       _logs.removeWhere((existing) => normalizer(existing) == baseLine);
@@ -4239,13 +4833,19 @@ class LogStore extends ChangeNotifier {
 class BackendPaths {
   static const String curveTableComment = '# CurveTables';
   static const String straightBloomComment = '# Straight Bloom';
-  static const String defaultCurvePath = '/Game/Athena/Balance/DataTables/AthenaGameData';
+  static const String defaultCurvePath =
+      '/Game/Athena/Balance/DataTables/AthenaGameData';
 
-  static String get defaultGameIni => joinPath([getBackendRoot(), 'static', 'hotfixes', 'DefaultGame.ini']);
-  static String get curvesJson => joinPath([getBackendRoot(), 'responses', 'curves.json']);
-  static String get modificationsBackup => joinPath([getBackendRoot(), 'responses', 'modifications-backup.json']);
-  static String get sniperJson => joinPath([getBackendRoot(), 'responses', 'sniper.json']);
-  static String get configIni => joinPath([getBackendRoot(), 'src', 'config', 'config.ini']);
+  static String get defaultGameIni =>
+      joinPath([getBackendRoot(), 'static', 'hotfixes', 'DefaultGame.ini']);
+  static String get curvesJson =>
+      joinPath([getBackendRoot(), 'responses', 'curves.json']);
+  static String get modificationsBackup =>
+      joinPath([getBackendRoot(), 'responses', 'modifications-backup.json']);
+  static String get sniperJson =>
+      joinPath([getBackendRoot(), 'responses', 'sniper.json']);
+  static String get configIni =>
+      joinPath([getBackendRoot(), 'src', 'config', 'config.ini']);
 }
 
 class IniService {
@@ -4259,11 +4859,15 @@ class IniService {
       final assetIndex = updated.indexOf('[AssetHotfix]');
       if (assetIndex != -1) {
         if (preferPrepend) {
-          updated = '${updated.substring(0, assetIndex)}[AssetHotfix]\n$commentLabel\n${updated.substring(assetIndex)}';
+          updated =
+              '${updated.substring(0, assetIndex)}[AssetHotfix]\n$commentLabel\n${updated.substring(assetIndex)}';
         } else {
           final newlineAfter = updated.indexOf('\n', assetIndex);
-          final insertAt = newlineAfter == -1 ? updated.length : newlineAfter + 1;
-          updated = '${updated.substring(0, insertAt)}$commentLabel\n${updated.substring(insertAt)}';
+          final insertAt = newlineAfter == -1
+              ? updated.length
+              : newlineAfter + 1;
+          updated =
+              '${updated.substring(0, insertAt)}$commentLabel\n${updated.substring(insertAt)}';
         }
       } else {
         updated = '${updated.trimRight()}\n[AssetHotfix]\n$commentLabel\n';
@@ -4272,7 +4876,9 @@ class IniService {
 
     final commentIndex = updated.indexOf(commentLabel);
     final newlineAfterComment = updated.indexOf('\n', commentIndex);
-    final insertPoint = newlineAfterComment == -1 ? updated.length : newlineAfterComment + 1;
+    final insertPoint = newlineAfterComment == -1
+        ? updated.length
+        : newlineAfterComment + 1;
     return (content: updated, insertPoint: insertPoint);
   }
 }
@@ -4283,7 +4889,10 @@ class StraightBloomService {
     final sniperFile = File(BackendPaths.sniperJson);
     if (!await iniFile.exists() || !await sniperFile.exists()) return false;
     final content = await iniFile.readAsString();
-    final lines = (jsonDecode(await sniperFile.readAsString()) as Map<String, dynamic>)['lines'] as List<dynamic>;
+    final lines =
+        (jsonDecode(await sniperFile.readAsString())
+                as Map<String, dynamic>)['lines']
+            as List<dynamic>;
     return lines.any((line) => content.contains(line as String));
   }
 
@@ -4292,7 +4901,10 @@ class StraightBloomService {
     final sniperFile = File(BackendPaths.sniperJson);
     if (!await iniFile.exists() || !await sniperFile.exists()) return;
     var content = await iniFile.readAsString();
-    final lines = (jsonDecode(await sniperFile.readAsString()) as Map<String, dynamic>)['lines'] as List<dynamic>;
+    final lines =
+        (jsonDecode(await sniperFile.readAsString())
+                as Map<String, dynamic>)['lines']
+            as List<dynamic>;
     final sniperLines = lines.cast<String>();
     if (!enabled) {
       for (final line in sniperLines) {
@@ -4300,10 +4912,14 @@ class StraightBloomService {
       }
       content = content.replaceAll(RegExp('\n\n+'), '\n');
     } else {
-      final ensured = IniService.ensureAssetSection(content, BackendPaths.straightBloomComment);
+      final ensured = IniService.ensureAssetSection(
+        content,
+        BackendPaths.straightBloomComment,
+      );
       content = ensured.content;
       final insertPoint = ensured.insertPoint;
-      content = content.substring(0, insertPoint) + sniperLines.join('\n') + '\n' + content.substring(insertPoint);
+      content =
+          '${content.substring(0, insertPoint)}${sniperLines.join('\n')}\n${content.substring(insertPoint)}';
     }
     await iniFile.writeAsString(content);
   }
@@ -4321,7 +4937,10 @@ class StraightBloomService {
         .where((line) => line.isNotEmpty)
         .map((line) => line.startsWith(';') ? line.substring(1) : line)
         .toSet();
-    final lines = (jsonDecode(await sniperFile.readAsString()) as Map<String, dynamic>)['lines'] as List<dynamic>;
+    final lines =
+        (jsonDecode(await sniperFile.readAsString())
+                as Map<String, dynamic>)['lines']
+            as List<dynamic>;
     final sniperLines = lines.cast<String>();
     final hasAll = sniperLines.every((line) => blockLines.contains(line));
     await setEnabled(hasAll);
@@ -4532,20 +5151,31 @@ List<CustomCurveGroupInfo> _customGroupsFromCurves(
 List<CustomCurveGroupInfo> _groupInfosForPrompt(List<CurveEntry> curves) {
   final builtinIds = _baseCurveGroups.map((group) => group.id).toSet();
   final builtinInfos = _baseCurveGroups
-      .map((group) => CustomCurveGroupInfo(id: group.id, name: group.title, imagePath: null))
+      .map(
+        (group) => CustomCurveGroupInfo(
+          id: group.id,
+          name: group.title,
+          imagePath: null,
+        ),
+      )
       .toList();
   final customInfos = _customGroupsFromCurves(curves, excludeIds: builtinIds);
-  final hasOther = builtinInfos.any((group) => group.id == 'other') || customInfos.any((group) => group.id == 'other');
+  final hasOther =
+      builtinInfos.any((group) => group.id == 'other') ||
+      customInfos.any((group) => group.id == 'other');
   return [
     ...builtinInfos,
     ...customInfos,
-    if (!hasOther) const CustomCurveGroupInfo(id: 'other', name: 'Other', imagePath: null),
+    if (!hasOther)
+      const CustomCurveGroupInfo(id: 'other', name: 'Other', imagePath: null),
   ];
 }
 
 String _humanizeCurveKey(String key) {
   final last = key.split('.').last;
-  return last.replaceAllMapped(RegExp('[A-Z]'), (match) => ' ${match.group(0)}').trim();
+  return last
+      .replaceAllMapped(RegExp('[A-Z]'), (match) => ' ${match.group(0)}')
+      .trim();
 }
 
 String _stripScheme(String url) {
@@ -4554,9 +5184,9 @@ String _stripScheme(String url) {
 
 class _CustomCurveDraft {
   _CustomCurveDraft()
-      : nameController = TextEditingController(),
-        linesController = TextEditingController(),
-        isStatic = false;
+    : nameController = TextEditingController(),
+      linesController = TextEditingController(),
+      isStatic = false;
 
   final TextEditingController nameController;
   final TextEditingController linesController;
@@ -4600,8 +5230,8 @@ class _ImportCurveDraft {
     required this.pathPart,
     required this.lines,
     required this.staticValue,
-  })  : nameController = TextEditingController(),
-        selectedGroupId = '';
+  }) : nameController = TextEditingController(),
+       selectedGroupId = '';
 
   final String key;
   final String pathPart;
@@ -4621,7 +5251,8 @@ class CurveTableService {
       pathPart: data['pathPart'],
       staticValue: data['staticValue'],
       isCustom: data['isCustom'] == true,
-      multiLines: (data['multiLines'] as List<dynamic>?)?.cast<String>() ?? const [],
+      multiLines:
+          (data['multiLines'] as List<dynamic>?)?.cast<String>() ?? const [],
       groupId: data['groupId'],
       groupName: data['groupName'],
       groupImagePath: data['groupImagePath'] ?? data['imagePath'],
@@ -4631,7 +5262,8 @@ class CurveTableService {
   static Future<List<CurveEntry>> loadCurves() async {
     final curvesFile = File(BackendPaths.curvesJson);
     if (!await curvesFile.exists()) return [];
-    final map = jsonDecode(await curvesFile.readAsString()) as Map<String, dynamic>;
+    final map =
+        jsonDecode(await curvesFile.readAsString()) as Map<String, dynamic>;
     final entries = map.entries.map((entry) {
       final data = entry.value as Map<String, dynamic>;
       return _entryFromJson(entry.key, data);
@@ -4651,8 +5283,10 @@ class CurveTableService {
     if (!await iniFile.exists()) return;
     var content = await iniFile.readAsString();
     if (await backupFile.exists()) {
-      final backup = jsonDecode(await backupFile.readAsString()) as Map<String, dynamic>;
-      final lines = (backup['curveTableLines'] as List<dynamic>? ?? []).cast<String>();
+      final backup =
+          jsonDecode(await backupFile.readAsString()) as Map<String, dynamic>;
+      final lines = (backup['curveTableLines'] as List<dynamic>? ?? [])
+          .cast<String>();
       for (final line in lines) {
         content = content.replaceAll(';$line', line);
       }
@@ -4660,12 +5294,18 @@ class CurveTableService {
       await backupFile.delete();
     } else {
       final regex = RegExp('^\\+CurveTable=.*;RowUpdate;.*\$', multiLine: true);
-      final matches = regex.allMatches(content).map((m) => m.group(0)!).toList();
+      final matches = regex
+          .allMatches(content)
+          .map((m) => m.group(0)!)
+          .toList();
       final active = <String>[];
       for (final line in matches) {
         if (!line.startsWith(';')) {
           active.add(line);
-          content = content.replaceAll(RegExp('^${RegExp.escape(line)}\$', multiLine: true), ';$line');
+          content = content.replaceAll(
+            RegExp('^${RegExp.escape(line)}\$', multiLine: true),
+            ';$line',
+          );
         }
       }
       await iniFile.writeAsString(content);
@@ -4690,7 +5330,10 @@ class CurveTableService {
       return true;
     }
     final escapedKey = RegExp.escape(entry.key);
-    final regex = RegExp('^\\+CurveTable=.*;RowUpdate;$escapedKey;\\d+;.*\$', multiLine: true);
+    final regex = RegExp(
+      '^\\+CurveTable=.*;RowUpdate;$escapedKey;\\d+;.*\$',
+      multiLine: true,
+    );
     return regex.hasMatch(content);
   }
 
@@ -4700,18 +5343,28 @@ class CurveTableService {
     final content = await iniFile.readAsString();
     if (entry.multiLines.isNotEmpty) {
       final escapedKey = RegExp.escape(entry.key);
-      final regex = RegExp('^\\+CurveTable=.*;RowUpdate;$escapedKey;\\d+;(.+)\$', multiLine: true);
+      final regex = RegExp(
+        '^\\+CurveTable=.*;RowUpdate;$escapedKey;\\d+;(.+)\$',
+        multiLine: true,
+      );
       final match = regex.firstMatch(content);
       return match?.group(1) ?? entry.staticValue;
     }
     final escapedKey = RegExp.escape(entry.key);
-    final regex = RegExp('^\\+CurveTable=.*;RowUpdate;$escapedKey;\\d+;(.+)\$', multiLine: true);
+    final regex = RegExp(
+      '^\\+CurveTable=.*;RowUpdate;$escapedKey;\\d+;(.+)\$',
+      multiLine: true,
+    );
     final match = regex.firstMatch(content);
     if (match == null) return null;
     return match.group(1);
   }
 
-  static Future<void> setCurveEnabled(CurveEntry entry, bool enabled, {String? customValue}) async {
+  static Future<void> setCurveEnabled(
+    CurveEntry entry,
+    bool enabled, {
+    String? customValue,
+  }) async {
     final iniFile = File(BackendPaths.defaultGameIni);
     if (!await iniFile.exists()) return;
     var content = await iniFile.readAsString();
@@ -4728,7 +5381,10 @@ class CurveTableService {
         }
       } else {
         final escapedKey = RegExp.escape(entry.key);
-        final regex = RegExp('^\\+CurveTable=.*;RowUpdate;$escapedKey;\\d+;.*\$', multiLine: true);
+        final regex = RegExp(
+          '^\\+CurveTable=.*;RowUpdate;$escapedKey;\\d+;.*\$',
+          multiLine: true,
+        );
         content = content.replaceAll(regex, '');
       }
       content = content.replaceAll(RegExp('\n\n+'), '\n');
@@ -4748,12 +5404,19 @@ class CurveTableService {
       }
     } else {
       final escapedKey = RegExp.escape(entry.key);
-      final regex = RegExp('^\\+CurveTable=.*;RowUpdate;$escapedKey;\\d+;.*\$', multiLine: true);
+      final regex = RegExp(
+        '^\\+CurveTable=.*;RowUpdate;$escapedKey;\\d+;.*\$',
+        multiLine: true,
+      );
       content = content.replaceAll(regex, '');
     }
     content = content.replaceAll(RegExp('\n\n+'), '\n');
 
-    final ensured = IniService.ensureAssetSection(content, BackendPaths.curveTableComment, preferPrepend: true);
+    final ensured = IniService.ensureAssetSection(
+      content,
+      BackendPaths.curveTableComment,
+      preferPrepend: true,
+    );
     content = ensured.content;
     final insertPoint = ensured.insertPoint;
 
@@ -4764,12 +5427,16 @@ class CurveTableService {
         }
         return line;
       }).toList();
-      content = content.substring(0, insertPoint) + lines.join('\n') + '\n' + content.substring(insertPoint);
+      content =
+          '${content.substring(0, insertPoint)}${lines.join('\n')}\n${content.substring(insertPoint)}';
     } else {
       final pathPart = entry.pathPart ?? BackendPaths.defaultCurvePath;
-      final value = entry.type == 'static' ? (entry.staticValue ?? '0') : (customValue ?? '0');
+      final value = entry.type == 'static'
+          ? (entry.staticValue ?? '0')
+          : (customValue ?? '0');
       final line = '+CurveTable=$pathPart;RowUpdate;${entry.key};0;$value';
-      content = content.substring(0, insertPoint) + line + '\n' + content.substring(insertPoint);
+      content =
+          '${content.substring(0, insertPoint)}$line\n${content.substring(insertPoint)}';
     }
     await iniFile.writeAsString(content);
   }
@@ -4783,7 +5450,10 @@ class CurveTableService {
     if (filteredContent.trim().isEmpty) {
       return;
     }
-    final regex = RegExp('^\\s*;?\\+CurveTable=(.+?);RowUpdate;(.+?);(\\d+);(.+)\$', multiLine: true);
+    final regex = RegExp(
+      '^\\s*;?\\+CurveTable=(.+?);RowUpdate;(.+?);(\\d+);(.+)\$',
+      multiLine: true,
+    );
     final matches = regex.allMatches(filteredContent).toList();
     if (matches.isEmpty) return;
 
@@ -4794,7 +5464,9 @@ class CurveTableService {
       final pathPart = match.group(1)!.trim();
       final key = match.group(2)!.trim();
       final rawLine = match.group(0)!.trim();
-      final normalized = rawLine.startsWith(';') ? rawLine.substring(1).trim() : rawLine;
+      final normalized = rawLine.startsWith(';')
+          ? rawLine.substring(1).trim()
+          : rawLine;
       allNormalized.add(normalized);
       if (!rawLine.startsWith(';')) {
         hasEnabled = true;
@@ -4811,7 +5483,10 @@ class CurveTableService {
 
     final existing = await CurveTableService.loadCurves();
     final existingKeys = existing
-        .map((entry) => '${(entry.pathPart ?? BackendPaths.defaultCurvePath).trim()}|||${entry.key.trim()}')
+        .map(
+          (entry) =>
+              '${(entry.pathPart ?? BackendPaths.defaultCurvePath).trim()}|||${entry.key.trim()}',
+        )
         .toSet();
 
     final missing = <CustomCurveInput>[];
@@ -4845,7 +5520,11 @@ class CurveTableService {
           .where((line) => !line.startsWith(';'))
           .toList();
       if (activeLines.isNotEmpty) {
-        await CurveTableService.applyCurveLines(parts[0], parts[1], activeLines);
+        await CurveTableService.applyCurveLines(
+          parts[0],
+          parts[1],
+          activeLines,
+        );
       }
     }
 
@@ -4855,13 +5534,17 @@ class CurveTableService {
         await backupFile.delete();
       }
     } else {
-      await backupFile.writeAsString(jsonEncode({'curveTableLines': allNormalized}));
+      await backupFile.writeAsString(
+        jsonEncode({'curveTableLines': allNormalized}),
+      );
     }
   }
 
   static String? _extractBlock(String content, String label) {
     final lines = content.split('\n');
-    final startIndex = lines.indexWhere((line) => line.trim() == label || line.trim().startsWith(label));
+    final startIndex = lines.indexWhere(
+      (line) => line.trim() == label || line.trim().startsWith(label),
+    );
     if (startIndex == -1) return null;
     final buffer = <String>[];
     for (var i = startIndex + 1; i < lines.length; i++) {
@@ -4872,8 +5555,11 @@ class CurveTableService {
     return buffer.join('\n');
   }
 
-
-  static Future<void> applyCurveLines(String pathPart, String key, List<String> lines) async {
+  static Future<void> applyCurveLines(
+    String pathPart,
+    String key,
+    List<String> lines,
+  ) async {
     final iniFile = File(BackendPaths.defaultGameIni);
     if (!await iniFile.exists()) return;
     var content = await iniFile.readAsString();
@@ -4887,10 +5573,15 @@ class CurveTableService {
       content = content.replaceAll(regex, '');
     }
     content = content.replaceAll(RegExp('\n\n+'), '\n');
-    final ensured = IniService.ensureAssetSection(content, BackendPaths.curveTableComment, preferPrepend: true);
+    final ensured = IniService.ensureAssetSection(
+      content,
+      BackendPaths.curveTableComment,
+      preferPrepend: true,
+    );
     content = ensured.content;
     final insertPoint = ensured.insertPoint;
-    content = content.substring(0, insertPoint) + lines.join('\n') + '\n' + content.substring(insertPoint);
+    content =
+        '${content.substring(0, insertPoint)}${lines.join('\n')}\n${content.substring(insertPoint)}';
     await iniFile.writeAsString(content);
   }
 
@@ -4899,7 +5590,10 @@ class CurveTableService {
     final backupFile = File(BackendPaths.modificationsBackup);
     if (!await iniFile.exists()) return;
     var content = await iniFile.readAsString();
-    content = content.replaceAll(RegExp('^\\+CurveTable=.*\$', multiLine: true), '');
+    content = content.replaceAll(
+      RegExp('^\\+CurveTable=.*\$', multiLine: true),
+      '',
+    );
     content = content.replaceAll(RegExp('\n\n+'), '\n');
     await iniFile.writeAsString(content);
     if (await backupFile.exists()) {
@@ -4915,8 +5609,14 @@ class CurveTableService {
     if (inputs.isEmpty) return;
     final curvesFile = File(BackendPaths.curvesJson);
     if (!await curvesFile.exists()) return;
-    final map = jsonDecode(await curvesFile.readAsString()) as Map<String, dynamic>;
-    var nextId = (map.keys.map(int.tryParse).whereType<int>().fold(0, (a, b) => a > b ? a : b)) + 1;
+    final map =
+        jsonDecode(await curvesFile.readAsString()) as Map<String, dynamic>;
+    var nextId =
+        (map.keys
+            .map(int.tryParse)
+            .whereType<int>()
+            .fold(0, (a, b) => a > b ? a : b)) +
+        1;
     final groupImageCache = <String, String>{};
 
     for (final input in inputs) {
@@ -4924,13 +5624,17 @@ class CurveTableService {
       if (storedGroupImagePath.isEmpty) {
         storedGroupImagePath = groupImageCache[input.groupId] ?? '';
       }
-      if (storedGroupImagePath.isEmpty && input.groupImageSourcePath.isNotEmpty) {
+      if (storedGroupImagePath.isEmpty &&
+          input.groupImageSourcePath.isNotEmpty) {
         final source = File(input.groupImageSourcePath);
         if (await source.exists()) {
-          final destDir = Directory(joinPath([getBackendRoot(), 'public', 'items', 'custom-groups']));
+          final destDir = Directory(
+            joinPath([getBackendRoot(), 'public', 'items', 'custom-groups']),
+          );
           await destDir.create(recursive: true);
           final fileName = source.uri.pathSegments.last;
-          final stampedName = '${DateTime.now().millisecondsSinceEpoch}_$fileName';
+          final stampedName =
+              '${DateTime.now().millisecondsSinceEpoch}_$fileName';
           storedGroupImagePath = joinPath(['custom-groups', stampedName]);
           await source.copy(joinPath([destDir.path, stampedName]));
         }
@@ -4949,7 +5653,8 @@ class CurveTableService {
         'multiLines': input.lines,
         'groupId': input.groupId,
         'groupName': input.groupName,
-        if (storedGroupImagePath.isNotEmpty) 'groupImagePath': storedGroupImagePath,
+        if (storedGroupImagePath.isNotEmpty)
+          'groupImagePath': storedGroupImagePath,
       };
 
       final entry = CurveEntry(
@@ -4963,26 +5668,32 @@ class CurveTableService {
         multiLines: input.lines,
         groupId: input.groupId,
         groupName: input.groupName,
-        groupImagePath: storedGroupImagePath.isNotEmpty ? storedGroupImagePath : null,
+        groupImagePath: storedGroupImagePath.isNotEmpty
+            ? storedGroupImagePath
+            : null,
       );
       await setCurveEnabled(entry, true);
       nextId++;
     }
 
-    await curvesFile.writeAsString(const JsonEncoder.withIndent('  ').convert(map));
+    await curvesFile.writeAsString(
+      const JsonEncoder.withIndent('  ').convert(map),
+    );
   }
 
   static Future<void> deleteCustomGroup(String groupId) async {
     final curvesFile = File(BackendPaths.curvesJson);
     if (!await curvesFile.exists()) return;
-    final map = jsonDecode(await curvesFile.readAsString()) as Map<String, dynamic>;
+    final map =
+        jsonDecode(await curvesFile.readAsString()) as Map<String, dynamic>;
     final entriesToDelete = <String, CurveEntry>{};
     String? groupImagePath;
     for (final entry in map.entries) {
       final data = entry.value as Map<String, dynamic>;
       if (data['isCustom'] == true && data['groupId'] == groupId) {
         entriesToDelete[entry.key] = _entryFromJson(entry.key, data);
-        groupImagePath ??= (data['groupImagePath'] ?? data['imagePath']) as String?;
+        groupImagePath ??=
+            (data['groupImagePath'] ?? data['imagePath']) as String?;
       }
     }
     for (final entry in entriesToDelete.values) {
@@ -4991,11 +5702,15 @@ class CurveTableService {
     for (final key in entriesToDelete.keys) {
       map.remove(key);
     }
-    await curvesFile.writeAsString(const JsonEncoder.withIndent('  ').convert(map));
+    await curvesFile.writeAsString(
+      const JsonEncoder.withIndent('  ').convert(map),
+    );
 
-    if (groupImagePath != null && groupImagePath!.isNotEmpty) {
-      if (groupImagePath!.startsWith('custom-groups')) {
-        final imageFile = File(joinPath([getBackendRoot(), 'public', 'items', groupImagePath!]));
+    if (groupImagePath != null && groupImagePath.isNotEmpty) {
+      if (groupImagePath.startsWith('custom-groups')) {
+        final imageFile = File(
+          joinPath([getBackendRoot(), 'public', 'items', groupImagePath]),
+        );
         if (await imageFile.exists()) {
           await imageFile.delete();
         }
@@ -5006,19 +5721,26 @@ class CurveTableService {
   static Future<void> deleteCustomCurve(String curveId) async {
     final curvesFile = File(BackendPaths.curvesJson);
     if (!await curvesFile.exists()) return;
-    final map = jsonDecode(await curvesFile.readAsString()) as Map<String, dynamic>;
+    final map =
+        jsonDecode(await curvesFile.readAsString()) as Map<String, dynamic>;
     final data = map[curveId];
     if (data is! Map<String, dynamic> || data['isCustom'] != true) return;
     final entry = _entryFromJson(curveId, data);
     await setCurveEnabled(entry, false);
     map.remove(curveId);
-    await curvesFile.writeAsString(const JsonEncoder.withIndent('  ').convert(map));
+    await curvesFile.writeAsString(
+      const JsonEncoder.withIndent('  ').convert(map),
+    );
   }
 
-  static Future<void> updateCustomCurve(String curveId, _CustomCurveEditResult updated) async {
+  static Future<void> updateCustomCurve(
+    String curveId,
+    _CustomCurveEditResult updated,
+  ) async {
     final curvesFile = File(BackendPaths.curvesJson);
     if (!await curvesFile.exists()) return;
-    final map = jsonDecode(await curvesFile.readAsString()) as Map<String, dynamic>;
+    final map =
+        jsonDecode(await curvesFile.readAsString()) as Map<String, dynamic>;
     final data = map[curveId];
     if (data is! Map<String, dynamic> || data['isCustom'] != true) return;
     final oldEntry = _entryFromJson(curveId, data);
@@ -5034,7 +5756,8 @@ class CurveTableService {
       'multiLines': updated.lines,
       'groupId': updated.groupId,
       'groupName': updated.groupName,
-      if (updated.groupImagePath != null) 'groupImagePath': updated.groupImagePath,
+      if (updated.groupImagePath != null)
+        'groupImagePath': updated.groupImagePath,
     };
     if (updated.groupImagePath == null) {
       (map[curveId] as Map<String, dynamic>).remove('groupImagePath');
@@ -5053,21 +5776,31 @@ class CurveTableService {
       groupImagePath: updated.groupImagePath ?? oldEntry.groupImagePath,
     );
     await setCurveEnabled(newEntry, true);
-    await curvesFile.writeAsString(const JsonEncoder.withIndent('  ').convert(map));
+    await curvesFile.writeAsString(
+      const JsonEncoder.withIndent('  ').convert(map),
+    );
   }
 
-  static Future<void> updateCustomGroup(String groupId, String name, String? newImagePath) async {
+  static Future<void> updateCustomGroup(
+    String groupId,
+    String name,
+    String? newImagePath,
+  ) async {
     final curvesFile = File(BackendPaths.curvesJson);
     if (!await curvesFile.exists()) return;
-    final map = jsonDecode(await curvesFile.readAsString()) as Map<String, dynamic>;
+    final map =
+        jsonDecode(await curvesFile.readAsString()) as Map<String, dynamic>;
     String? storedImagePath;
     if (newImagePath != null && newImagePath.isNotEmpty) {
       final source = File(newImagePath);
       if (await source.exists()) {
-        final destDir = Directory(joinPath([getBackendRoot(), 'public', 'items', 'custom-groups']));
+        final destDir = Directory(
+          joinPath([getBackendRoot(), 'public', 'items', 'custom-groups']),
+        );
         await destDir.create(recursive: true);
         final fileName = source.uri.pathSegments.last;
-        final stampedName = '${DateTime.now().millisecondsSinceEpoch}_$fileName';
+        final stampedName =
+            '${DateTime.now().millisecondsSinceEpoch}_$fileName';
         storedImagePath = joinPath(['custom-groups', stampedName]);
         await source.copy(joinPath([destDir.path, stampedName]));
       }
@@ -5082,7 +5815,9 @@ class CurveTableService {
         map[entry.key] = data;
       }
     }
-    await curvesFile.writeAsString(const JsonEncoder.withIndent('  ').convert(map));
+    await curvesFile.writeAsString(
+      const JsonEncoder.withIndent('  ').convert(map),
+    );
   }
 
   static Future<void> _ensureCurveInJson(String key, String pathPart) async {
@@ -5091,14 +5826,21 @@ class CurveTableService {
       await curvesFile.parent.create(recursive: true);
       await curvesFile.writeAsString('{}');
     }
-    final map = jsonDecode(await curvesFile.readAsString()) as Map<String, dynamic>;
+    final map =
+        jsonDecode(await curvesFile.readAsString()) as Map<String, dynamic>;
     final exists = map.values.any((value) {
       final data = value as Map<String, dynamic>;
-      final existingPath = (data['pathPart'] ?? BackendPaths.defaultCurvePath) as String;
+      final existingPath =
+          (data['pathPart'] ?? BackendPaths.defaultCurvePath) as String;
       return data['key'] == key && existingPath == pathPart;
     });
     if (exists) return;
-    final nextId = (map.keys.map(int.tryParse).whereType<int>().fold(0, (a, b) => a > b ? a : b)) + 1;
+    final nextId =
+        (map.keys
+            .map(int.tryParse)
+            .whereType<int>()
+            .fold(0, (a, b) => a > b ? a : b)) +
+        1;
     map[nextId.toString()] = {
       'name': _humanizeKey(key),
       'key': key,
@@ -5108,12 +5850,16 @@ class CurveTableService {
       'groupId': 'other',
       'groupName': 'Other',
     };
-    await curvesFile.writeAsString(const JsonEncoder.withIndent('  ').convert(map));
+    await curvesFile.writeAsString(
+      const JsonEncoder.withIndent('  ').convert(map),
+    );
   }
 
   static String _humanizeKey(String key) {
     final last = key.split('.').last;
-    return last.replaceAllMapped(RegExp('[A-Z]'), (match) => ' ${match.group(0)}').trim();
+    return last
+        .replaceAllMapped(RegExp('[A-Z]'), (match) => ' ${match.group(0)}')
+        .trim();
   }
 }
 
@@ -5160,7 +5906,8 @@ class ConfigSettings {
       saveArenaPoints: saveArenaPoints ?? this.saveArenaPoints,
       useWaterStorm: useWaterStorm ?? this.useWaterStorm,
       startBackendOnLaunch: startBackendOnLaunch ?? this.startBackendOnLaunch,
-      disableBackendUpdateCheck: disableBackendUpdateCheck ?? this.disableBackendUpdateCheck,
+      disableBackendUpdateCheck:
+          disableBackendUpdateCheck ?? this.disableBackendUpdateCheck,
       useDarkMode: useDarkMode ?? this.useDarkMode,
       backgroundImagePath: backgroundImagePath ?? this.backgroundImagePath,
       backgroundBlur: backgroundBlur ?? this.backgroundBlur,
@@ -5193,12 +5940,15 @@ class ConfigService {
       waterLevel: int.tryParse(map['WaterLevel'] ?? '') ?? 1,
       saveArenaPoints: (map['SaveArenaPoints'] ?? '').toLowerCase() == 'true',
       useWaterStorm: (map['UseWaterStorm'] ?? '').toLowerCase() == 'true',
-      startBackendOnLaunch: (map['StartBackendOnLaunch'] ?? '').toLowerCase() == 'true',
-      disableBackendUpdateCheck: (map['DisableBackendUpdateCheck'] ?? '').toLowerCase() == 'true',
+      startBackendOnLaunch:
+          (map['StartBackendOnLaunch'] ?? '').toLowerCase() == 'true',
+      disableBackendUpdateCheck:
+          (map['DisableBackendUpdateCheck'] ?? '').toLowerCase() == 'true',
       useDarkMode: (map['UseDarkMode'] ?? 'true').toLowerCase() == 'true',
       backgroundImagePath: map['BackgroundImagePath'] ?? '',
       backgroundBlur: double.tryParse(map['BackgroundBlur'] ?? '') ?? 18,
-      dialogBlurEnabled: (map['DialogBlurEnabled'] ?? 'true').toLowerCase() == 'true',
+      dialogBlurEnabled:
+          (map['DialogBlurEnabled'] ?? 'true').toLowerCase() == 'true',
     );
   }
 
@@ -5209,7 +5959,9 @@ class ConfigService {
       ..writeln('SaveArenaPoints=${settings.saveArenaPoints}')
       ..writeln('UseWaterStorm=${settings.useWaterStorm}')
       ..writeln('StartBackendOnLaunch=${settings.startBackendOnLaunch}')
-      ..writeln('DisableBackendUpdateCheck=${settings.disableBackendUpdateCheck}')
+      ..writeln(
+        'DisableBackendUpdateCheck=${settings.disableBackendUpdateCheck}',
+      )
       ..writeln('UseDarkMode=${settings.useDarkMode}')
       ..writeln('BackgroundImagePath=${settings.backgroundImagePath}')
       ..writeln('BackgroundBlur=${settings.backgroundBlur}')
@@ -5232,7 +5984,10 @@ class ConfigService {
     if (appData.isNotEmpty) {
       return joinPath([appData, 'ATLAS', 'gui.ini']);
     }
-    final home = Platform.environment['USERPROFILE'] ?? Platform.environment['HOME'] ?? '';
+    final home =
+        Platform.environment['USERPROFILE'] ??
+        Platform.environment['HOME'] ??
+        '';
     if (home.isNotEmpty) {
       return joinPath([home, 'AppData', 'Roaming', 'ATLAS', 'gui.ini']);
     }
@@ -5245,7 +6000,9 @@ class ConfigService {
     final map = <String, String>{};
     for (final line in content.split('\n')) {
       final trimmed = line.trim();
-      if (trimmed.isEmpty || trimmed.startsWith('#') || !trimmed.contains('=')) continue;
+      if (trimmed.isEmpty || trimmed.startsWith('#') || !trimmed.contains('=')) {
+        continue;
+      }
       final parts = trimmed.split('=');
       map[parts.first.trim()] = parts.sublist(1).join('=').trim();
     }
@@ -5293,20 +6050,25 @@ class UpdateInfo {
 class UpdateService {
   static const String _repo = 'cipherfps/ATLAS-Backend';
   static const String _branch = 'gui';
-  static const String _mainZipUrl = 'https://github.com/cipherfps/ATLAS-Backend/archive/refs/heads/gui.zip';
-  static const String _latestReleaseUrl = 'https://api.github.com/repos/cipherfps/ATLAS-Backend/releases/latest';
-  static const String _releasesListUrl = 'https://api.github.com/repos/cipherfps/ATLAS-Backend/releases?per_page=30';
+  static const String _mainZipUrl =
+      'https://github.com/cipherfps/ATLAS-Backend/archive/refs/heads/gui.zip';
+  static const String _latestReleaseUrl =
+      'https://api.github.com/repos/cipherfps/ATLAS-Backend/releases/latest';
+  static const String _releasesListUrl =
+      'https://api.github.com/repos/cipherfps/ATLAS-Backend/releases?per_page=30';
 
   static Future<UpdateInfo?> checkForUpdate() async {
     final backendRoot = getBackendRoot();
     final packageFile = File(joinPath([backendRoot, 'package.json']));
     if (!await packageFile.exists()) return null;
 
-    final localPackage = jsonDecode(await packageFile.readAsString()) as Map<String, dynamic>;
+    final localPackage =
+        jsonDecode(await packageFile.readAsString()) as Map<String, dynamic>;
     final currentVersion = (localPackage['version'] ?? '0.0.0').toString();
     final remotePackage = await _fetchRemotePackage();
     if (remotePackage == null) return null;
-    final latestVersion = (remotePackage['version'] ?? currentVersion).toString();
+    final latestVersion = (remotePackage['version'] ?? currentVersion)
+        .toString();
     final hasVersionUpdate = _isNewerVersion(latestVersion, currentVersion);
     if (!hasVersionUpdate) return null;
 
@@ -5375,7 +6137,10 @@ class UpdateService {
       }
 
       releases.sort(
-        (a, b) => _compareVersions(_normalizeVersion(b.version), _normalizeVersion(a.version)),
+        (a, b) => _compareVersions(
+          _normalizeVersion(b.version),
+          _normalizeVersion(a.version),
+        ),
       );
       return releases;
     } catch (_) {
@@ -5385,10 +6150,16 @@ class UpdateService {
     }
   }
 
-  static Future<void> downloadAndApply(UpdateInfo info, ValueNotifier<double>? progress) async {
+  static Future<void> downloadAndApply(
+    UpdateInfo info,
+    ValueNotifier<double>? progress,
+  ) async {
     if (info.isInstaller) {
       final msiFile = await _downloadInstaller(info.downloadUrl, progress);
-      await Process.start('msiexec', ['/i', msiFile.path], mode: ProcessStartMode.detached);
+      await Process.start('msiexec', [
+        '/i',
+        msiFile.path,
+      ], mode: ProcessStartMode.detached);
       exit(0);
     } else {
       final zipFile = await _downloadZip(info.downloadUrl, progress);
@@ -5425,7 +6196,9 @@ class UpdateService {
   }
 
   static Future<Map<String, dynamic>?> _fetchRemotePackage() async {
-    final url = Uri.parse('https://raw.githubusercontent.com/$_repo/$_branch/package.json?t=${DateTime.now().millisecondsSinceEpoch}');
+    final url = Uri.parse(
+      'https://raw.githubusercontent.com/$_repo/$_branch/package.json?t=${DateTime.now().millisecondsSinceEpoch}',
+    );
     final client = HttpClient();
     try {
       final request = await client.getUrl(url);
@@ -5441,8 +6214,10 @@ class UpdateService {
     }
   }
 
-
-  static Future<File> _downloadZip(String url, ValueNotifier<double>? progress) async {
+  static Future<File> _downloadZip(
+    String url,
+    ValueNotifier<double>? progress,
+  ) async {
     final tempDir = await Directory.systemTemp.createTemp('atlas_update_');
     final zipFile = File(joinPath([tempDir.path, 'update.zip']));
     final client = HttpClient();
@@ -5473,7 +6248,10 @@ class UpdateService {
     }
   }
 
-  static Future<File> _downloadInstaller(String url, ValueNotifier<double>? progress) async {
+  static Future<File> _downloadInstaller(
+    String url,
+    ValueNotifier<double>? progress,
+  ) async {
     final tempDir = await Directory.systemTemp.createTemp('atlas_update_');
     final msiFile = File(joinPath([tempDir.path, 'ATLAS-Update.msi']));
     final client = HttpClient();
@@ -5538,7 +6316,9 @@ class UpdateService {
     if (normalized.startsWith('node_modules/')) return true;
     if (normalized.startsWith('exports/')) return true;
     if (normalized.startsWith('responses/curves.json')) return true;
-    if (normalized.startsWith('responses/modifications-backup.json')) return true;
+    if (normalized.startsWith('responses/modifications-backup.json')) {
+      return true;
+    }
     if (normalized.startsWith('src/config/config.ini')) return true;
     if (normalized.startsWith('public/items/custom-groups/')) return true;
     if (normalized.startsWith('static/hotfixes/DefaultGame.ini')) return true;
@@ -5569,15 +6349,24 @@ class UpdateBackupService {
     final entries = <_BackupEntry>[
       _BackupEntry.dir(joinPath([backendRoot, 'static', 'profiles'])),
       _BackupEntry.dir(joinPath([backendRoot, 'static', 'ClientSettings'])),
-      _BackupEntry.file(joinPath([backendRoot, 'static', 'hotfixes', 'DefaultGame.ini'])),
+      _BackupEntry.file(
+        joinPath([backendRoot, 'static', 'hotfixes', 'DefaultGame.ini']),
+      ),
       _BackupEntry.file(joinPath([backendRoot, 'responses', 'curves.json'])),
-      _BackupEntry.file(joinPath([backendRoot, 'responses', 'modifications-backup.json'])),
+      _BackupEntry.file(
+        joinPath([backendRoot, 'responses', 'modifications-backup.json']),
+      ),
       _BackupEntry.file(joinPath([backendRoot, 'src', 'config', 'config.ini'])),
-      _BackupEntry.dir(joinPath([backendRoot, 'public', 'items', 'custom-groups'])),
+      _BackupEntry.dir(
+        joinPath([backendRoot, 'public', 'items', 'custom-groups']),
+      ),
     ];
 
     for (final entry in entries) {
-      final target = joinPath([backupRoot.path, ...entry.relativeParts(backendRoot)]);
+      final target = joinPath([
+        backupRoot.path,
+        ...entry.relativeParts(backendRoot),
+      ]);
       if (entry.isDir) {
         final dir = Directory(entry.path);
         if (!dir.existsSync()) continue;
@@ -5594,8 +6383,9 @@ class UpdateBackupService {
       'version': _normalizeVersion(await _readBackendVersion()),
       'createdAt': DateTime.now().toIso8601String(),
     };
-    await File(joinPath([backupRoot.path, 'manifest.json']))
-        .writeAsString(const JsonEncoder.withIndent('  ').convert(manifest));
+    await File(
+      joinPath([backupRoot.path, 'manifest.json']),
+    ).writeAsString(const JsonEncoder.withIndent('  ').convert(manifest));
   }
 
   static Future<void> restoreIfNeeded(BuildContext context) async {
@@ -5606,15 +6396,28 @@ class UpdateBackupService {
     final entries = <_BackupEntry>[
       _BackupEntry.dir(joinPath([backupRoot.path, 'static', 'profiles'])),
       _BackupEntry.dir(joinPath([backupRoot.path, 'static', 'ClientSettings'])),
-      _BackupEntry.file(joinPath([backupRoot.path, 'static', 'hotfixes', 'DefaultGame.ini'])),
-      _BackupEntry.file(joinPath([backupRoot.path, 'responses', 'curves.json'])),
-      _BackupEntry.file(joinPath([backupRoot.path, 'responses', 'modifications-backup.json'])),
-      _BackupEntry.file(joinPath([backupRoot.path, 'src', 'config', 'config.ini'])),
-      _BackupEntry.dir(joinPath([backupRoot.path, 'public', 'items', 'custom-groups'])),
+      _BackupEntry.file(
+        joinPath([backupRoot.path, 'static', 'hotfixes', 'DefaultGame.ini']),
+      ),
+      _BackupEntry.file(
+        joinPath([backupRoot.path, 'responses', 'curves.json']),
+      ),
+      _BackupEntry.file(
+        joinPath([backupRoot.path, 'responses', 'modifications-backup.json']),
+      ),
+      _BackupEntry.file(
+        joinPath([backupRoot.path, 'src', 'config', 'config.ini']),
+      ),
+      _BackupEntry.dir(
+        joinPath([backupRoot.path, 'public', 'items', 'custom-groups']),
+      ),
     ];
 
     for (final entry in entries) {
-      final target = joinPath([backendRoot, ...entry.relativeParts(backupRoot.path)]);
+      final target = joinPath([
+        backendRoot,
+        ...entry.relativeParts(backupRoot.path),
+      ]);
       if (entry.isDir) {
         final dir = Directory(entry.path);
         if (!dir.existsSync()) continue;
@@ -5629,8 +6432,9 @@ class UpdateBackupService {
 
     await backupRoot.delete(recursive: true);
     if (context.mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Restored data from previous version.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Restored data from previous version.')),
+      );
     }
   }
 
@@ -5644,14 +6448,18 @@ class UpdateBackupService {
     final packageFile = File(joinPath([getBackendRoot(), 'package.json']));
     if (!packageFile.existsSync()) return '';
     try {
-      final json = jsonDecode(await packageFile.readAsString()) as Map<String, dynamic>;
+      final json =
+          jsonDecode(await packageFile.readAsString()) as Map<String, dynamic>;
       return json['version']?.toString() ?? '';
     } catch (_) {
       return '';
     }
   }
 
-  static Future<void> _copyDirectory(Directory source, Directory destination) async {
+  static Future<void> _copyDirectory(
+    Directory source,
+    Directory destination,
+  ) async {
     await destination.create(recursive: true);
     await for (final entity in source.list(recursive: false)) {
       final name = entity.uri.pathSegments.last;
@@ -5680,7 +6488,9 @@ class _BackupEntry {
     if (!normalizedPath.startsWith(normalizedRoot)) {
       return normalizedPath.split('/');
     }
-    final relative = normalizedPath.substring(normalizedRoot.length).replaceFirst(RegExp('^/'), '');
+    final relative = normalizedPath
+        .substring(normalizedRoot.length)
+        .replaceFirst(RegExp('^/'), '');
     if (relative.isEmpty) return [];
     return relative.split('/');
   }
@@ -5697,9 +6507,19 @@ String _normalizeVersion(String version) {
 }
 
 int _compareVersions(String left, String right) {
-  final leftParts = left.split('.').map(int.tryParse).map((v) => v ?? 0).toList();
-  final rightParts = right.split('.').map(int.tryParse).map((v) => v ?? 0).toList();
-  final maxLen = leftParts.length > rightParts.length ? leftParts.length : rightParts.length;
+  final leftParts = left
+      .split('.')
+      .map(int.tryParse)
+      .map((v) => v ?? 0)
+      .toList();
+  final rightParts = right
+      .split('.')
+      .map(int.tryParse)
+      .map((v) => v ?? 0)
+      .toList();
+  final maxLen = leftParts.length > rightParts.length
+      ? leftParts.length
+      : rightParts.length;
   for (var i = 0; i < maxLen; i++) {
     final l = i < leftParts.length ? leftParts[i] : 0;
     final r = i < rightParts.length ? rightParts[i] : 0;
@@ -5710,7 +6530,11 @@ int _compareVersions(String left, String right) {
 }
 
 bool _isNewerVersion(String latest, String current) {
-  return _compareVersions(_normalizeVersion(latest), _normalizeVersion(current)) > 0;
+  return _compareVersions(
+        _normalizeVersion(latest),
+        _normalizeVersion(current),
+      ) >
+      0;
 }
 
 String _formatReleaseDate(DateTime date) {
@@ -5748,10 +6572,17 @@ class DataService {
   static const String _profileTemplateBackupDirName = '.defaults';
 
   static Future<void> clearBackendData(BuildContext context) async {
-    final confirm = await _confirmDialog(context, 'Clear all backend data? This will reset profiles, client settings, CurveTables, and straight bloom.');
+    final confirm = await _confirmDialog(
+      context,
+      'Clear all backend data? This will reset profiles, client settings, CurveTables, and straight bloom.',
+    );
     if (!confirm) return;
-    final profilesDir = Directory(joinPath([getBackendRoot(), 'static', 'profiles']));
-    final clientSettingsDir = Directory(joinPath([getBackendRoot(), 'static', 'ClientSettings']));
+    final profilesDir = Directory(
+      joinPath([getBackendRoot(), 'static', 'profiles']),
+    );
+    final clientSettingsDir = Directory(
+      joinPath([getBackendRoot(), 'static', 'ClientSettings']),
+    );
     final iniFile = File(BackendPaths.defaultGameIni);
     final curvesFile = File(BackendPaths.curvesJson);
     final backupFile = File(BackendPaths.modificationsBackup);
@@ -5781,38 +6612,51 @@ class DataService {
 
     if (await iniFile.exists() && await curvesFile.exists()) {
       var content = await iniFile.readAsString();
-      content = content.replaceAll(RegExp('^\\+CurveTable=.*\$', multiLine: true), '');
+      content = content.replaceAll(
+        RegExp('^\\+CurveTable=.*\$', multiLine: true),
+        '',
+      );
       content = content.replaceAll(RegExp('\n\n+'), '\n');
       await iniFile.writeAsString(content);
-      final curves = jsonDecode(await curvesFile.readAsString()) as Map<String, dynamic>;
-      final keysToRemove = curves.entries.where((e) => (e.value as Map<String, dynamic>)['isCustom'] == true).map((e) => e.key).toList();
+      final curves =
+          jsonDecode(await curvesFile.readAsString()) as Map<String, dynamic>;
+      final keysToRemove = curves.entries
+          .where((e) => (e.value as Map<String, dynamic>)['isCustom'] == true)
+          .map((e) => e.key)
+          .toList();
       for (final key in keysToRemove) {
         curves.remove(key);
       }
-      await curvesFile.writeAsString(const JsonEncoder.withIndent('  ').convert(curves));
+      await curvesFile.writeAsString(
+        const JsonEncoder.withIndent('  ').convert(curves),
+      );
       await backupFile.writeAsString(jsonEncode({'curveTableLines': []}));
     }
     final current = await ConfigService.load();
     await ConfigService.save(
-      current.copyWith(
-        backgroundImagePath: '',
-        backgroundBlur: 18,
-      ),
+      current.copyWith(backgroundImagePath: '', backgroundBlur: 18),
     );
     appBackgroundPath.value = '';
     appBackgroundBlur.value = 18;
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Backend data cleared.')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Backend data cleared.')));
     }
   }
 
   static Future<void> exportData(BuildContext context) async {
     final exportsRoot = Directory(joinPath([getBackendRoot(), 'exports']));
-    final defaultGameDir = Directory(joinPath([exportsRoot.path, 'DefaultGame']));
+    final defaultGameDir = Directory(
+      joinPath([exportsRoot.path, 'DefaultGame']),
+    );
     final profilesDir = Directory(joinPath([exportsRoot.path, 'Profiles']));
     final clientDir = Directory(joinPath([exportsRoot.path, 'ClientSettings']));
     if (await _hasExistingExport(defaultGameDir, profilesDir, clientDir)) {
-      final confirm = await _confirmDialog(context, 'Exports already exist. Overwrite them?');
+      final confirm = await _confirmDialog(
+        context,
+        'Exports already exist. Overwrite them?',
+      );
       if (!confirm) return;
       await _clearDirectory(defaultGameDir);
       await _clearDirectory(profilesDir);
@@ -5849,8 +6693,9 @@ class DataService {
       await _deleteIfEmpty(clientDir);
       await _deleteIfEmpty(defaultGameDir);
       if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('No data found to export.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No data found to export.')),
+        );
       }
       return;
     }
@@ -5867,16 +6712,23 @@ class DataService {
 
   static Future<void> importData(BuildContext context) async {
     final exportsRoot = Directory(joinPath([getBackendRoot(), 'exports']));
-    final defaultGameDir = Directory(joinPath([exportsRoot.path, 'DefaultGame']));
+    final defaultGameDir = Directory(
+      joinPath([exportsRoot.path, 'DefaultGame']),
+    );
     final profilesDir = Directory(joinPath([exportsRoot.path, 'Profiles']));
     final clientDir = Directory(joinPath([exportsRoot.path, 'ClientSettings']));
     if (!await _hasExistingExport(defaultGameDir, profilesDir, clientDir)) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No exported data found.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No exported data found.')),
+        );
       }
       return;
     }
-    final confirm = await _confirmDialog(context, 'Importing will overwrite existing data. Continue?');
+    final confirm = await _confirmDialog(
+      context,
+      'Importing will overwrite existing data. Continue?',
+    );
     if (!confirm) return;
 
     await _importFolderChildren(
@@ -5892,33 +6744,50 @@ class DataService {
       onlyDirs: true,
     );
     // Profiles + client settings only: skip DefaultGame.ini imports.
-    
+
     // Clear profile cache on backend
     try {
       final client = HttpClient();
-      final request = await client.postUrl(Uri.parse('http://127.0.0.1:3551/atlas/clear-profile-cache'));
+      final request = await client.postUrl(
+        Uri.parse('http://127.0.0.1:3551/atlas/clear-profile-cache'),
+      );
       await request.close();
       client.close();
     } catch (_) {
       // Backend might not be running, that's okay
     }
-    
+
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Import complete. Changes will be visible on next login.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Import complete. Changes will be visible on next login.',
+          ),
+        ),
+      );
     }
   }
 
   static Future<void> clearExportedData(BuildContext context) async {
-    final confirm = await _confirmDialog(context, 'Clear exported data? This will remove DefaultGame, profiles, and client settings from exports/.');
+    final confirm = await _confirmDialog(
+      context,
+      'Clear exported data? This will remove DefaultGame, profiles, and client settings from exports/.',
+    );
     if (!confirm) return;
     final exportsRoot = Directory(joinPath([getBackendRoot(), 'exports']));
     await _clearDirectory(exportsRoot);
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Exported data cleared.')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Exported data cleared.')));
     }
   }
 
-  static Future<bool> _hasExistingExport(Directory a, Directory b, Directory c) async {
+  static Future<bool> _hasExistingExport(
+    Directory a,
+    Directory b,
+    Directory c,
+  ) async {
     final aHas = a.existsSync() && a.listSync().isNotEmpty;
     final bHas = b.existsSync() && b.listSync().isNotEmpty;
     final cHas = c.existsSync() && c.listSync().isNotEmpty;
@@ -5936,10 +6805,14 @@ class DataService {
       lines.add('DefaultGame.ini');
     }
     if (profilesExported > 0) {
-      lines.add('Profiles: $profilesExported folder${profilesExported == 1 ? '' : 's'}');
+      lines.add(
+        'Profiles: $profilesExported folder${profilesExported == 1 ? '' : 's'}',
+      );
     }
     if (clientExported > 0) {
-      lines.add('ClientSettings: $clientExported folder${clientExported == 1 ? '' : 's'}');
+      lines.add(
+        'ClientSettings: $clientExported folder${clientExported == 1 ? '' : 's'}',
+      );
     }
     await _showBlurDialog<void>(
       context: context,
@@ -6058,13 +6931,19 @@ class DataService {
     if (!await iniFile.exists()) return;
     var content = await iniFile.readAsString();
     final curveRegex = RegExp('^;?\\+CurveTable=.*\$', multiLine: true);
-    final curveLines = curveRegex.allMatches(content).map((m) => m.group(0)!).toList();
+    final curveLines = curveRegex
+        .allMatches(content)
+        .map((m) => m.group(0)!)
+        .toList();
     content = content.replaceAll(curveRegex, '');
 
     final sniperFile = File(BackendPaths.sniperJson);
     final straightLines = <String>[];
     if (await sniperFile.exists()) {
-      final lines = (jsonDecode(await sniperFile.readAsString()) as Map<String, dynamic>)['lines'] as List<dynamic>;
+      final lines =
+          (jsonDecode(await sniperFile.readAsString())
+                  as Map<String, dynamic>)['lines']
+              as List<dynamic>;
       for (final line in lines.cast<String>()) {
         if (content.contains(line)) {
           straightLines.add(line);
@@ -6083,7 +6962,9 @@ class DataService {
     content = content.replaceAll(RegExp('\n\n+'), '\n');
 
     final linesOut = content.split('\n').toList();
-    var assetIndex = linesOut.indexWhere((line) => line.trim() == '[AssetHotfix]');
+    var assetIndex = linesOut.indexWhere(
+      (line) => line.trim() == '[AssetHotfix]',
+    );
     if (assetIndex == -1) {
       linesOut.add('[AssetHotfix]');
       assetIndex = linesOut.length - 1;
@@ -6115,8 +6996,12 @@ class DataService {
     return path;
   }
 
-  static Future<void> _ensureProfileTemplateBackup(Directory profilesDir) async {
-    final backupDir = Directory(joinPath([profilesDir.path, _profileTemplateBackupDirName]));
+  static Future<void> _ensureProfileTemplateBackup(
+    Directory profilesDir,
+  ) async {
+    final backupDir = Directory(
+      joinPath([profilesDir.path, _profileTemplateBackupDirName]),
+    );
     if (!await backupDir.exists()) {
       await backupDir.create(recursive: true);
     }
@@ -6131,7 +7016,9 @@ class DataService {
   }
 
   static Future<void> _restoreProfileTemplates(Directory profilesDir) async {
-    final backupDir = Directory(joinPath([profilesDir.path, _profileTemplateBackupDirName]));
+    final backupDir = Directory(
+      joinPath([profilesDir.path, _profileTemplateBackupDirName]),
+    );
     if (!await backupDir.exists()) return;
     for (final name in _profileTemplateFiles) {
       final backup = File(joinPath([backupDir.path, name]));
@@ -6140,7 +7027,10 @@ class DataService {
     }
   }
 
-  static Future<bool> _confirmDialog(BuildContext context, String message) async {
+  static Future<bool> _confirmDialog(
+    BuildContext context,
+    String message,
+  ) async {
     return (await _showBlurDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
@@ -6202,7 +7092,9 @@ Future<void> _showCurveImportSummary(
   required List<_ImportCurveDraft> missing,
 }) async {
   if (grouped.isEmpty) return;
-  final missingKeys = missing.map((entry) => '${entry.pathPart}|||${entry.key}').toSet();
+  final missingKeys = missing
+      .map((entry) => '${entry.pathPart}|||${entry.key}')
+      .toSet();
   final labels = <String, Map<String, dynamic>>{};
   for (final entry in grouped.entries) {
     final parts = entry.key.split('|||');
@@ -6212,11 +7104,7 @@ Future<void> _showCurveImportSummary(
     final isNew = missingKeys.contains(entry.key);
     final existing = labels[label];
     if (existing == null) {
-      labels[label] = {
-        'count': 1,
-        'lines': count,
-        'isNew': isNew,
-      };
+      labels[label] = {'count': 1, 'lines': count, 'isNew': isNew};
     } else {
       labels[label] = {
         'count': (existing['count'] as int) + 1,
@@ -6248,7 +7136,9 @@ Future<void> _showCurveImportSummary(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('${grouped.length} CurveTable${grouped.length == 1 ? '' : 's'} imported.'),
+                Text(
+                  '${grouped.length} CurveTable${grouped.length == 1 ? '' : 's'} imported.',
+                ),
                 if (missing.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Text('New entries: ${missing.length}'),
@@ -6390,7 +7280,7 @@ Future<List<CustomCurveInput>?> _promptCustomCurves(
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<String>(
-                  value: selectedGroupId,
+                  initialValue: selectedGroupId,
                   decoration: const InputDecoration(labelText: 'Group'),
                   items: [
                     ...groups.map(
@@ -6425,7 +7315,9 @@ Future<List<CustomCurveInput>?> _promptCustomCurves(
                         child: Text(
                           newGroupImagePath == null
                               ? 'No group image selected'
-                              : newGroupImagePath!.split(Platform.pathSeparator).last,
+                              : newGroupImagePath!
+                                    .split(Platform.pathSeparator)
+                                    .last,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -6433,8 +7325,13 @@ Future<List<CustomCurveInput>?> _promptCustomCurves(
                       _HoverScale(
                         child: TextButton.icon(
                           onPressed: () async {
-                            final picked = await FilePicker.platform.pickFiles(type: FileType.image);
-                            if (picked == null || picked.files.single.path == null) return;
+                            final picked = await FilePicker.platform.pickFiles(
+                              type: FileType.image,
+                            );
+                            if (picked == null ||
+                                picked.files.single.path == null) {
+                              return;
+                            }
                             setState(() {
                               newGroupImagePath = picked.files.single.path;
                               errorText = null;
@@ -6450,7 +7347,10 @@ Future<List<CustomCurveInput>?> _promptCustomCurves(
                 const SizedBox(height: 16),
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: Text('Curves', style: Theme.of(context).textTheme.titleMedium),
+                  child: Text(
+                    'Curves',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 ...drafts.asMap().entries.map((entry) {
@@ -6472,7 +7372,9 @@ Future<List<CustomCurveInput>?> _promptCustomCurves(
                               Expanded(
                                 child: TextField(
                                   controller: draft.nameController,
-                                  decoration: InputDecoration(labelText: 'Curve name ${index + 1}'),
+                                  decoration: InputDecoration(
+                                    labelText: 'Curve name ${index + 1}',
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 12),
@@ -6481,7 +7383,8 @@ Future<List<CustomCurveInput>?> _promptCustomCurves(
                                   const Text('Static'),
                                   Switch(
                                     value: draft.isStatic,
-                                    onChanged: (value) => setState(() => draft.isStatic = value),
+                                    onChanged: (value) =>
+                                        setState(() => draft.isStatic = value),
                                   ),
                                 ],
                               ),
@@ -6489,7 +7392,8 @@ Future<List<CustomCurveInput>?> _promptCustomCurves(
                                 _HoverScale(
                                   child: IconButton(
                                     tooltip: 'Remove curve',
-                                    onPressed: () => setState(() => drafts.removeAt(index)),
+                                    onPressed: () =>
+                                        setState(() => drafts.removeAt(index)),
                                     icon: const Icon(Icons.close),
                                   ),
                                 ),
@@ -6502,7 +7406,8 @@ Future<List<CustomCurveInput>?> _promptCustomCurves(
                             maxLines: 8,
                             decoration: const InputDecoration(
                               labelText: 'CurveTable line(s)',
-                              hintText: '+CurveTable=/Game/...;RowUpdate;Key;0;Value',
+                              hintText:
+                                  '+CurveTable=/Game/...;RowUpdate;Key;0;Value',
                             ),
                           ),
                         ],
@@ -6514,7 +7419,8 @@ Future<List<CustomCurveInput>?> _promptCustomCurves(
                   alignment: Alignment.centerLeft,
                   child: _HoverScale(
                     child: OutlinedButton.icon(
-                      onPressed: () => setState(() => drafts.add(_CustomCurveDraft())),
+                      onPressed: () =>
+                          setState(() => drafts.add(_CustomCurveDraft())),
                       icon: const Icon(Icons.add),
                       label: const Text('Add another curve'),
                     ),
@@ -6522,7 +7428,10 @@ Future<List<CustomCurveInput>?> _promptCustomCurves(
                 ),
                 if (errorText != null) ...[
                   const SizedBox(height: 12),
-                  Text(errorText!, style: const TextStyle(color: Colors.redAccent)),
+                  Text(
+                    errorText!,
+                    style: const TextStyle(color: Colors.redAccent),
+                  ),
                 ],
               ],
             ),
@@ -6530,62 +7439,81 @@ Future<List<CustomCurveInput>?> _promptCustomCurves(
         ),
         actions: [
           _HoverScale(
-            child: TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            child: TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
           ),
           _HoverScale(
             child: ElevatedButton(
               onPressed: () {
-              final isNewGroup = selectedGroupId == '_new';
-              final groupName = isNewGroup
-                  ? groupNameController.text.trim()
-                  : groups.firstWhere((group) => group.id == selectedGroupId).name;
-              final groupImagePath = isNewGroup
-                  ? ''
-                  : (groups.firstWhere((group) => group.id == selectedGroupId).imagePath ?? '');
-              final groupImageSourcePath = isNewGroup ? (newGroupImagePath ?? '') : '';
+                final isNewGroup = selectedGroupId == '_new';
+                final groupName = isNewGroup
+                    ? groupNameController.text.trim()
+                    : groups
+                          .firstWhere((group) => group.id == selectedGroupId)
+                          .name;
+                final groupImagePath = isNewGroup
+                    ? ''
+                    : (groups
+                              .firstWhere(
+                                (group) => group.id == selectedGroupId,
+                              )
+                              .imagePath ??
+                          '');
+                final groupImageSourcePath = isNewGroup
+                    ? (newGroupImagePath ?? '')
+                    : '';
 
-              if (isNewGroup && groupName.isEmpty) {
-                setState(() => errorText = 'Group name is required.');
-                return;
-              }
-              if (isNewGroup && (newGroupImagePath == null || newGroupImagePath!.trim().isEmpty)) {
-                setState(() => errorText = 'Group image is required.');
-                return;
-              }
-              if (drafts.isEmpty) {
-                setState(() => errorText = 'Add at least one curve.');
-                return;
-              }
-
-              final groupId = isNewGroup ? 'custom-${DateTime.now().millisecondsSinceEpoch}' : selectedGroupId;
-              final inputs = <CustomCurveInput>[];
-              for (final draft in drafts) {
-                final curveName = draft.nameController.text.trim();
-                if (curveName.isEmpty) {
-                  setState(() => errorText = 'Each curve must have a name.');
+                if (isNewGroup && groupName.isEmpty) {
+                  setState(() => errorText = 'Group name is required.');
                   return;
                 }
-                final parsed = _parseCurveLines(draft.linesController.text);
-                if (parsed == null) {
-                  setState(() => errorText = 'Enter valid +CurveTable line(s) with matching path/key.');
+                if (isNewGroup &&
+                    (newGroupImagePath == null ||
+                        newGroupImagePath!.trim().isEmpty)) {
+                  setState(() => errorText = 'Group image is required.');
                   return;
                 }
-                inputs.add(
-                  CustomCurveInput(
-                    name: curveName,
-                    key: parsed.key,
-                    pathPart: parsed.pathPart,
-                    lines: parsed.lines,
-                    staticValue: parsed.staticValue,
-                    isStatic: draft.isStatic,
-                    groupId: groupId,
-                    groupName: groupName,
-                    groupImagePath: groupImagePath,
-                    groupImageSourcePath: groupImageSourcePath,
-                  ),
-                );
-              }
-              Navigator.pop(context, inputs);
+                if (drafts.isEmpty) {
+                  setState(() => errorText = 'Add at least one curve.');
+                  return;
+                }
+
+                final groupId = isNewGroup
+                    ? 'custom-${DateTime.now().millisecondsSinceEpoch}'
+                    : selectedGroupId;
+                final inputs = <CustomCurveInput>[];
+                for (final draft in drafts) {
+                  final curveName = draft.nameController.text.trim();
+                  if (curveName.isEmpty) {
+                    setState(() => errorText = 'Each curve must have a name.');
+                    return;
+                  }
+                  final parsed = _parseCurveLines(draft.linesController.text);
+                  if (parsed == null) {
+                    setState(
+                      () => errorText =
+                          'Enter valid +CurveTable line(s) with matching path/key.',
+                    );
+                    return;
+                  }
+                  inputs.add(
+                    CustomCurveInput(
+                      name: curveName,
+                      key: parsed.key,
+                      pathPart: parsed.pathPart,
+                      lines: parsed.lines,
+                      staticValue: parsed.staticValue,
+                      isStatic: draft.isStatic,
+                      groupId: groupId,
+                      groupName: groupName,
+                      groupImagePath: groupImagePath,
+                      groupImageSourcePath: groupImageSourcePath,
+                    ),
+                  );
+                }
+                Navigator.pop(context, inputs);
               },
               child: const Text('Add'),
             ),
@@ -6634,8 +7562,12 @@ Future<_CustomGroupEditResult?> _promptEditCustomGroup(
                   _HoverScale(
                     child: TextButton.icon(
                       onPressed: () async {
-                        final picked = await FilePicker.platform.pickFiles(type: FileType.image);
-                        if (picked == null || picked.files.single.path == null) return;
+                        final picked = await FilePicker.platform.pickFiles(
+                          type: FileType.image,
+                        );
+                        if (picked == null || picked.files.single.path == null) {
+                          return;
+                        }
                         setState(() {
                           newImagePath = picked.files.single.path;
                           errorText = null;
@@ -6649,14 +7581,20 @@ Future<_CustomGroupEditResult?> _promptEditCustomGroup(
               ),
               if (errorText != null) ...[
                 const SizedBox(height: 12),
-                Text(errorText!, style: const TextStyle(color: Colors.redAccent)),
+                Text(
+                  errorText!,
+                  style: const TextStyle(color: Colors.redAccent),
+                ),
               ],
             ],
           ),
         ),
         actions: [
           _HoverScale(
-            child: TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            child: TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
           ),
           _HoverScale(
             child: ElevatedButton(
@@ -6687,7 +7625,9 @@ Future<_CustomCurveEditResult?> _promptEditCustomCurve(
   List<CustomCurveGroupInfo> groups,
 ) async {
   final nameController = TextEditingController(text: entry.name);
-  final linesController = TextEditingController(text: entry.multiLines.join('\n'));
+  final linesController = TextEditingController(
+    text: entry.multiLines.join('\n'),
+  );
   bool isStatic = entry.type == 'static';
   String selectedGroupId = entry.groupId ?? groups.first.id;
   String? errorText;
@@ -6704,7 +7644,7 @@ Future<_CustomCurveEditResult?> _promptEditCustomCurve(
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<String>(
-                  value: selectedGroupId,
+                  initialValue: selectedGroupId,
                   decoration: const InputDecoration(labelText: 'Group'),
                   items: groups
                       .map(
@@ -6750,7 +7690,10 @@ Future<_CustomCurveEditResult?> _promptEditCustomCurve(
                 ),
                 if (errorText != null) ...[
                   const SizedBox(height: 12),
-                  Text(errorText!, style: const TextStyle(color: Colors.redAccent)),
+                  Text(
+                    errorText!,
+                    style: const TextStyle(color: Colors.redAccent),
+                  ),
                 ],
               ],
             ),
@@ -6758,7 +7701,10 @@ Future<_CustomCurveEditResult?> _promptEditCustomCurve(
         ),
         actions: [
           _HoverScale(
-            child: TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            child: TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
           ),
           _HoverScale(
             child: ElevatedButton(
@@ -6770,10 +7716,15 @@ Future<_CustomCurveEditResult?> _promptEditCustomCurve(
                 }
                 final parsed = _parseCurveLines(linesController.text);
                 if (parsed == null) {
-                  setState(() => errorText = 'Enter valid +CurveTable line(s) with matching path/key.');
+                  setState(
+                    () => errorText =
+                        'Enter valid +CurveTable line(s) with matching path/key.',
+                  );
                   return;
                 }
-                final groupInfo = groups.firstWhere((group) => group.id == selectedGroupId);
+                final groupInfo = groups.firstWhere(
+                  (group) => group.id == selectedGroupId,
+                );
                 Navigator.pop(
                   context,
                   _CustomCurveEditResult(
@@ -6799,7 +7750,9 @@ Future<_CustomCurveEditResult?> _promptEditCustomCurve(
   return result;
 }
 
-Future<CustomCurveGroupInfo?> _promptCreateCustomGroup(BuildContext context) async {
+Future<CustomCurveGroupInfo?> _promptCreateCustomGroup(
+  BuildContext context,
+) async {
   final nameController = TextEditingController();
   String? imagePath;
   String? errorText;
@@ -6822,7 +7775,9 @@ Future<CustomCurveGroupInfo?> _promptCreateCustomGroup(BuildContext context) asy
                 children: [
                   Expanded(
                     child: Text(
-                      imagePath == null ? 'No image selected' : imagePath!.split(Platform.pathSeparator).last,
+                      imagePath == null
+                          ? 'No image selected'
+                          : imagePath!.split(Platform.pathSeparator).last,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -6830,8 +7785,12 @@ Future<CustomCurveGroupInfo?> _promptCreateCustomGroup(BuildContext context) asy
                   _HoverScale(
                     child: TextButton.icon(
                       onPressed: () async {
-                        final picked = await FilePicker.platform.pickFiles(type: FileType.image);
-                        if (picked == null || picked.files.single.path == null) return;
+                        final picked = await FilePicker.platform.pickFiles(
+                          type: FileType.image,
+                        );
+                        if (picked == null || picked.files.single.path == null) {
+                          return;
+                        }
                         setState(() {
                           imagePath = picked.files.single.path;
                           errorText = null;
@@ -6845,14 +7804,20 @@ Future<CustomCurveGroupInfo?> _promptCreateCustomGroup(BuildContext context) asy
               ),
               if (errorText != null) ...[
                 const SizedBox(height: 12),
-                Text(errorText!, style: const TextStyle(color: Colors.redAccent)),
+                Text(
+                  errorText!,
+                  style: const TextStyle(color: Colors.redAccent),
+                ),
               ],
             ],
           ),
         ),
         actions: [
           _HoverScale(
-            child: TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            child: TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
           ),
           _HoverScale(
             child: ElevatedButton(
@@ -6893,7 +7858,9 @@ Future<List<CustomCurveInput>?> _promptImportMissingCurves(
   String? errorText;
   final groupOptions = [...groups];
   if (!groupOptions.any((group) => group.id == 'other')) {
-    groupOptions.add(const CustomCurveGroupInfo(id: 'other', name: 'Other', imagePath: null));
+    groupOptions.add(
+      const CustomCurveGroupInfo(id: 'other', name: 'Other', imagePath: null),
+    );
   }
   if (groupOptions.isNotEmpty) {
     for (final draft in missing) {
@@ -6925,21 +7892,33 @@ Future<List<CustomCurveInput>?> _promptImportMissingCurves(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(draft.key, style: const TextStyle(fontWeight: FontWeight.w600)),
+                          Text(
+                            draft.key,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
                           const SizedBox(height: 4),
                           Text(
                             draft.pathPart,
-                            style: TextStyle(fontSize: 12, color: _onSurface(context, 0.7)),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: _onSurface(context, 0.7),
+                            ),
                           ),
                           const SizedBox(height: 8),
                           TextField(
                             controller: draft.nameController,
-                            decoration: const InputDecoration(labelText: 'Curve name'),
+                            decoration: const InputDecoration(
+                              labelText: 'Curve name',
+                            ),
                           ),
                           const SizedBox(height: 8),
                           DropdownButtonFormField<String>(
-                            value: draft.selectedGroupId.isEmpty ? null : draft.selectedGroupId,
-                            decoration: const InputDecoration(labelText: 'Group'),
+                            initialValue: draft.selectedGroupId.isEmpty
+                                ? null
+                                : draft.selectedGroupId,
+                            decoration: const InputDecoration(
+                              labelText: 'Group',
+                            ),
                             items: [
                               ...groupOptions.map(
                                 (group) => DropdownMenuItem(
@@ -6955,7 +7934,9 @@ Future<List<CustomCurveInput>?> _promptImportMissingCurves(
                             onChanged: (value) async {
                               if (value == null) return;
                               if (value == '__new__') {
-                                final newGroup = await _promptCreateCustomGroup(context);
+                                final newGroup = await _promptCreateCustomGroup(
+                                  context,
+                                );
                                 if (newGroup != null) {
                                   setState(() {
                                     groupOptions.add(newGroup);
@@ -6972,10 +7953,6 @@ Future<List<CustomCurveInput>?> _promptImportMissingCurves(
                     ),
                   );
                 }),
-                if (errorText != null) ...[
-                  const SizedBox(height: 12),
-                  Text(errorText!, style: const TextStyle(color: Colors.redAccent)),
-                ],
               ],
             ),
           ),
@@ -7009,7 +7986,10 @@ Future<List<CustomCurveInput>?> _promptImportMissingCurves(
             ),
           ),
           _HoverScale(
-            child: TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            child: TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
           ),
           _HoverScale(
             child: ElevatedButton(
@@ -7019,11 +7999,18 @@ Future<List<CustomCurveInput>?> _promptImportMissingCurves(
                   final name = draft.nameController.text.trim().isEmpty
                       ? _humanizeCurveKey(draft.key)
                       : draft.nameController.text.trim();
-                  final groupId = draft.selectedGroupId.isEmpty ? 'other' : draft.selectedGroupId;
+                  final groupId = draft.selectedGroupId.isEmpty
+                      ? 'other'
+                      : draft.selectedGroupId;
                   final group = groupOptions.firstWhere((g) => g.id == groupId);
                   final groupImageSourcePath =
-                      (group.imagePath != null && File(group.imagePath!).existsSync()) ? group.imagePath! : '';
-                  final groupImagePath = groupImageSourcePath.isEmpty ? (group.imagePath ?? '') : '';
+                      (group.imagePath != null &&
+                          File(group.imagePath!).existsSync())
+                      ? group.imagePath!
+                      : '';
+                  final groupImagePath = groupImageSourcePath.isEmpty
+                      ? (group.imagePath ?? '')
+                      : '';
                   inputs.add(
                     CustomCurveInput(
                       name: name,
@@ -7076,7 +8063,10 @@ class BackendController extends ChangeNotifier {
 
   void startPolling() {
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) => _checkBackend());
+    _pollTimer = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) => _checkBackend(),
+    );
     _checkBackend();
   }
 
@@ -7116,11 +8106,9 @@ class BackendController extends ChangeNotifier {
     final nodeModules = Directory('$backendRoot/node_modules');
     if (!nodeModules.existsSync()) {
       _addLog('Installing dependencies (bun install)...');
-      final install = await Process.run(
-        bunPath ?? 'bun',
-        ['install'],
-        workingDirectory: backendRoot,
-      );
+      final install = await Process.run(bunPath ?? 'bun', [
+        'install',
+      ], workingDirectory: backendRoot);
       if (install.exitCode != 0) {
         _addLog('Dependency install failed: ${install.stderr}');
         isStarting = false;
@@ -7255,8 +8243,12 @@ class BackendController extends ChangeNotifier {
   Future<bool> _pingBackend() async {
     try {
       final client = HttpClient();
-      final request = await client.getUrl(Uri.parse('http://127.0.0.1:3551/unknown'));
-      final response = await request.close().timeout(const Duration(seconds: 2));
+      final request = await client.getUrl(
+        Uri.parse('http://127.0.0.1:3551/unknown'),
+      );
+      final response = await request.close().timeout(
+        const Duration(seconds: 2),
+      );
       client.close();
       return response.statusCode >= 200 && response.statusCode < 500;
     } catch (_) {
@@ -7264,12 +8256,17 @@ class BackendController extends ChangeNotifier {
     }
   }
 
-  Future<bool> _checkBunAvailable(String workingDirectory, String? bunPath) async {
+  Future<bool> _checkBunAvailable(
+    String workingDirectory,
+    String? bunPath,
+  ) async {
     if (bunPath != null) {
       return File(bunPath).existsSync();
     }
     try {
-      final result = await Process.run('bun', ['--version'], workingDirectory: workingDirectory);
+      final result = await Process.run('bun', [
+        '--version',
+      ], workingDirectory: workingDirectory);
       return result.exitCode == 0;
     } catch (_) {
       return false;
@@ -7316,7 +8313,9 @@ class BackendController extends ChangeNotifier {
         .where((line) => _shouldIncludeLog(line))
         .toList();
     if (lines.isEmpty) return;
-    final timestampPattern = RegExp(r'\s+-\s+\d{1,2}:\d{2}:\d{2}\s+(AM|PM)\s+\S+$');
+    final timestampPattern = RegExp(
+      r'\s+-\s+\d{1,2}:\d{2}:\d{2}\s+(AM|PM)\s+\S+$',
+    );
     _logStore.addOrReplaceLines(
       lines,
       (line) => line.replaceFirst(timestampPattern, '').trimRight(),
@@ -7331,7 +8330,9 @@ class BackendController extends ChangeNotifier {
   bool _shouldIncludeLog(String line) {
     final trimmed = line.trim();
     if (trimmed.isEmpty) return false;
-    if (trimmed.contains('[BACKEND]') || trimmed.contains('[MATCHMAKING]')) return true;
+    if (trimmed.contains('[BACKEND]') || trimmed.contains('[MATCHMAKING]')) {
+      return true;
+    }
     return false;
   }
 
@@ -7390,7 +8391,9 @@ String? _resolveBackgroundPath(String path) {
   final backendRoot = getBackendRoot();
   final relative = File(joinPath([backendRoot, trimmed]));
   if (relative.existsSync()) return relative.path;
-  final publicImage = File(joinPath([backendRoot, 'public', 'images', trimmed]));
+  final publicImage = File(
+    joinPath([backendRoot, 'public', 'images', trimmed]),
+  );
   if (publicImage.existsSync()) return publicImage.path;
   return null;
 }
