@@ -2033,6 +2033,9 @@ class ModificationsScreen extends StatefulWidget {
 class _ModificationsScreenState extends State<ModificationsScreen> {
   bool _isLoading = true;
   bool _straightBloom = false;
+  bool _customSniperSpread = false;
+  String _sniperSpreadAmount = '0';
+  final TextEditingController _spreadController = TextEditingController();
   bool _curveTablesEnabled = true;
   bool _curveLoading = true;
   List<CurveEntry> _curves = [];
@@ -2047,6 +2050,7 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
 
   @override
   void dispose() {
+    _spreadController.dispose();
     for (final controller in _valueControllers.values) {
       controller.dispose();
     }
@@ -2055,11 +2059,15 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
 
   Future<void> _load() async {
     final bloom = await StraightBloomService.isEnabled();
+    final customSpreadState = await CustomSniperSpreadService.getState();
     final curvesEnabled = await CurveTableService.areGlobalEnabled();
     final curves = await CurveTableService.loadCurves();
     if (!mounted) return;
     setState(() {
       _straightBloom = bloom;
+      _customSniperSpread = customSpreadState.enabled;
+      _sniperSpreadAmount = customSpreadState.amount;
+      _spreadController.text = customSpreadState.amount;
       _curveTablesEnabled = curvesEnabled;
       _curves = curves;
       _isLoading = false;
@@ -2069,8 +2077,29 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
 
   Future<void> _toggleStraightBloom(bool value) async {
     await StraightBloomService.setEnabled(value);
+    if (value && _customSniperSpread) {
+      // Disable custom spread when enabling straight bloom
+      await CustomSniperSpreadService.setEnabled(false, _sniperSpreadAmount);
+    }
     if (!mounted) return;
-    setState(() => _straightBloom = value);
+    setState(() {
+      _straightBloom = value;
+      if (value) _customSniperSpread = false;
+    });
+  }
+
+  Future<void> _toggleCustomSniperSpread(bool value) async {
+    await CustomSniperSpreadService.setEnabled(value, _sniperSpreadAmount);
+    if (!mounted) return;
+    setState(() => _customSniperSpread = value);
+  }
+
+  Future<void> _updateSniperSpreadAmount(String value) async {
+    final amount = value.trim();
+    if (amount.isEmpty) return;
+    await CustomSniperSpreadService.setEnabled(_customSniperSpread, amount);
+    if (!mounted) return;
+    setState(() => _sniperSpreadAmount = amount);
   }
 
   Future<void> _toggleCurveTables() async {
@@ -2301,9 +2330,50 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                         : 'Straight Bloom Disabled',
                   ),
                   subtitle: const Text(
-                    'Toggle straight bloom lines for snipers in DefaultGame.ini',
+                    'Toggles no-spread for all snipers.',
                   ),
                 ),
+                if (!_straightBloom) ...[
+                  const SizedBox(height: 12),
+                  SwitchListTile(
+                    value: _customSniperSpread,
+                    onChanged: _toggleCustomSniperSpread,
+                    title: Text(
+                      _customSniperSpread
+                          ? 'Custom Sniper Spread Enabled'
+                          : 'Custom Sniper Spread Disabled',
+                    ),
+                    subtitle: const Text(
+                      'Set a custom spread amount for snipers.',
+                    ),
+                  ),
+                  if (_customSniperSpread) ...[
+                    const SizedBox(height: 8),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: TextField(
+                        controller: _spreadController,
+                        decoration: InputDecoration(
+                          labelText: 'Spread Amount',
+                          hintText: 'Enter spread value (e.g., 0, 0.5, 1)',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.check),
+                            onPressed: () {
+                              _updateSniperSpreadAmount(_spreadController.text);
+                            },
+                          ),
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        onSubmitted: _updateSniperSpreadAmount,
+                      ),
+                    ),
+                  ],
+                ],
                 const SizedBox(height: 20),
                 const _SectionTitle(title: 'CurveTables'),
                 SwitchListTile(
@@ -5714,6 +5784,104 @@ class IniService {
         ? updated.length
         : newlineAfterComment + 1;
     return (content: updated, insertPoint: insertPoint);
+  }
+}
+
+class CustomSniperSpreadService {
+  static const String _commentLabel = '# Custom Sniper Spread';
+
+  static Future<({bool enabled, String amount})> getState() async {
+    final iniFile = File(BackendPaths.defaultGameIni);
+    final sniperFile = File(BackendPaths.sniperJson);
+    if (!await iniFile.exists() || !await sniperFile.exists()) {
+      return (enabled: false, amount: '0');
+    }
+    
+    final content = await iniFile.readAsString();
+    if (!content.contains(_commentLabel)) {
+      return (enabled: false, amount: '0');
+    }
+    
+    // Check if any custom spread lines exist by looking for a DataTable line
+    // and extracting the spread value
+    final regex = RegExp(
+      r'\+DataTable=/Game/Athena/Items/Weapons/AthenaRangedWeapons;RowUpdate;[^;]+;(?:Spread|AthenaJumpingFallingSpreadMultiplier);([\d.]+)',
+    );
+    final match = regex.firstMatch(content);
+    if (match == null) {
+      return (enabled: false, amount: '0');
+    }
+    final amount = match.group(1) ?? '0';
+    
+    // Verify that we have custom spread lines (not straight bloom which is 0)
+    final lines = await _getCustomSpreadLines(amount);
+    final hasCustomLines = lines.any((line) => content.contains(line));
+    
+    return (enabled: hasCustomLines, amount: amount);
+  }
+
+  static Future<List<String>> _getCustomSpreadLines(String amount) async {
+    final sniperFile = File(BackendPaths.sniperJson);
+    if (!await sniperFile.exists()) return [];
+    
+    final lines = (jsonDecode(await sniperFile.readAsString())
+            as Map<String, dynamic>)['lines'] as List<dynamic>;
+    
+    // Replace the ;0 at the end of each line with ;{amount}
+    return lines.cast<String>().map((line) {
+      // Each line ends with ;0, replace it with ;{amount}
+      if (line.endsWith(';0')) {
+        return '${line.substring(0, line.length - 2)};$amount';
+      }
+      return line;
+    }).toList();
+  }
+
+  static Future<void> setEnabled(bool enabled, String amount) async {
+    final iniFile = File(BackendPaths.defaultGameIni);
+    final sniperFile = File(BackendPaths.sniperJson);
+    if (!await iniFile.exists() || !await sniperFile.exists()) return;
+    
+    var content = await iniFile.readAsString();
+    
+    // Get the base lines from sniper.json
+    final baseLines = (jsonDecode(await sniperFile.readAsString())
+            as Map<String, dynamic>)['lines'] as List<dynamic>;
+    final sniperLines = baseLines.cast<String>();
+    
+    // Remove any existing custom sniper spread lines (any spread value)
+    for (final baseLine in sniperLines) {
+      // Remove the line with any spread value at the end
+      final linePrefix = baseLine.substring(0, baseLine.lastIndexOf(';') + 1);
+      final regex = RegExp(
+        '${RegExp.escape(linePrefix)}[\\d.]+\\n?',
+        multiLine: true,
+      );
+      content = content.replaceAll(regex, '');
+    }
+    
+    if (enabled) {
+      // Ensure the section exists
+      final ensured = IniService.ensureAssetSection(content, _commentLabel);
+      content = ensured.content;
+      final insertPoint = ensured.insertPoint;
+      
+      // Get custom spread lines with the specified amount
+      final customLines = await _getCustomSpreadLines(amount);
+      
+      // Insert all custom spread lines
+      content =
+          '${content.substring(0, insertPoint)}${customLines.join('\n')}\n${content.substring(insertPoint)}';
+    } else {
+      // Remove the comment if no lines remain under it
+      if (content.contains(_commentLabel)) {
+        content = content.replaceAll('$_commentLabel\n', '');
+      }
+    }
+    
+    // Clean up multiple newlines
+    content = content.replaceAll(RegExp('\n\n+'), '\n');
+    await iniFile.writeAsString(content);
   }
 }
 
