@@ -6895,7 +6895,7 @@ class UpdateBackupService {
       _BackupEntry.file(
         joinPath([backendRoot, 'static', 'hotfixes', 'DefaultGame.ini']),
       ),
-      _BackupEntry.file(joinPath([backendRoot, 'responses', 'curves.json'])),
+      // Don't backup curves.json - let new version provide updated curves
       _BackupEntry.file(
         joinPath([backendRoot, 'responses', 'modifications-backup.json']),
       ),
@@ -6942,9 +6942,7 @@ class UpdateBackupService {
       _BackupEntry.file(
         joinPath([backupRoot.path, 'static', 'hotfixes', 'DefaultGame.ini']),
       ),
-      _BackupEntry.file(
-        joinPath([backupRoot.path, 'responses', 'curves.json']),
-      ),
+      // Don't restore curves.json - keep new version's curves with new entries
       _BackupEntry.file(
         joinPath([backupRoot.path, 'responses', 'modifications-backup.json']),
       ),
@@ -6974,26 +6972,6 @@ class UpdateBackupService {
     }
 
     await backupRoot.delete(recursive: true);
-    
-    // If CurveTables were disabled before update, re-disable them in the new DefaultGame.ini
-    final backupFile = File(BackendPaths.modificationsBackup);
-    if (await backupFile.exists()) {
-      final iniFile = File(BackendPaths.defaultGameIni);
-      if (await iniFile.exists()) {
-        var content = await iniFile.readAsString();
-        final regex = RegExp('^\\+CurveTable=.*;RowUpdate;.*\$', multiLine: true);
-        final matches = regex.allMatches(content).map((m) => m.group(0)!).toList();
-        for (final line in matches) {
-          if (!line.startsWith(';')) {
-            content = content.replaceAll(
-              RegExp('^${RegExp.escape(line)}\$', multiLine: true),
-              ';$line',
-            );
-          }
-        }
-        await iniFile.writeAsString(content);
-      }
-    }
     
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
