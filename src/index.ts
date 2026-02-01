@@ -21,69 +21,18 @@ export default app;
 // Store last status message
 let lastStatusMessage = '';
 let lastDisplayedMessage = '';
-let shouldRefreshMenu = false;
+let hasLoggedLauncherPing = false;
 
 // Export function to update status message from other modules
 export function setStatusMessage(message: string) {
-  // Add timestamp
-  const now = new Date();
-  let hours = now.getHours();
-  const minutes = now.getMinutes().toString().padStart(2, '0');
-  const seconds = now.getSeconds().toString().padStart(2, '0');
-  const ampm = hours >= 12 ? 'PM' : 'AM';
-  hours = hours % 12;
-  hours = hours ? hours : 12; // the hour '0' should be '12'
+  const cleanMessage = message.replace(/\x1b\[[0-9;]*m/g, '').trim();
   
-  // Get timezone abbreviation
-  const timezone = new Intl.DateTimeFormat('en-US', { timeZoneName: 'short' })
-    .formatToParts(now)
-    .find(part => part.type === 'timeZoneName')?.value || '';
+  lastStatusMessage = cleanMessage;
   
-  const timestamp = `${hours}:${minutes}:${seconds} ${ampm} ${timezone}`;
-  
-  lastStatusMessage = `${message} \x1b[90m- ${timestamp}\x1b[0m`;
-  // If message changed, trigger menu refresh
-  if (message !== lastDisplayedMessage) {
-    lastDisplayedMessage = message;
-    shouldRefreshMenu = true;
-    
-    // Immediately refresh the display
-    console.clear();
-    displayMenuContent();
-  }
-}
-
-// Function to display the menu content (logo, status, options)
-function displayMenuContent() {
-  const terminalWidth = process.stdout.columns || 80;
-  const logoLines = `\x1b[96m${addShadows(` █████╗ ████████╗██╗      █████╗ ███████╗
-██╔══██╗╚══██╔══╝██║     ██╔══██╗██╔════╝
-███████║   ██║   ██║     ███████║███████╗
-██╔══██║   ██║   ██║     ██╔══██║╚════██║
-██║  ██║   ██║   ███████╗██║  ██║███████║
-╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝  ╚═╝╚══════╝`)}
-                                         
-\x1b[37m${addShadowsBackend(`██████╗  █████╗  ██████╗██╗  ██╗███████╗███╗   ██╗██████╗ 
-██╔══██╗██╔══██╗██╔════╝██║ ██╔╝██╔════╝████╗  ██║██╔══██╗
-██████╔╝███████║██║     █████╔╝ █████╗  ██╔██╗ ██║██║  ██║
-██╔══██╗██╔══██║██║     ██╔═██╗ ██╔══╝  ██║╚██╗██║██║  ██║
-██████╔╝██║  ██║╚██████╗██║  ██╗███████╗██║ ╚████║██████╔╝
-╚═════╝ ╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═════╝ `)}
-                                                          
-\x1b[0m`;
-  
-  const lines = logoLines.split('\n');
-  const centeredLogo = lines.map(line => {
-    const padding = Math.max(0, Math.floor((terminalWidth - line.replace(/\x1b\[[0-9;]*m/g, '').length) / 2));
-    return ' '.repeat(padding) + line;
-  }).join('\n');
-  
-  console.log(centeredLogo);
-  console.log(`\x1b[36m[BACKEND]\x1b[0m ATLAS started on Port ${PORT}`);
-  
-  // Display last status message if exists
-  if (lastStatusMessage) {
-    console.log(lastStatusMessage);
+  // Log status update
+  if (cleanMessage !== lastDisplayedMessage) {
+    lastDisplayedMessage = cleanMessage;
+    logger.info(lastStatusMessage);
   }
 }
 
@@ -99,7 +48,10 @@ app.use(async (c, next) => {
   }
 
   if (c.req.path === "/unknown" && c.req.method === "GET") {
-    setStatusMessage("\x1b[36m[BACKEND]\x1b[0m ATLAS Backend was pinged by Launcher");
+    if (!hasLoggedLauncherPing) {
+      hasLoggedLauncherPing = true;
+      setStatusMessage("[BACKEND] ATLAS Backend was pinged by Launcher");
+    }
     return c.text("OK"); // Return a response and prevent further logging
   }
 });
@@ -2400,10 +2352,10 @@ function areModificationsEnabled(): boolean {
 }
 
 async function runInteractiveCLI() {
+  // Log that CLI is available
+  logger.info('Interactive CLI is available');
+  
   while (true) {
-    // Clear console and display menu content
-    console.clear();
-    displayMenuContent();
   
   const iniPath = path.join(__dirname, '../static/hotfixes/DefaultGame.ini');
   const sniperPath = path.join(__dirname, '../responses/sniper.json');
@@ -2430,13 +2382,6 @@ async function runInteractiveCLI() {
   console.log('\x1b[32m(5)\x1b[0m Refresh');
   console.log('\x1b[32m(6)\x1b[0m Exit');
   console.log('\x1b[36m═══════════════════════════════════════════════════════════\x1b[0m');
-
-  // Check if we should auto-refresh due to new status message
-  if (shouldRefreshMenu) {
-    shouldRefreshMenu = false;
-    await new Promise(resolve => setTimeout(resolve, 50)); // Brief pause to show the message
-    continue; // Restart loop to refresh display
-  }
 
   const response = await prompts({
     type: 'text',
@@ -2479,17 +2424,15 @@ async function runInteractiveCLI() {
 
 // Start the server with Bun
 const startServer = async () => {
-  // Now clear and start the server
-  console.clear();
   // Start matchmaking WebSocket server
   startMatchmakingWebSocket(5555);
   Bun.serve({
     port: PORT,
     fetch: app.fetch,
   });
-  // Wait for Bun's startup message to print
-  await new Promise(resolve => setTimeout(resolve, 100));
-  await runInteractiveCLI();
+  
+  logger.backend(`ATLAS started on Port ${PORT}`);
+  logger.info('Backend is running. Control via GUI application.');
 };
 
 // Main execution

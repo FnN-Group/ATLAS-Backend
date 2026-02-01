@@ -176,6 +176,7 @@ dist
 
 
 # Atlas
+tools/bun/
 static/profiles/profile_athena.json
 static/profiles/*
 static/ClientSettings/*

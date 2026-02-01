@@ -8,7 +8,13 @@ param(
 $ErrorActionPreference = "Stop"
 
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
-$flutter = Join-Path $root "flutter\\bin\\flutter.bat"
+# Try to find Flutter in PATH first
+$flutterCmd = Get-Command flutter -ErrorAction SilentlyContinue
+if ($flutterCmd) {
+  $flutter = $flutterCmd.Source
+} else {
+  $flutter = Join-Path $root "flutter\\bin\\flutter.bat"
+}
 $guiDir = Join-Path $root "atlas_gui_flutter"
 $distDir = Join-Path $root "dist"
 $buildRoot = Join-Path $distDir "ATLAS"

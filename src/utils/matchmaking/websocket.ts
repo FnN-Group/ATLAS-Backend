@@ -21,7 +21,7 @@ export function startMatchmakingWebSocket(port: number = 5555) {
     },
     websocket: {
       open(ws) {
-        setStatusMessage(`\x1b[33m[MATCHMAKING]\x1b[0m Connected`);
+        setStatusMessage(`[MATCHMAKING] Connected`);
         
         // Generate IDs
         const ticketId = crypto.randomUUID().replace(/-/gi, "").toUpperCase();
@@ -67,7 +67,7 @@ export function startMatchmakingWebSocket(port: number = 5555) {
           setTimeout(() => {
             if (ws.readyState === 1) { // 1 = OPEN
               ws.send(JSON.stringify({ name, payload }));
-              setStatusMessage(`\x1b[33m[MATCHMAKING]\x1b[0m ${payload.state || name}`);
+              setStatusMessage(`[MATCHMAKING] ${payload.state || name}`);
             }
           }, delay);
         });
@@ -75,13 +75,13 @@ export function startMatchmakingWebSocket(port: number = 5555) {
       message(ws, message) {
         try {
           const payload = JSON.parse(message as string);
-          setStatusMessage(`\x1b[33m[MATCHMAKING]\x1b[0m Message received`);
+          setStatusMessage(`[MATCHMAKING] Message received`);
         } catch (error) {
           console.error(`[Matchmaking] Error processing message: ${error}`);
         }
       },
       close(ws) {
-        setStatusMessage(`\x1b[33m[MATCHMAKING]\x1b[0m Disconnected`);
+        setStatusMessage(`[MATCHMAKING] Disconnected`);
       },
       error(ws, error) {
         console.error(`[Matchmaking] WebSocket error: ${error}`);

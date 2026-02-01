@@ -62,7 +62,9 @@ export default function () {
 
     // Only log actual player logins, not default/system accounts
     if (body.username && accountId !== "atlas") {
-      setStatusMessage(`\x1b[36m[BACKEND]\x1b[0m Player Logged In: ${accountId}`);
+      const versionMatch = userAgent.match(/(?:Fortnite|UEFN)[^0-9]*([0-9]+(?:\.[0-9]+){1,3})/i);
+      const versionLabel = versionMatch ? versionMatch[1] : "unknown";
+      setStatusMessage(`[BACKEND] ${accountId} logged in on version ${versionLabel}`);
     }
 
     let t = jwt.sign(

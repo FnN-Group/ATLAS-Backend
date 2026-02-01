@@ -14,10 +14,29 @@ export default {
   },
 
   debug(...messages: string[]) {
-    // Logging disabled
+    console.log(`\x1b[35m[DEBUG]\x1b[0m`, ...messages);
   },
 
-  error: (...args: unknown[]) => {
-    // Logging disabled
+  error(...messages: string[]) {
+    console.error(`\x1b[31m[ERROR]\x1b[0m`, ...messages);
+  },
+  
+  info(...messages: string[]) {
+    if (messages.length > 0 && typeof messages[0] === 'string') {
+      const first = messages[0].trim();
+      if (first.startsWith('[')) {
+        console.log(...messages);
+        return;
+      }
+    }
+    console.log(`\x1b[34m[INFO]\x1b[0m`, ...messages);
+  },
+  
+  success(...messages: string[]) {
+    console.log(`\x1b[32m[SUCCESS]\x1b[0m`, ...messages);
+  },
+  
+  warning(...messages: string[]) {
+    console.log(`\x1b[33m[WARNING]\x1b[0m`, ...messages);
   },
 };

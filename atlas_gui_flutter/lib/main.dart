@@ -5,6 +5,7 @@ import 'dart:math';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart';
 import 'package:image/image.dart' as img;
 import 'package:file_picker/file_picker.dart';
@@ -20,6 +21,13 @@ const _fallbackAcrylicColor = Color(0x260A0E14);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Check if another instance is already running
+  if (!await _acquireInstanceLock()) {
+    print('Another instance of ATLAS GUI is already running.');
+    exit(1);
+  }
+  
   if (Platform.isWindows) {
     await Window.initialize();
     await Window.setEffect(
@@ -30,6 +38,19 @@ Future<void> main() async {
     await Window.enableFullSizeContentView();
   }
   runApp(const AtlasApp());
+}
+
+ServerSocket? _instanceLockSocket;
+
+Future<bool> _acquireInstanceLock() async {
+  try {
+    // Try to bind to port 57843 (ATLAS in leet speak)
+    _instanceLockSocket = await ServerSocket.bind('127.0.0.1', 57843);
+    return true;
+  } catch (e) {
+    // Port already in use, another instance is running
+    return false;
+  }
 }
 
 class AtlasApp extends StatefulWidget {
@@ -667,7 +688,7 @@ class _AtlasHomePageState extends State<AtlasHomePage>
       subtitle: 'Leaderboard and Point Saving',
       icon: Icons.emoji_events,
       accent: Color(0xFFFF6A8C),
-      enabled: false,
+      enabled: true,
       actions: [
         MenuAction(
           title: 'Arena Leaderboard',
@@ -1201,7 +1222,28 @@ class _SidePanel extends StatelessWidget {
                   Navigator.of(context).push(_buildRoute(const LogsScreen())),
             ),
             const SizedBox(height: 16),
-            Text('Live Logs', style: Theme.of(context).textTheme.titleLarge),
+            Row(
+              children: [
+                Text('Live Logs', style: Theme.of(context).textTheme.titleLarge),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: controller.recentLogs.isEmpty
+                      ? null
+                      : () {
+                          Clipboard.setData(
+                            ClipboardData(text: controller.recentLogs.join('\n')),
+                          );
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Live logs copied to clipboard'),
+                            ),
+                          );
+                        },
+                  icon: const Icon(Icons.copy_all_rounded, size: 18),
+                  label: const Text('Copy'),
+                ),
+              ],
+            ),
             const SizedBox(height: 12),
             Expanded(
               child: Container(
@@ -1211,21 +1253,18 @@ class _SidePanel extends StatelessWidget {
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: Colors.white10),
                 ),
-                child: ListView.builder(
+                child: SingleChildScrollView(
                   controller: _logsController,
-                  itemCount: controller.recentLogs.length,
-                  itemBuilder: (context, index) {
-                    final log = controller.recentLogs[index];
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: SelectableText(
-                        log,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: _onSurface(context, 0.7),
-                        ),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: SelectableText(
+                      controller.recentLogs.join('\n'),
+                      textAlign: TextAlign.left,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: _onSurface(context, 0.7),
                       ),
-                    );
-                  },
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -2197,9 +2236,13 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                 SwitchListTile(
                   value: _straightBloom,
                   onChanged: _toggleStraightBloom,
-                  title: const Text('Straight Bloom (Sniper)'),
+                  title: Text(
+                    _straightBloom
+                        ? 'Straight Bloom Enabled'
+                        : 'Straight Bloom Disabled',
+                  ),
                   subtitle: const Text(
-                    'Toggle straight bloom lines in DefaultGame.ini',
+                    'Toggle straight bloom lines for snipers in DefaultGame.ini',
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -2877,6 +2920,16 @@ class _ArenaScreenState extends State<ArenaScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final top3 = _leaderboard.take(3).toList();
+    final rest = _leaderboard.skip(3).toList();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final leaderboardTitleColor = isDark ? Colors.white70 : Colors.black87;
+    final podiumBaselineColor = isDark ? Colors.grey.shade700 : Colors.grey.shade300;
+    final listRowColor = isDark ? Colors.grey.shade800 : Colors.grey.shade100;
+    final listRankColor = isDark ? Colors.grey.shade300 : Colors.grey.shade600;
+    final listHypeColor = isDark ? Colors.orangeAccent : Colors.orange.shade700;
+    final podiumNameColor = isDark ? Colors.white : Colors.black87;
+
     return _BaseScreen(
       title: 'Arena',
       child: _loading
@@ -2895,36 +2948,447 @@ class _ArenaScreenState extends State<ArenaScreen> {
                       Icon(Icons.info_outline, color: Colors.orangeAccent),
                       SizedBox(width: 8),
                       Text(
-                        'Arena leaderboard is coming soon. Points saving is live.',
+                        'Arena leaderboard and point saving is in development.',
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 16),
-                SwitchListTile(
-                  value: _saveArenaPoints,
-                  onChanged: _toggleSavePoints,
-                  title: const Text('Save Arena Points'),
-                  subtitle: const Text('Persist player hype between sessions'),
-                ),
-                const SizedBox(height: 16),
-                const _SectionTitle(title: 'Leaderboard (Preview)'),
-                const SizedBox(height: 8),
                 Expanded(
-                  child: ListView.builder(
-                    itemCount: _leaderboard.length,
-                    itemBuilder: (context, index) {
-                      final entry = _leaderboard[index];
-                      return ListTile(
-                        leading: Text('#${index + 1}'),
-                        title: Text(entry.accountId),
-                        trailing: Text('${entry.hype} hype'),
-                      );
-                    },
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Left side: Save Arena Points
+                      Expanded(
+                        flex: 1,
+                        child: SwitchListTile(
+                          value: _saveArenaPoints,
+                          onChanged: null,
+                          title: const Text('Save Arena Points'),
+                          subtitle: const Text('Persist player hype between sessions'),
+                          secondary: const Tooltip(
+                            message: 'Disabled',
+                            child: Icon(Icons.info_outline, size: 20),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      // Right side: Leaderboard Box
+                      Expanded(
+                        flex: 1,
+                        child: GlassPanel(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: Text(
+                                  'Leaderboard',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: leaderboardTitleColor,
+                                  ),
+                                ),
+                              ),
+                              // Top 3 Podium
+                              Column(
+                                children: [
+                                  SizedBox(
+                                    height: 210,
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        // 2nd Place
+                                        Flexible(
+                                           child: Column(
+                                             mainAxisAlignment: MainAxisAlignment.end,
+                                             children: [
+                                               top3.length >= 2
+                                                   ? _buildPodiumPillarContent(
+                                                    entry: top3[1],
+                                                    rank: 2,
+                                                    medalColor: const Color(0xFFC0C0C0),
+                                                    nameColor: podiumNameColor,
+                                                   )
+                                                   : _buildEmptyPodiumPillarContent(rank: 2),
+                                               const SizedBox(height: 8),
+                                               Container(
+                                                 width: 60,
+                                                 height: 100,
+                                                 decoration: BoxDecoration(
+                                                  color: const Color(0xFFC0C0C0),
+                                                   borderRadius: const BorderRadius.only(
+                                                     topLeft: Radius.circular(8),
+                                                     topRight: Radius.circular(8),
+                                                   ),
+                                                    border: Border.all(
+                                                      color: const Color(0xFFB0B0B0),
+                                                     width: 2,
+                                                   ),
+                                                 ),
+                                                child: Center(
+                                                  child: Text(
+                                                    '#2',
+                                                    style: TextStyle(
+                                                      fontSize: 22,
+                                                      fontWeight: FontWeight.w900,
+                                                      color: Colors.grey.shade200,
+                                                      shadows: const [
+                                                        Shadow(
+                                                          blurRadius: 8,
+                                                          color: Color(0x99000000),
+                                                          offset: Offset(0, 2),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                               ),
+                                             ],
+                                           ),
+                                        ),
+                                        // 1st Place
+                                        Flexible(
+                                           child: Column(
+                                             mainAxisAlignment: MainAxisAlignment.end,
+                                             children: [
+                                               top3.isNotEmpty
+                                                   ? _buildPodiumPillarContent(
+                                                     entry: top3[0],
+                                                     rank: 1,
+                                                     medalColor: const Color(0xFFD4AF37),
+                                                     nameColor: podiumNameColor,
+                                                   )
+                                                   : _buildEmptyPodiumPillarContent(rank: 1),
+                                               const SizedBox(height: 8),
+                                               Container(
+                                                 width: 60,
+                                                 height: 140,
+                                                 decoration: BoxDecoration(
+                                                  color: const Color(0xFFD4AF37),
+                                                   borderRadius: const BorderRadius.only(
+                                                     topLeft: Radius.circular(8),
+                                                     topRight: Radius.circular(8),
+                                                   ),
+                                                    border: Border.all(
+                                                      color: const Color(0xFFC89B2C),
+                                                     width: 2,
+                                                   ),
+                                                 ),
+                                                 child: Center(
+                                                   child: Column(
+                                                     mainAxisAlignment: MainAxisAlignment.center,
+                                                     children: [
+                                                        Text(
+                                                          '#1',
+                                                          style: TextStyle(
+                                                            fontSize: 22,
+                                                            fontWeight: FontWeight.w900,
+                                                            color: Colors.yellow.shade100,
+                                                            shadows: const [
+                                                              Shadow(
+                                                                blurRadius: 10,
+                                                                color: Color(0xCC000000),
+                                                                offset: Offset(0, 2),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                       if (top3.isNotEmpty)
+                                                         Padding(
+                                                           padding: const EdgeInsets.only(top: 8),
+                                                           child: Text(
+                                                             '${top3[0].hype}',
+                                                             style: const TextStyle(
+                                                               fontSize: 11,
+                                                               fontWeight: FontWeight.bold,
+                                                               color: Colors.black87,
+                                                             ),
+                                                           ),
+                                                         ),
+                                                     ],
+                                                   ),
+                                                 ),
+                                               ),
+                                             ],
+                                           ),
+                                        ),
+                                        // 3rd Place
+                                        Flexible(
+                                           child: Column(
+                                             mainAxisAlignment: MainAxisAlignment.end,
+                                             children: [
+                                               top3.length >= 3
+                                                   ? _buildPodiumPillarContent(
+                                                     entry: top3[2],
+                                                     rank: 3,
+                                                     medalColor: const Color(0xFFCD7F32),
+                                                     nameColor: podiumNameColor,
+                                                   )
+                                                   : _buildEmptyPodiumPillarContent(rank: 3),
+                                               const SizedBox(height: 8),
+                                               Container(
+                                                 width: 60,
+                                                 height: 80,
+                                                 decoration: BoxDecoration(
+                                                  color: const Color(0xFFCD7F32),
+                                                   borderRadius: const BorderRadius.only(
+                                                     topLeft: Radius.circular(8),
+                                                     topRight: Radius.circular(8),
+                                                   ),
+                                                    border: Border.all(
+                                                      color: const Color(0xFFB56A2A),
+                                                     width: 2,
+                                                   ),
+                                                 ),
+                                                child: Center(
+                                                  child: Text(
+                                                    '#3',
+                                                    style: TextStyle(
+                                                      fontSize: 22,
+                                                      fontWeight: FontWeight.w900,
+                                                      color: Colors.orange.shade100,
+                                                      shadows: const [
+                                                        Shadow(
+                                                          blurRadius: 8,
+                                                          color: Color(0x99000000),
+                                                          offset: Offset(0, 2),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                               ),
+                                             ],
+                                           ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Container(
+                                    height: 2,
+                                    color: podiumBaselineColor,
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              // Scrollable list of remaining players
+                              Expanded(
+                                child: rest.isEmpty
+                                    ? const Center(
+                                        child: Text(
+                                          'No more players',
+                                          style: TextStyle(color: Colors.grey),
+                                        ),
+                                      )
+                                    : ListView.builder(
+                                        itemCount: rest.length,
+                                        itemBuilder: (context, index) {
+                                          final entry = rest[index];
+                                          final rank = index + 4;
+                                          return Padding(
+                                            padding: const EdgeInsets.symmetric(vertical: 6),
+                                            child: Container(
+                                              decoration: BoxDecoration(
+                                                color: listRowColor,
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              padding: const EdgeInsets.symmetric(
+                                                horizontal: 12,
+                                                vertical: 8,
+                                              ),
+                                              child: Row(
+                                                children: [
+                                                  SizedBox(
+                                                    width: 40,
+                                                    child: Text(
+                                                      '#$rank',
+                                                      style: TextStyle(
+                                                        fontWeight: FontWeight.bold,
+                                                        color: listRankColor,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  Expanded(
+                                                    child: SizedBox.shrink(),
+                                                  ),
+                                                  Text(
+                                                    '${entry.hype}',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: listHypeColor,
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                              ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
+    );
+  }
+
+  Widget _buildPodiumPillar({
+    required int rank,
+    required ArenaEntry entry,
+    required double height,
+    required Color color,
+    required Color medalColor,
+  }) {
+    final medalIcons = {
+      1: Icons.emoji_events,
+      2: Icons.military_tech,
+      3: Icons.grade,
+    };
+
+    final displayName = entry.accountId.trim().isEmpty ? 'You' : entry.accountId.trim();
+    final shortName = displayName.length > 14
+      ? '${displayName.substring(0, 14)}…'
+      : displayName;
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          medalIcons[rank] ?? Icons.circle,
+          color: medalColor,
+          size: 20,
+        ),
+        const SizedBox(height: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.35),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: Colors.white24, width: 1),
+          ),
+          child: SizedBox(
+            width: 72,
+            child: Text(
+              shortName,
+              textAlign: TextAlign.center,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Container(
+          width: 60,
+          height: height,
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.7),
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(8),
+              topRight: Radius.circular(8),
+            ),
+            border: Border.all(
+              color: color,
+              width: 2,
+            ),
+          ),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  '$rank',
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${entry.hype}',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyPodiumPillar({
+    required int rank,
+    required double height,
+    required Color color,
+  }) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(
+          Icons.lock_outline,
+          color: Colors.grey,
+          size: 20,
+        ),
+        const SizedBox(height: 4),
+        const SizedBox(
+          width: 60,
+          child: Text(
+            'Empty',
+            textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Container(
+          width: 60,
+          height: height,
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.3),
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(8),
+              topRight: Radius.circular(8),
+            ),
+            border: Border.all(
+              color: color,
+              width: 2,
+            ),
+          ),
+          child: Center(
+            child: Text(
+              '$rank',
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -3738,6 +4202,44 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     }
   }
 
+  Future<void> _openClientSettingsFolder(String accountId) async {
+    final clientSettingsPath = joinPath([getBackendRoot(), 'static', 'ClientSettings', accountId]);
+    if (!Directory(clientSettingsPath).existsSync()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ClientSettings folder not found.')),
+      );
+      return;
+    }
+    try {
+      await Process.start('explorer', [clientSettingsPath], runInShell: true);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to open ClientSettings folder.')),
+      );
+    }
+  }
+
+  Future<void> _openProfileFolder(String accountId) async {
+    final profilePath = joinPath([getBackendRoot(), 'static', 'profiles', accountId]);
+    if (!Directory(profilePath).existsSync()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile folder not found.')),
+      );
+      return;
+    }
+    try {
+      await Process.start('explorer', [profilePath], runInShell: true);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to open profile folder.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final presetItems = {
@@ -3793,29 +4295,55 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                                     final profile = _profiles[index];
                                     final selected =
                                         profile.accountId == _selectedProfile;
-                                    return ListTile(
-                                      selected: selected,
-                                      selectedTileColor: Colors.white10,
-                                      title: Text(profile.accountId),
-                                      subtitle: Text(
-                                        profile.hasAthena
-                                            ? 'profile_athena.json found'
-                                            : 'Missing profile_athena.json',
-                                        style: TextStyle(
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.secondary,
+                                    return GestureDetector(
+                                      onSecondaryTapDown: (details) {
+                                        showMenu(
+                                          context: context,
+                                          position: RelativeRect.fromLTRB(
+                                            details.globalPosition.dx,
+                                            details.globalPosition.dy,
+                                            details.globalPosition.dx,
+                                            details.globalPosition.dy,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          items: [
+                                            PopupMenuItem(
+                                              child: const Text('Open ClientSettings Folder'),
+                                              onTap: () => _openClientSettingsFolder(profile.accountId),
+                                            ),
+                                            PopupMenuItem(
+                                              child: const Text('Open Profile Folder'),
+                                              onTap: () => _openProfileFolder(profile.accountId),
+                                            ),
+                                          ],
+                                        );
+                                      },
+                                      child: ListTile(
+                                        selected: selected,
+                                        selectedTileColor: Colors.white10,
+                                        title: Text(profile.accountId),
+                                        subtitle: Text(
+                                          profile.hasAthena
+                                              ? 'profile_athena.json found'
+                                              : 'Missing profile_athena.json',
+                                          style: TextStyle(
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.secondary,
+                                          ),
                                         ),
-                                      ),
-                                      trailing: selected
-                                          ? const Icon(
-                                              Icons.check_circle,
-                                              color: Colors.greenAccent,
-                                            )
-                                          : null,
-                                      onTap: () => setState(
-                                        () => _selectedProfile =
-                                            profile.accountId,
+                                        trailing: selected
+                                            ? const Icon(
+                                                Icons.check_circle,
+                                                color: Colors.greenAccent,
+                                              )
+                                            : null,
+                                        onTap: () => setState(
+                                          () => _selectedProfile =
+                                              profile.accountId,
+                                        ),
                                       ),
                                     );
                                   },
@@ -3993,36 +4521,50 @@ class LogsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final logStore = LogStore.instance;
-    return _BaseScreen(
-      title: 'Logs',
-      child: AnimatedBuilder(
-        animation: logStore,
-        builder: (context, _) {
-          return Container(
+    return AnimatedBuilder(
+      animation: logStore,
+      builder: (context, _) {
+        final allLogsText = logStore.allLogs.join('\n');
+        return _BaseScreen(
+          title: 'Logs',
+          trailing: _HoverScale(
+            child: IconButton(
+              tooltip: 'Copy all logs',
+              onPressed: allLogsText.isEmpty
+                  ? null
+                  : () {
+                      Clipboard.setData(ClipboardData(text: allLogsText));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Logs copied to clipboard')),
+                      );
+                    },
+              icon: const Icon(Icons.copy_all_rounded),
+            ),
+          ),
+          child: Container(
+            width: double.infinity,
+            height: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: Colors.black.withOpacity(0.2),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: Colors.white10),
             ),
-            child: ListView.builder(
-              itemCount: logStore.allLogs.length,
-              itemBuilder: (context, index) {
-                final log = logStore.allLogs[index];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: SelectableText(
-                    log,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: _onSurface(context, 0.7),
-                    ),
+            child: SingleChildScrollView(
+              child: SizedBox(
+                width: double.infinity,
+                child: SelectableText(
+                  allLogsText,
+                  textAlign: TextAlign.left,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: _onSurface(context, 0.7),
                   ),
-                );
-              },
+                ),
+              ),
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }
@@ -4191,9 +4733,10 @@ class ArenaService {
                 (data['stats'] as Map<String, dynamic>?)?['attributes']
                     as Map<String, dynamic>?;
             final hype = stats?['arena_hype'] ?? 0;
+            final folderName = entity.path.split(Platform.pathSeparator).last;
             entries.add(
               ArenaEntry(
-                accountId: entity.uri.pathSegments.last,
+                accountId: folderName,
                 hype: hype is int ? hype : int.tryParse(hype.toString()) ?? 0,
               ),
             );
@@ -4806,19 +5349,12 @@ class LogStore extends ChangeNotifier {
 
   List<String> get allLogs => List.unmodifiable(_logs);
   List<String> get recentLogs =>
-      _logs.length > 16 ? _logs.sublist(_logs.length - 16) : _logs;
+      _logs.length > 20 ? _logs.sublist(_logs.length - 20) : _logs;
 
-  void addOrReplaceLines(
-    List<String> lines,
-    String Function(String) normalizer,
-  ) {
-    for (final line in lines) {
-      final baseLine = normalizer(line);
-      _logs.removeWhere((existing) => normalizer(existing) == baseLine);
-      _logs.add(line);
-    }
-    if (_logs.length > 500) {
-      _logs.removeRange(0, _logs.length - 500);
+  void addLog(String line) {
+    _logs.add(line);
+    if (_logs.length > 1000) {
+      _logs.removeRange(0, _logs.length - 1000);
     }
     notifyListeners();
   }
@@ -5118,6 +5654,13 @@ const List<CurveGroup> _baseCurveGroups = [
     imageName: 'edit.webp',
     icon: Icons.handyman,
     keywords: ['neutral editing'],
+  ),
+  CurveGroup(
+    id: 'storm',
+    title: 'Storm',
+    imageName: 'storm.webp',
+    icon: Icons.cloud,
+    keywords: ['storm', 'safezone', 'safe zone'],
   ),
 ];
 
@@ -6431,6 +6974,27 @@ class UpdateBackupService {
     }
 
     await backupRoot.delete(recursive: true);
+    
+    // If CurveTables were disabled before update, re-disable them in the new DefaultGame.ini
+    final backupFile = File(BackendPaths.modificationsBackup);
+    if (await backupFile.exists()) {
+      final iniFile = File(BackendPaths.defaultGameIni);
+      if (await iniFile.exists()) {
+        var content = await iniFile.readAsString();
+        final regex = RegExp('^\\+CurveTable=.*;RowUpdate;.*\$', multiLine: true);
+        final matches = regex.allMatches(content).map((m) => m.group(0)!).toList();
+        for (final line in matches) {
+          if (!line.startsWith(';')) {
+            content = content.replaceAll(
+              RegExp('^${RegExp.escape(line)}\$', multiLine: true),
+              ';$line',
+            );
+          }
+        }
+        await iniFile.writeAsString(content);
+      }
+    }
+    
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Restored data from previous version.')),
@@ -8152,7 +8716,7 @@ class BackendController extends ChangeNotifier {
       });
     } catch (error) {
       if (_process != null) {
-        _addLog('Backend started with limited process access: $error');
+        // Suppress detached process warning in GUI logs.
         isRunning = false;
         isStarting = false;
         _setStatus('Starting...', Colors.orangeAccent);
@@ -8306,34 +8870,30 @@ class BackendController extends ChangeNotifier {
   }
 
   void _addLog(String log) {
-    final sanitized = log.replaceAll(RegExp(r'\x1B\[[0-?]*[ -/]*[@-~]'), '');
-    final lines = sanitized
-        .trim()
-        .split('\n')
-        .where((line) => _shouldIncludeLog(line))
-        .toList();
+    final sanitized = log
+        .replaceAll(RegExp(r'\x1B\[[0-?]*[ -/]*[@-~]'), '')
+        .trim();
+    
+    if (sanitized.isEmpty) return;
+    
+    final lines = sanitized.split('\n').where((line) => line.trim().isNotEmpty).toList();
     if (lines.isEmpty) return;
-    final timestampPattern = RegExp(
-      r'\s+-\s+\d{1,2}:\d{2}:\d{2}\s+(AM|PM)\s+\S+$',
-    );
-    _logStore.addOrReplaceLines(
-      lines,
-      (line) => line.replaceFirst(timestampPattern, '').trimRight(),
-    );
+    
+    final now = DateTime.now();
+    final hour = now.hour;
+    final period = hour >= 12 ? 'PM' : 'AM';
+    final hour12 = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+    final timezoneAbbr = now.timeZoneName.replaceAll(RegExp(r'[^A-Z]'), '');
+    final timestamp = '[${hour12.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')} $period $timezoneAbbr]';
+    
+    for (final line in lines) {
+      _logStore.addLog('$timestamp $line');
+    }
     notifyListeners();
   }
 
   Future<void> forceKillBackendPort() async {
     await _killBackendOnPort(3551);
-  }
-
-  bool _shouldIncludeLog(String line) {
-    final trimmed = line.trim();
-    if (trimmed.isEmpty) return false;
-    if (trimmed.contains('[BACKEND]') || trimmed.contains('[MATCHMAKING]')) {
-      return true;
-    }
-    return false;
   }
 
   @override
@@ -8373,6 +8933,7 @@ String joinPath(List<String> parts) {
 }
 
 String? _resolveBunPath(String backendRoot) {
+  // Check local bundled Bun first
   final candidates = [
     joinPath([backendRoot, 'tools', 'bun', 'bun.exe']),
     joinPath([backendRoot, 'tools', 'bun', 'bun']),
@@ -8380,6 +8941,8 @@ String? _resolveBunPath(String backendRoot) {
   for (final path in candidates) {
     if (File(path).existsSync()) return path;
   }
+  
+  // Return null to let _checkBunAvailable try to find it in PATH
   return null;
 }
 
@@ -8397,3 +8960,71 @@ String? _resolveBackgroundPath(String path) {
   if (publicImage.existsSync()) return publicImage.path;
   return null;
 }
+
+  Widget _buildPodiumPillarContent({
+    required ArenaEntry entry,
+    required int rank,
+    required Color medalColor,
+    required Color nameColor,
+  }) {
+    final medalIcons = {
+      1: Icons.emoji_events,
+      2: Icons.military_tech,
+      3: Icons.grade,
+    };
+
+    return Column(
+      children: [
+        Icon(
+          medalIcons[rank] ?? Icons.circle,
+          color: medalColor,
+          size: 20,
+        ),
+        const SizedBox(height: 4),
+        SizedBox(
+          width: 70,
+          child: Text(
+            entry.accountId,
+            textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
+            maxLines: 2,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: nameColor,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyPodiumPillarContent({required int rank}) {
+    final medalColor = rank == 2
+      ? const Color(0xFFC0C0C0)
+      : const Color(0xFFCD7F32);
+
+    return Column(
+      children: [
+        Icon(
+          Icons.military_tech,
+          color: medalColor,
+          size: 20,
+        ),
+        const SizedBox(height: 4),
+        const SizedBox(
+          width: 70,
+          child: Text(
+            'Empty',
+            textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey,
+            ),
+          ),
+        ),
+      ],
+    );
+  }

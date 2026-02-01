@@ -117,5 +117,11 @@
       "+CurveTable=/Game/Athena/Balance/DataTables/AthenaFallingDamage;RowUpdate;Player;2704;0.0",
       "+CurveTable=/Game/Athena/Balance/DataTables/AthenaFallingDamage;RowUpdate;Player;7200;0.0"
     ]
+  },
+  "20": {
+    "name": "Storm Damage",
+    "key": "Default.SafeZone.Damage",
+    "type": "static",
+    "staticValue": "0"
   }
 }
