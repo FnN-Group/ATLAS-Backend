@@ -2265,6 +2265,28 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     );
     return _BaseScreen(
       title: 'Modifications',
+      trailing: _HoverScale(
+        child: OutlinedButton.icon(
+          onPressed: () async {
+            final hotfixesPath = joinPath([getBackendRoot(), 'static', 'hotfixes']);
+            if (Platform.isWindows) {
+              try {
+                await Process.start('explorer', [hotfixesPath]);
+              } catch (_) {}
+            } else if (Platform.isMacOS) {
+              try {
+                await Process.start('open', [hotfixesPath]);
+              } catch (_) {}
+            } else if (Platform.isLinux) {
+              try {
+                await Process.start('xdg-open', [hotfixesPath]);
+              } catch (_) {}
+            }
+          },
+          icon: const Icon(Icons.folder_open),
+          label: const Text('Open Folder'),
+        ),
+      ),
       child: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
