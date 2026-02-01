@@ -6890,7 +6890,6 @@ class UpdateBackupService {
 
     final backendRoot = getBackendRoot();
     final entries = <_BackupEntry>[
-      _BackupEntry.dir(joinPath([backendRoot, 'static', 'profiles'])),
       _BackupEntry.dir(joinPath([backendRoot, 'static', 'ClientSettings'])),
       _BackupEntry.file(
         joinPath([backendRoot, 'static', 'hotfixes', 'DefaultGame.ini']),
@@ -6922,6 +6921,16 @@ class UpdateBackupService {
       }
     }
 
+    // Backup user-created profiles only (exclude template profiles)
+    final profilesSource = Directory(joinPath([backendRoot, 'static', 'profiles']));
+    if (profilesSource.existsSync()) {
+      final profilesTarget = Directory(joinPath([backupRoot.path, 'static', 'profiles']));
+      await _copyDirectoryExcludingProfiles(profilesSource, profilesTarget, _templateProfiles);
+    }
+
+    // Don't backup Profile Presets - they are templates
+    // (athenaprofiles/Profile Presets is skipped automatically)
+
     final manifest = {
       'version': _normalizeVersion(await _readBackendVersion()),
       'createdAt': DateTime.now().toIso8601String(),
@@ -6937,7 +6946,6 @@ class UpdateBackupService {
 
     final backendRoot = getBackendRoot();
     final entries = <_BackupEntry>[
-      _BackupEntry.dir(joinPath([backupRoot.path, 'static', 'profiles'])),
       _BackupEntry.dir(joinPath([backupRoot.path, 'static', 'ClientSettings'])),
       _BackupEntry.file(
         joinPath([backupRoot.path, 'static', 'hotfixes', 'DefaultGame.ini']),
@@ -6970,6 +6978,16 @@ class UpdateBackupService {
         await file.copy(target);
       }
     }
+
+    // Restore user-created profiles only (exclude template profiles)
+    final profilesSource = Directory(joinPath([backupRoot.path, 'static', 'profiles']));
+    if (profilesSource.existsSync()) {
+      final profilesTarget = Directory(joinPath([backendRoot, 'static', 'profiles']));
+      await _copyDirectoryExcludingProfiles(profilesSource, profilesTarget, _templateProfiles);
+    }
+
+    // Note: Profile Presets (athenaprofiles/Profile Presets) are not backed up or restored
+    // They are templates and should not be modified
 
     await backupRoot.delete(recursive: true);
     
@@ -7008,6 +7026,39 @@ class UpdateBackupService {
       final newPath = joinPath([destination.path, name]);
       if (entity is Directory) {
         await _copyDirectory(entity, Directory(newPath));
+      } else if (entity is File) {
+        await entity.copy(newPath);
+      }
+    }
+  }
+
+  static const Set<String> _templateProfiles = {
+    'profile_athena.json',
+    'profile_campaign.json',
+    'profile_collections.json',
+    'profile_common_core.json',
+    'profile_common_public.json',
+    'profile_creative.json',
+    'profile_metadata.json',
+    'profile_outpost0.json',
+    'profile_profile0.json',
+    'profile_theater0.json',
+  };
+
+  static Future<void> _copyDirectoryExcludingProfiles(
+    Directory source,
+    Directory destination,
+    Set<String> excludeFiles, {
+    bool isRootLevel = true,
+  }) async {
+    await destination.create(recursive: true);
+    await for (final entity in source.list(recursive: false)) {
+      final name = entity.uri.pathSegments.last;
+      // Only exclude template files at root level, not in user subfolders
+      if (isRootLevel && excludeFiles.contains(name)) continue;
+      final newPath = joinPath([destination.path, name]);
+      if (entity is Directory) {
+        await _copyDirectoryExcludingProfiles(entity, Directory(newPath), excludeFiles, isRootLevel: false);
       } else if (entity is File) {
         await entity.copy(newPath);
       }
