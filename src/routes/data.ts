@@ -164,9 +164,18 @@ export default function () {
     }
 
     if (version.season === 10) {
-      content.dynamicbackgrounds.backgrounds.backgrounds[0].stage = "seasonx";
-      content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
+      if (version.build === 10.40) {
+        content.dynamicbackgrounds.backgrounds.backgrounds[0].stage =
+          "blackmonday";
+        content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
+          "";
+      }
+      else {
+        content.dynamicbackgrounds.backgrounds.backgrounds[0].stage = 
+        "seasonx";
+        content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage = 
         "";
+      }
     } else if (version.season === 11) {
       if (version.build === 11.31 || version.build === 11.4) {
         content.dynamicbackgrounds.backgrounds.backgrounds[0].stage =
