@@ -119,7 +119,7 @@
     ]
   },
   "20": {
-    "name": "Storm Damage",
+    "name": "Storm Damage Fix",
     "key": "Default.SafeZone.Damage",
     "type": "static",
     "staticValue": "0"
