@@ -187,4 +187,3 @@ exports/*
 !exports/.gitkeep
 responses/modifications-backup.json
 flutter/
-/atlas_gui_flutter
