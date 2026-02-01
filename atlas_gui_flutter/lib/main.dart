@@ -1483,7 +1483,7 @@ class AtlasBackground extends StatelessWidget {
       getBackendRoot(),
       'public',
       'images',
-      'hey-fortnite-flat-earthers-explain-these-images-of-things-v0-0c9emy18f0t81.webp',
+      'DefaultBackground.webp',
     ]);
     final imageFile = File(imagePath);
     return Stack(
