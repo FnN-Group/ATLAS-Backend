@@ -1,7 +1,7 @@
 {
   "created": "",
   "updated": "",
-  "rvn": 2256,
+  "rvn": 2257,
   "wipeNumber": 1,
   "accountId": "",
   "profileId": "athena",
@@ -19,7 +19,7 @@
             },
             "Character": {
               "items": [
-                "AthenaCharacter:CID_295_Athena_Commando_M_CupidWinter"
+                ""
               ],
               "activeVariants": [
                 {
@@ -236832,7 +236832,7 @@
       "favorite_consumableemote": "",
       "banner_color": "DefaultColor1",
       "favorite_callingcard": "",
-      "favorite_character": "AthenaCharacter:CID_295_Athena_Commando_M_CupidWinter",
+      "favorite_character": "AthenaCharacter:CID_001_Athena_Commando_F_Default",
       "favorite_spray": [],
       "book_xp": 100,
       "favorite_loadingscreen": "",
@@ -236875,5 +236875,5 @@
       ]
     }
   },
-  "commandRevision": 2255
+  "commandRevision": 2256
 }

@@ -22,6 +22,9 @@ const _fallbackAcrylicColor = Color(0x260A0E14);
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
+  // Initialize app data directory structure if running from installed location
+  await _initializeAppDataDirectory();
+  
   // Check if another instance is already running
   if (!await _acquireInstanceLock()) {
     print('Another instance of ATLAS GUI is already running.');
@@ -50,6 +53,40 @@ Future<bool> _acquireInstanceLock() async {
   } catch (e) {
     // Port already in use, another instance is running
     return false;
+  }
+}
+
+Future<void> _initializeAppDataDirectory() async {
+  final executablePath = File(Platform.resolvedExecutable).parent.path;
+  if (executablePath.contains(r'Program Files') || executablePath.contains(r'AppData\Local\Programs')) {
+    // Running from installed MSI - ensure app data directories exist
+    final appDataDir = Platform.environment['APPDATA'];
+    if (appDataDir != null) {
+      final atlasDataDir = Directory(joinPath([appDataDir, 'ATLAS']));
+      final requiredDirs = [
+        atlasDataDir,
+        Directory(joinPath([atlasDataDir.path, 'static', 'profiles'])),
+        Directory(joinPath([atlasDataDir.path, 'static', 'ClientSettings'])),
+        Directory(joinPath([atlasDataDir.path, 'static', 'athenaprofiles'])),
+        Directory(joinPath([atlasDataDir.path, 'static', 'shop'])),
+        Directory(joinPath([atlasDataDir.path, 'static', 'discovery'])),
+        Directory(joinPath([atlasDataDir.path, 'static', 'hotfixes'])),
+        Directory(joinPath([atlasDataDir.path, 'static', 'events'])),
+        Directory(joinPath([atlasDataDir.path, 'public', 'gameconfig'])),
+        Directory(joinPath([atlasDataDir.path, 'public', 'images'])),
+        Directory(joinPath([atlasDataDir.path, 'public', 'items'])),
+        Directory(joinPath([atlasDataDir.path, 'public', 'playlists'])),
+        Directory(joinPath([atlasDataDir.path, 'responses'])),
+        Directory(joinPath([atlasDataDir.path, 'exports'])),
+        Directory(joinPath([atlasDataDir.path, 'logs'])),
+      ];
+      
+      for (final dir in requiredDirs) {
+        if (!dir.existsSync()) {
+          await dir.create(recursive: true);
+        }
+      }
+    }
   }
 }
 
@@ -8933,6 +8970,23 @@ class BackendController extends ChangeNotifier {
 }
 
 String getBackendRoot() {
+  // Check if running from an installed location (not from source)
+  // If running from Program Files or AppData Local, use separate app data directory
+  final executablePath = File(Platform.resolvedExecutable).parent.path;
+  if (executablePath.contains(r'Program Files') || executablePath.contains(r'AppData\Local\Programs')) {
+    // Running from installed MSI - use AppData for data storage
+    final appDataDir = Platform.environment['APPDATA'];
+    if (appDataDir != null) {
+      final atlasDataDir = Directory(joinPath([appDataDir, 'ATLAS']));
+      // Ensure the directory exists
+      if (!atlasDataDir.existsSync()) {
+        atlasDataDir.createSync(recursive: true);
+      }
+      return atlasDataDir.path;
+    }
+  }
+
+  // Development/source mode - look for static and src directories
   final candidates = <Directory>[
     Directory.current,
     Directory.current.parent,
