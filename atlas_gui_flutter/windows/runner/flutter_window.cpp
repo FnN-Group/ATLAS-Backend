@@ -1,8 +1,16 @@
 #include "flutter_window.h"
 
 #include <optional>
+#include <flutter/method_channel.h>
+#include <flutter/standard_method_codec.h>
 
 #include "flutter/generated_plugin_registrant.h"
+
+std::string GetRadminVpnIp() {
+  // TODO: Implement VPN IP detection using Windows Network APIs
+  // For now, return error message prompting user to check network settings
+  return "Error: VPN IP detection coming soon. Please check your Radmin VPN network adapter settings.";
+}
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -25,6 +33,22 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+  
+  // Set up method channel for VPN IP detection
+  auto channel = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+      flutter_controller_->engine()->messenger(), "com.atlas/vpn",
+      &flutter::StandardMethodCodec::GetInstance());
+  
+  channel->SetMethodCallHandler([](const flutter::MethodCall<flutter::EncodableValue>& call,
+                                    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+    if (call.method_name() == "getVpnIp") {
+      std::string ip = GetRadminVpnIp();
+      result->Success(flutter::EncodableValue(ip));
+    } else {
+      result->NotImplemented();
+    }
+  });
+  
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {

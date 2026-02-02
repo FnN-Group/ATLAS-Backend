@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart';
@@ -11,6 +12,7 @@ import 'package:image/image.dart' as img;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
 import 'package:archive/archive_io.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 final ValueNotifier<ThemeMode> appThemeMode = ValueNotifier(ThemeMode.dark);
 final ValueNotifier<String> appBackgroundPath = ValueNotifier('');
@@ -47,45 +49,39 @@ ServerSocket? _instanceLockSocket;
 
 Future<bool> _acquireInstanceLock() async {
   try {
-    // Try to bind to port 57843 (ATLAS in leet speak)
-    _instanceLockSocket = await ServerSocket.bind('127.0.0.1', 57843);
+    _instanceLockSocket = await ServerSocket.bind(
+      InternetAddress.loopbackIPv4,
+      43621,
+    );
     return true;
-  } catch (e) {
-    // Port already in use, another instance is running
+  } catch (_) {
     return false;
   }
 }
 
 Future<void> _initializeAppDataDirectory() async {
-  final executablePath = File(Platform.resolvedExecutable).parent.path;
-  if (executablePath.contains(r'Program Files') || executablePath.contains(r'AppData\Local\Programs')) {
-    // Running from installed MSI - ensure app data directories exist
-    final appDataDir = Platform.environment['APPDATA'];
-    if (appDataDir != null) {
-      final atlasDataDir = Directory(joinPath([appDataDir, 'ATLAS']));
-      final requiredDirs = [
-        atlasDataDir,
-        Directory(joinPath([atlasDataDir.path, 'static', 'profiles'])),
-        Directory(joinPath([atlasDataDir.path, 'static', 'ClientSettings'])),
-        Directory(joinPath([atlasDataDir.path, 'static', 'athenaprofiles'])),
-        Directory(joinPath([atlasDataDir.path, 'static', 'shop'])),
-        Directory(joinPath([atlasDataDir.path, 'static', 'discovery'])),
-        Directory(joinPath([atlasDataDir.path, 'static', 'hotfixes'])),
-        Directory(joinPath([atlasDataDir.path, 'static', 'events'])),
-        Directory(joinPath([atlasDataDir.path, 'public', 'gameconfig'])),
-        Directory(joinPath([atlasDataDir.path, 'public', 'images'])),
-        Directory(joinPath([atlasDataDir.path, 'public', 'items'])),
-        Directory(joinPath([atlasDataDir.path, 'public', 'playlists'])),
-        Directory(joinPath([atlasDataDir.path, 'responses'])),
-        Directory(joinPath([atlasDataDir.path, 'exports'])),
-        Directory(joinPath([atlasDataDir.path, 'logs'])),
-      ];
-      
-      for (final dir in requiredDirs) {
-        if (!dir.existsSync()) {
-          await dir.create(recursive: true);
-        }
-      }
+  final atlasDataDir = Directory(getBackendRoot());
+  final requiredDirs = [
+    atlasDataDir,
+    Directory(joinPath([atlasDataDir.path, 'static', 'profiles'])),
+    Directory(joinPath([atlasDataDir.path, 'static', 'ClientSettings'])),
+    Directory(joinPath([atlasDataDir.path, 'static', 'athenaprofiles'])),
+    Directory(joinPath([atlasDataDir.path, 'static', 'shop'])),
+    Directory(joinPath([atlasDataDir.path, 'static', 'discovery'])),
+    Directory(joinPath([atlasDataDir.path, 'static', 'hotfixes'])),
+    Directory(joinPath([atlasDataDir.path, 'static', 'events'])),
+    Directory(joinPath([atlasDataDir.path, 'public', 'gameconfig'])),
+    Directory(joinPath([atlasDataDir.path, 'public', 'images'])),
+    Directory(joinPath([atlasDataDir.path, 'public', 'items'])),
+    Directory(joinPath([atlasDataDir.path, 'public', 'playlists'])),
+    Directory(joinPath([atlasDataDir.path, 'responses'])),
+    Directory(joinPath([atlasDataDir.path, 'exports'])),
+    Directory(joinPath([atlasDataDir.path, 'logs'])),
+  ];
+
+  for (final dir in requiredDirs) {
+    if (!dir.existsSync()) {
+      await dir.create(recursive: true);
     }
   }
 }
@@ -424,6 +420,209 @@ class _AtlasHomePageState extends State<AtlasHomePage>
     await _showUpdateDialog(info);
   }
 
+  Future<void> _showShareDialog() async {
+    String vpnIp = 'Detecting...';
+    bool isLoading = true;
+    bool hasError = false;
+
+    try {
+      vpnIp = await VpnService.getVpnIpAddress();
+      hasError = vpnIp.startsWith('Error:');
+      isLoading = false;
+    } catch (e) {
+      vpnIp = 'Error: $e';
+      hasError = true;
+      isLoading = false;
+    }
+
+    if (!mounted) return;
+
+    final widget = StatefulBuilder(
+      builder: (context, setState) {
+        Widget buildStep(int index, List<InlineSpan> spans) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 22,
+                  height: 22,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.white24),
+                  ),
+                  child: Text(
+                    '$index',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: RichText(
+                    text: TextSpan(
+                      style: const TextStyle(fontSize: 12.8, color: Colors.white70),
+                      children: spans,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return AlertDialog(
+        title: const Text('Share Connection Details'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Radmin VPN IP for Reboot Launcher:'),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white10,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white24),
+              ),
+              child: SelectableText(
+                isLoading ? 'Detecting...' : vpnIp,
+                style: const TextStyle(
+                  fontFamily: 'Courier',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            if (hasError) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Make sure Radmin VPN is installed and running',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.redAccent.withOpacity(0.8),
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: () async {
+                  final url = Uri.parse('https://www.radmin-vpn.com/');
+                  final opened = await launchUrl(
+                    url,
+                    mode: LaunchMode.externalApplication,
+                  );
+                  if (!opened && mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Unable to open download link.')),
+                    );
+                  }
+                },
+                icon: const Icon(Icons.open_in_new),
+                label: const Text('Download Radmin VPN'),
+              ),
+            ],
+            if (!isLoading && !hasError) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white10,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.white12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.school_rounded, size: 18, color: Colors.white70),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Quick setup in Reboot Launcher for others',
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white.withOpacity(0.95),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    buildStep(1, const [
+                      TextSpan(text: 'Open '),
+                      TextSpan(text: 'Reboot Launcher', style: TextStyle(fontWeight: FontWeight.w700)),
+                      TextSpan(text: '.'),
+                    ]),
+                    buildStep(2, const [
+                      TextSpan(text: 'Go to '),
+                      TextSpan(text: 'Backend', style: TextStyle(fontWeight: FontWeight.w700)),
+                      TextSpan(text: ' and switch '),
+                      TextSpan(text: 'Embedded', style: TextStyle(fontWeight: FontWeight.w700)),
+                      TextSpan(text: ' to '),
+                      TextSpan(text: 'Remote', style: TextStyle(fontWeight: FontWeight.w700)),
+                      TextSpan(text: '.'),
+                    ]),
+                    buildStep(3, const [
+                      TextSpan(text: 'Paste the Host IP into the '),
+                      TextSpan(text: 'Host', style: TextStyle(fontWeight: FontWeight.w700)),
+                      TextSpan(text: ' field.'),
+                    ]),
+                    buildStep(4, const [
+                      TextSpan(text: 'Click '),
+                      TextSpan(text: 'Start Backend', style: TextStyle(fontWeight: FontWeight.w700)),
+                      TextSpan(text: '.'),
+                    ]),
+                    buildStep(5, const [
+                      TextSpan(text: 'Confirm you see '),
+                      TextSpan(
+                        text: '“The backend was started successfully”',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      TextSpan(text: ' then launch your game!'),
+                    ]),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          if (!isLoading && !hasError)
+            ElevatedButton.icon(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: vpnIp));
+                Navigator.pop(context);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('VPN IP copied to clipboard!')),
+                  );
+                }
+              },
+              icon: const Icon(Icons.copy),
+              label: const Text('Copy'),
+            ),
+        ],
+      );
+      },
+    );
+
+    await _showBlurDialog<void>(
+      context: context,
+      barrierDismissible: !isLoading,
+      builder: (_) => widget,
+    );
+  }
+
   Future<void> _showVersionHistoryMenu(BuildContext anchorContext) async {
     if (_loadingReleaseHistory) return;
     if (_releaseHistory.isEmpty) {
@@ -749,18 +948,18 @@ class _AtlasHomePageState extends State<AtlasHomePage>
       ],
     ),
     MenuItemData(
-      title: 'Profiles',
-      subtitle: 'Manage profiles and apply custom cosmetic presets',
+      title: 'Users',
+      subtitle: 'Manage users, profiles, and client settings',
       icon: Icons.people_alt_rounded,
       accent: Color(0xFF7EE081),
       actions: [
         MenuAction(
-          title: 'View Profiles',
-          description: 'See all local profiles.',
+          title: 'View Users',
+          description: 'See all local users.',
         ),
         MenuAction(
           title: 'Apply Preset',
-          description: 'Replace a profile with a preset.',
+          description: 'Replace a user with a preset.',
         ),
       ],
     ),
@@ -792,6 +991,7 @@ class _AtlasHomePageState extends State<AtlasHomePage>
                         context,
                       ).push(_buildRoute(const SettingsScreen())),
                       onCheckUpdates: () => _checkForUpdates(silent: false),
+                      onShowShareDialog: _showShareDialog,
                       height: 110,
                     ),
                   ),
@@ -832,6 +1032,7 @@ class _TopBar extends StatelessWidget {
     required this.onVersionPressed,
     required this.onSettingsPressed,
     required this.onCheckUpdates,
+    required this.onShowShareDialog,
     required this.height,
   });
 
@@ -842,6 +1043,7 @@ class _TopBar extends StatelessWidget {
   final void Function(BuildContext context)? onVersionPressed;
   final VoidCallback onSettingsPressed;
   final VoidCallback? onCheckUpdates;
+  final VoidCallback onShowShareDialog;
   final double height;
 
   @override
@@ -892,7 +1094,19 @@ class _TopBar extends StatelessWidget {
           SizedBox(
             width: 40,
             child: _HoverScale(
-              enabled: onSettingsPressed != null,
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: onShowShareDialog,
+                icon: const Icon(Icons.share_rounded),
+                tooltip: 'Share VPN Connection',
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 40,
+            child: _HoverScale(
               child: IconButton(
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
@@ -1954,14 +2168,20 @@ Future<void> _openUrl(String url) async {
 
 PageRouteBuilder<void> _buildRoute(Widget page) {
   return PageRouteBuilder<void>(
-    transitionDuration: const Duration(milliseconds: 260),
+    transitionDuration: const Duration(milliseconds: 350),
     pageBuilder: (_, __, ___) => page,
     transitionsBuilder: (_, animation, __, child) {
       final curve = CurvedAnimation(
         parent: animation,
-        curve: Curves.easeOutCubic,
+        curve: Curves.easeInOutCubic,
       );
-      return FadeTransition(opacity: curve, child: child);
+      return FadeTransition(
+        opacity: curve,
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.98, end: 1).animate(curve),
+          child: child,
+        ),
+      );
     },
   );
 }
@@ -2001,7 +2221,7 @@ Widget _pageForMenu(String title) {
       return const ArenaScreen();
     case 'Game Configuration':
       return const GameConfigurationScreen();
-    case 'Profiles':
+    case 'Users':
       return const ProfilesScreen();
     case 'Logs':
       return const LogsScreen();
@@ -2063,9 +2283,15 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     final curvesEnabled = await CurveTableService.areGlobalEnabled();
     final curves = await CurveTableService.loadCurves();
     if (!mounted) return;
+    var finalBloom = bloom;
+    var finalCustom = customSpreadState.enabled;
+    if (finalBloom && finalCustom) {
+      finalBloom = false;
+      StraightBloomService.setEnabled(false).ignore();
+    }
     setState(() {
-      _straightBloom = bloom;
-      _customSniperSpread = customSpreadState.enabled;
+      _straightBloom = finalBloom;
+      _customSniperSpread = finalCustom;
       _sniperSpreadAmount = customSpreadState.amount;
       _spreadController.text = customSpreadState.amount;
       _curveTablesEnabled = curvesEnabled;
@@ -2076,30 +2302,37 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
   }
 
   Future<void> _toggleStraightBloom(bool value) async {
-    await StraightBloomService.setEnabled(value);
-    if (value && _customSniperSpread) {
-      // Disable custom spread when enabling straight bloom
-      await CustomSniperSpreadService.setEnabled(false, _sniperSpreadAmount);
-    }
     if (!mounted) return;
+    final wasCustomSpread = _customSniperSpread;
     setState(() {
       _straightBloom = value;
       if (value) _customSniperSpread = false;
     });
+    StraightBloomService.setEnabled(value).ignore();
+    if (value && wasCustomSpread) {
+      CustomSniperSpreadService.setEnabled(false, _sniperSpreadAmount).ignore();
+    }
   }
 
   Future<void> _toggleCustomSniperSpread(bool value) async {
-    await CustomSniperSpreadService.setEnabled(value, _sniperSpreadAmount);
     if (!mounted) return;
-    setState(() => _customSniperSpread = value);
+    final wasStraightBloom = _straightBloom;
+    setState(() {
+      _customSniperSpread = value;
+      if (value) _straightBloom = false;
+    });
+    CustomSniperSpreadService.setEnabled(value, _sniperSpreadAmount).ignore();
+    if (value && wasStraightBloom) {
+      StraightBloomService.setEnabled(false).ignore();
+    }
   }
 
   Future<void> _updateSniperSpreadAmount(String value) async {
     final amount = value.trim();
     if (amount.isEmpty) return;
-    await CustomSniperSpreadService.setEnabled(_customSniperSpread, amount);
     if (!mounted) return;
     setState(() => _sniperSpreadAmount = amount);
+    CustomSniperSpreadService.setEnabled(_customSniperSpread, amount).ignore();
   }
 
   Future<void> _toggleCurveTables() async {
@@ -2321,18 +2554,19 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
           : ListView(
               children: [
                 const _SectionTitle(title: 'Straight Bloom'),
-                SwitchListTile(
-                  value: _straightBloom,
-                  onChanged: _toggleStraightBloom,
-                  title: Text(
-                    _straightBloom
-                        ? 'Straight Bloom Enabled'
-                        : 'Straight Bloom Disabled',
+                if (!_customSniperSpread)
+                  SwitchListTile(
+                    value: _straightBloom,
+                    onChanged: _toggleStraightBloom,
+                    title: Text(
+                      _straightBloom
+                          ? 'Straight Bloom Enabled'
+                          : 'Straight Bloom Disabled',
+                    ),
+                    subtitle: const Text(
+                      'Toggles no-spread for all snipers.',
+                    ),
                   ),
-                  subtitle: const Text(
-                    'Toggles no-spread for all snipers.',
-                  ),
-                ),
                 if (!_straightBloom) ...[
                   const SizedBox(height: 12),
                   SwitchListTile(
@@ -3590,12 +3824,16 @@ class _ArenaScreenState extends State<ArenaScreen> {
                           Positioned.fill(
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(12),
-                              child: BackdropFilter(
-                                filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-                                child: Container(
-                                  color: Colors.black.withOpacity(0.3),
-                                  child: const Center(
-                                    child: CircularProgressIndicator(),
+                              child: AnimatedOpacity(
+                                opacity: _leaderboardLoading ? 1 : 0,
+                                duration: const Duration(milliseconds: 400),
+                                child: BackdropFilter(
+                                  filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+                                  child: Container(
+                                    color: Colors.black.withOpacity(0.3),
+                                    child: const Center(
+                                      child: CircularProgressIndicator(),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -3753,6 +3991,83 @@ class _ArenaScreenState extends State<ArenaScreen> {
                 fontWeight: FontWeight.bold,
                 color: Colors.grey,
               ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPodiumPillarContent({
+    required ArenaEntry entry,
+    required int rank,
+    required Color medalColor,
+    required Color nameColor,
+  }) {
+    final medalIcons = {
+      1: Icons.emoji_events,
+      2: Icons.military_tech,
+      3: Icons.military_tech,
+    };
+
+    return Column(
+      children: [
+        Icon(
+          medalIcons[rank] ?? Icons.circle,
+          color: medalColor,
+          size: 20,
+        ),
+        const SizedBox(height: 4),
+        SizedBox(
+          width: 70,
+          child: Text(
+            entry.accountId,
+            textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
+            maxLines: 2,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: nameColor,
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '${entry.hype}',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: nameColor.withOpacity(0.8),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyPodiumPillarContent({required int rank}) {
+    final medalColor = rank == 2
+      ? const Color(0xFFC0C0C0)
+      : const Color(0xFFCD7F32);
+
+    return Column(
+      children: [
+        Icon(
+          Icons.military_tech,
+          color: medalColor,
+          size: 20,
+        ),
+        const SizedBox(height: 4),
+        const SizedBox(
+          width: 70,
+          child: Text(
+            'Empty',
+            textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey,
             ),
           ),
         ),
@@ -3957,7 +4272,6 @@ class _GameConfigurationScreenState extends State<GameConfigurationScreen> {
         return joinPath([base, 'waterlevel$_waterLevel.webp']);
       case _GameConfigPreview.waterStorm:
         return joinPath([base, 'waterstorm.webp']);
-      case _GameConfigPreview.none:
       default:
         return joinPath([base, 'default.webp']);
     }
@@ -4328,7 +4642,7 @@ class _DataManagementPanelState extends State<DataManagementPanel> {
         ListTile(
           title: const Text('Export Backend Settings'),
           subtitle: const Text(
-            'Write DefaultGame.ini, profiles, client settings to exports/',
+            'Write Profile, Client Settings, and DefaultGame.ini data to exports/',
           ),
           trailing: _HoverScale(
             enabled: !_busy,
@@ -4358,7 +4672,7 @@ class _DataManagementPanelState extends State<DataManagementPanel> {
         ListTile(
           title: const Text('Clear Exported Data'),
           subtitle: const Text(
-            'Remove DefaultGame, profiles, and client settings from exports/',
+            'Remove Profile, Client Setting, and DefaultGame.ini data from exports/',
           ),
           trailing: _HoverScale(
             enabled: !_busy,
@@ -4375,7 +4689,7 @@ class _DataManagementPanelState extends State<DataManagementPanel> {
         ListTile(
           title: const Text('Clear Backend Data'),
           subtitle: const Text(
-            'Reset profiles, client settings, CurveTables, and straight bloom',
+            'Clear All Profile, Client Setting, CurveTable, and Straight Bloom data from the backend',
           ),
           trailing: _HoverScale(
             enabled: !_busy,
@@ -4503,7 +4817,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     }
     final confirm = await DataService._confirmDialog(
       context,
-      'Replace profile_athena.json for all profiles with preset "${preset.displayName}"?',
+      'Replace profile_athena.json for all users with preset "${preset.displayName}"?',
     );
     if (!confirm) return;
     try {
@@ -4529,18 +4843,126 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   Future<void> _deleteProfile() async {
     final profileId = _selectedProfile;
     if (profileId == null) return;
-    final confirm = await DataService._confirmDialog(
-      context,
-      'Delete profile "$profileId"? This removes profile data and ClientSettings for this user.',
+    
+    // Check which folders exist
+    final profilesDir = Directory(
+      joinPath([getBackendRoot(), 'static', 'profiles', profileId]),
     );
-    if (!confirm) return;
+    final clientSettingsDir = Directory(
+      joinPath([getBackendRoot(), 'static', 'ClientSettings', profileId]),
+    );
+    final profileFolderExists = await profilesDir.exists();
+    final clientSettingsFolderExists = await clientSettingsDir.exists();
+    
+    bool deleteProfile = profileFolderExists;
+    bool deleteClientSettings = clientSettingsFolderExists;
+    
+    final blurEnabled = appDialogBlurEnabled.value;
+    
+    final result = await showDialog<Map<String, bool>>(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.3),
+      builder: (context) => blurEnabled
+          ? BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: StatefulBuilder(
+                builder: (context, setState) => AlertDialog(
+                  title: Text('Delete profile "$profileId"?'),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Select what to delete:'),
+                      const SizedBox(height: 12),
+                      CheckboxListTile(
+                        value: deleteProfile,
+                        onChanged: profileFolderExists 
+                            ? (value) => setState(() => deleteProfile = value ?? true)
+                            : null,
+                        title: const Text('User Profile'),
+                        subtitle: const Text('profile_athena.json and related profile data'),
+                        controlAffinity: ListTileControlAffinity.leading,
+                      ),
+                      CheckboxListTile(
+                        value: deleteClientSettings,
+                        onChanged: clientSettingsFolderExists
+                            ? (value) => setState(() => deleteClientSettings = value ?? true)
+                            : null,
+                        title: const Text('ClientSettings'),
+                        subtitle: const Text('Game settings and preferences'),
+                        controlAffinity: ListTileControlAffinity.leading,
+                      ),
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                      onPressed: (deleteProfile || deleteClientSettings)
+                          ? () => Navigator.pop(context, {'profile': deleteProfile, 'settings': deleteClientSettings})
+                          : null,
+                      child: const Text('Delete', style: TextStyle(color: Colors.white)),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : StatefulBuilder(
+              builder: (context, setState) => AlertDialog(
+                title: Text('Delete profile "$profileId"?'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Select what to delete:'),
+                    const SizedBox(height: 12),
+                    CheckboxListTile(
+                      value: deleteProfile,
+                      onChanged: profileFolderExists 
+                          ? (value) => setState(() => deleteProfile = value ?? true)
+                          : null,
+                      title: const Text('User Profile'),
+                      subtitle: const Text('profile_athena.json and related profile data'),
+                      controlAffinity: ListTileControlAffinity.leading,
+                    ),
+                    CheckboxListTile(
+                      value: deleteClientSettings,
+                      onChanged: clientSettingsFolderExists
+                          ? (value) => setState(() => deleteClientSettings = value ?? true)
+                          : null,
+                      title: const Text('ClientSettings'),
+                      subtitle: const Text('Game settings and preferences'),
+                      controlAffinity: ListTileControlAffinity.leading,
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                    onPressed: (deleteProfile || deleteClientSettings)
+                        ? () => Navigator.pop(context, {'profile': deleteProfile, 'settings': deleteClientSettings})
+                        : null,
+                    child: const Text('Delete', style: TextStyle(color: Colors.white)),
+                  ),
+                ],
+              ),
+            ),
+    );
+    
+    if (result == null) return;
+    
     try {
-      await ProfileService.deleteProfile(profileId);
+      await ProfileService.deleteProfile(profileId, deleteProfile: result['profile']!, deleteClientSettings: result['settings']!);
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Deleted profile "$profileId".')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Deleted profile "$profileId".')));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -4550,18 +4972,107 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   }
 
   Future<void> _deleteAllProfiles() async {
-    final confirm = await DataService._confirmDialog(
-      context,
-      'Delete ALL profiles? This removes all profile folders and ClientSettings for every user.',
+    bool deleteProfiles = true;
+    bool deleteClientSettings = true;
+    
+    final blurEnabled = appDialogBlurEnabled.value;
+    
+    final result = await showDialog<Map<String, bool>>(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.3),
+      builder: (context) => blurEnabled
+          ? BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: StatefulBuilder(
+                builder: (context, setState) => AlertDialog(
+                  title: const Text('Delete ALL profiles?'),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Select what to delete for all users:'),
+                      const SizedBox(height: 12),
+                      CheckboxListTile(
+                        value: deleteProfiles,
+                        onChanged: (value) => setState(() => deleteProfiles = value ?? true),
+                        title: const Text('User Profiles'),
+                        subtitle: const Text('All profile_athena.json files and related data'),
+                        controlAffinity: ListTileControlAffinity.leading,
+                      ),
+                      CheckboxListTile(
+                        value: deleteClientSettings,
+                        onChanged: (value) => setState(() => deleteClientSettings = value ?? true),
+                        title: const Text('ClientSettings'),
+                        subtitle: const Text('All game settings and preferences'),
+                        controlAffinity: ListTileControlAffinity.leading,
+                      ),
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                      onPressed: (deleteProfiles || deleteClientSettings)
+                          ? () => Navigator.pop(context, {'profiles': deleteProfiles, 'settings': deleteClientSettings})
+                          : null,
+                      child: const Text('Delete All', style: TextStyle(color: Colors.white)),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : StatefulBuilder(
+              builder: (context, setState) => AlertDialog(
+                title: const Text('Delete ALL profiles?'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Select what to delete for all users:'),
+                    const SizedBox(height: 12),
+                    CheckboxListTile(
+                      value: deleteProfiles,
+                      onChanged: (value) => setState(() => deleteProfiles = value ?? true),
+                      title: const Text('User Profiles'),
+                      subtitle: const Text('All profile_athena.json files and related data'),
+                      controlAffinity: ListTileControlAffinity.leading,
+                    ),
+                    CheckboxListTile(
+                      value: deleteClientSettings,
+                      onChanged: (value) => setState(() => deleteClientSettings = value ?? true),
+                      title: const Text('ClientSettings'),
+                      subtitle: const Text('All game settings and preferences'),
+                      controlAffinity: ListTileControlAffinity.leading,
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                    onPressed: (deleteProfiles || deleteClientSettings)
+                        ? () => Navigator.pop(context, {'profiles': deleteProfiles, 'settings': deleteClientSettings})
+                        : null,
+                    child: const Text('Delete All', style: TextStyle(color: Colors.white)),
+                  ),
+                ],
+              ),
+            ),
     );
-    if (!confirm) return;
+    
+    if (result == null) return;
+    
     try {
-      await ProfileService.deleteAllProfiles();
+      await ProfileService.deleteAllProfiles(deleteProfiles: result['profiles']!, deleteClientSettings: result['settings']!);
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Deleted all profiles.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Deleted all profiles.')));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -4584,7 +5095,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to open ClientSettings folder.')),
+        const SnackBar(content: Text('Failed to open Client Settings folder.')),
       );
     }
   }
@@ -4603,7 +5114,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to open profile folder.')),
+        const SnackBar(content: Text('Failed to open Profile folder.')),
       );
     }
   }
@@ -4625,8 +5136,12 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     bool exportProfile = true;
     bool exportClientSettings = true;
 
-    final profilesDir = Directory(joinPath([getBackendRoot(), 'static', 'profiles', accountId]));
-    final clientSettingsDir = Directory(joinPath([getBackendRoot(), 'static', 'ClientSettings', accountId]));
+    final profilesDir = Directory(
+      joinPath([getBackendRoot(), 'static', 'profiles', accountId]),
+    );
+    final clientSettingsDir = Directory(
+      joinPath([getBackendRoot(), 'static', 'ClientSettings', accountId]),
+    );
     final profileFolderExists = await profilesDir.exists();
     final clientSettingsFolderExists = await clientSettingsDir.exists();
 
@@ -4648,7 +5163,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
               filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
               child: StatefulBuilder(
                 builder: (context, setState) => AlertDialog(
-                  title: Text('Export "$accountId" settings'),
+                  title: Text('Export settings for "$accountId"'),
                   content: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -4657,14 +5172,18 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                       const SizedBox(height: 12),
                       CheckboxListTile(
                         value: exportProfile,
-                        onChanged: profileFolderExists ? (value) => setState(() => exportProfile = value ?? true) : null,
+                        onChanged: profileFolderExists
+                            ? (value) => setState(() => exportProfile = value ?? true)
+                            : null,
                         title: const Text('User Profile'),
                         subtitle: const Text('profile_athena.json and related profile data'),
                         controlAffinity: ListTileControlAffinity.leading,
                       ),
                       CheckboxListTile(
                         value: exportClientSettings,
-                        onChanged: clientSettingsFolderExists ? (value) => setState(() => exportClientSettings = value ?? true) : null,
+                        onChanged: clientSettingsFolderExists
+                            ? (value) => setState(() => exportClientSettings = value ?? true)
+                            : null,
                         title: const Text('ClientSettings'),
                         subtitle: const Text('Game settings and preferences'),
                         controlAffinity: ListTileControlAffinity.leading,
@@ -4672,7 +5191,10 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                     ],
                   ),
                   actions: [
-                    TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
                     ElevatedButton.icon(
                       onPressed: (exportProfile || exportClientSettings)
                           ? () => Navigator.pop(context, {'profile': exportProfile, 'settings': exportClientSettings})
@@ -4686,7 +5208,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
             )
           : StatefulBuilder(
               builder: (context, setState) => AlertDialog(
-                title: Text('Export "$accountId" settings'),
+                title: Text('Export settings for "$accountId"'),
                 content: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -4695,14 +5217,18 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                     const SizedBox(height: 12),
                     CheckboxListTile(
                       value: exportProfile,
-                      onChanged: profileFolderExists ? (value) => setState(() => exportProfile = value ?? true) : null,
+                      onChanged: profileFolderExists
+                          ? (value) => setState(() => exportProfile = value ?? true)
+                          : null,
                       title: const Text('User Profile'),
                       subtitle: const Text('profile_athena.json and related profile data'),
                       controlAffinity: ListTileControlAffinity.leading,
                     ),
                     CheckboxListTile(
                       value: exportClientSettings,
-                      onChanged: clientSettingsFolderExists ? (value) => setState(() => exportClientSettings = value ?? true) : null,
+                      onChanged: clientSettingsFolderExists
+                          ? (value) => setState(() => exportClientSettings = value ?? true)
+                          : null,
                       title: const Text('ClientSettings'),
                       subtitle: const Text('Game settings and preferences'),
                       controlAffinity: ListTileControlAffinity.leading,
@@ -4710,7 +5236,10 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                   ],
                 ),
                 actions: [
-                  TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
                   ElevatedButton.icon(
                     onPressed: (exportProfile || exportClientSettings)
                         ? () => Navigator.pop(context, {'profile': exportProfile, 'settings': exportClientSettings})
@@ -4727,14 +5256,15 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
 
     try {
       final backendRoot = getBackendRoot();
-      final downloadsPath = Directory.systemTemp.parent.parent.path;
-      final downloadsDir = Directory(joinPath([downloadsPath, 'Downloads']));
-
-      if (!await downloadsDir.exists()) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Downloads folder not found.')));
-        return;
-      }
+      final zipFileName =
+          '${accountId}_export_${DateTime.now().millisecondsSinceEpoch}.zip';
+      final savePath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save Export Zip',
+        fileName: zipFileName,
+        type: FileType.custom,
+        allowedExtensions: ['zip'],
+      );
+      if (savePath == null) return;
 
       final tempDir = Directory.systemTemp.createTempSync('atlas_export_');
       final exportDir = Directory(joinPath([tempDir.path, accountId]));
@@ -4754,24 +5284,106 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
         await _copyDirectory(settingsSource, settingsDest);
       }
 
-      final zipFileName = '${accountId}_export_${DateTime.now().millisecondsSinceEpoch}.zip';
-      final zipPath = joinPath([downloadsDir.path, zipFileName]);
+      final zipPath = savePath;
 
       await Process.run('powershell', [
         '-NoProfile',
         '-Command',
-        'Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::CreateFromDirectory(\'${exportDir.path}\', \'$zipPath\')',
+        'Add-Type -AssemblyName System.IO.Compression.FileSystem; '
+            '[System.IO.Compression.ZipFile]::CreateFromDirectory(\'${exportDir.path}\', \'$zipPath\')',
       ]);
 
       await tempDir.delete(recursive: true);
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Exported to Downloads: $zipFileName')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Exported: $zipPath')),
+      );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Export failed: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to export settings: $error')),
+      );
     }
   }
+
+    Future<void> _importUserSettingsZip() async {
+      final picked = await FilePicker.platform.pickFiles(
+        dialogTitle: 'Import User Settings (zip)',
+        type: FileType.custom,
+        allowedExtensions: ['zip'],
+      );
+      if (picked == null || picked.files.single.path == null) return;
+      final zipPath = picked.files.single.path!;
+
+      try {
+        final backendRoot = getBackendRoot();
+        final input = InputFileStream(zipPath);
+        final archive = ZipDecoder().decodeBuffer(input);
+
+        final matched = <String>{};
+        for (final file in archive) {
+          if (!file.isFile) continue;
+          final name = file.name.replaceAll('\\', '/');
+          final segments = name.split('/').where((s) => s.isNotEmpty).toList();
+          if (segments.length < 3) continue;
+
+          String? accountId;
+          String? category;
+          int relativeStart = 0;
+
+          if (segments[0] == 'profiles' || segments[0] == 'ClientSettings') {
+            category = segments[0];
+            accountId = segments[1];
+            relativeStart = 2;
+          } else if (segments.length >= 4 &&
+              (segments[1] == 'profiles' || segments[1] == 'ClientSettings')) {
+            accountId = segments[0];
+            category = segments[1];
+            if (segments[2] != accountId) continue;
+            relativeStart = 3;
+          }
+
+          if (accountId == null || category == null) continue;
+
+          String? baseDir;
+          if (category == 'profiles') {
+            baseDir = joinPath([backendRoot, 'static', 'profiles', accountId]);
+          } else if (category == 'ClientSettings') {
+            baseDir = joinPath([backendRoot, 'static', 'ClientSettings', accountId]);
+          } else {
+            continue;
+          }
+
+          final relative = segments.sublist(relativeStart).join('/');
+          if (relative.isEmpty) continue;
+          final outPath = joinPath([baseDir, relative]);
+          final outFile = File(outPath);
+          await outFile.parent.create(recursive: true);
+          final data = file.content as List<int>;
+          await outFile.writeAsBytes(data, flush: true);
+          matched.add(accountId);
+        }
+
+        if (!mounted) return;
+        if (matched.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No valid profiles found in zip.')),
+          );
+          return;
+        }
+
+        await _load();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Imported ${matched.length} profile(s).')),
+        );
+      } catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to import zip: $error')),
+        );
+      }
+    }
 
   @override
   Widget build(BuildContext context) {
@@ -4789,11 +5401,11 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
         ? _selectedProfile
         : null;
     return _BaseScreen(
-      title: 'Profiles',
+      title: 'Users',
       trailing: _HoverScale(
         enabled: !_loading,
         child: IconButton(
-          tooltip: 'Refresh profiles',
+          tooltip: 'Refresh users',
           onPressed: _loading ? null : _load,
           icon: const Icon(Icons.refresh_rounded),
         ),
@@ -4803,7 +5415,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _SectionTitle(title: 'Profiles (${_profiles.length})'),
+                _SectionTitle(title: 'Users (${_profiles.length})'),
                 const SizedBox(height: 12),
                 Expanded(
                   child: Row(
@@ -4816,8 +5428,8 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(color: Colors.white10),
                           ),
-                          child: _profiles.isEmpty
-                              ? const Center(child: Text('No profiles found.'))
+                            child: _profiles.isEmpty
+                              ? const Center(child: Text('No users found.'))
                               : ListView.separated(
                                   itemCount: _profiles.length,
                                   separatorBuilder: (_, __) => const Divider(
@@ -4843,7 +5455,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                                           ),
                                           items: [
                                             PopupMenuItem(
-                                              child: const Text('Open ClientSettings Folder'),
+                                              child: const Text('Open Client Settings Folder'),
                                               onTap: () => _openClientSettingsFolder(profile.accountId),
                                             ),
                                             PopupMenuItem(
@@ -4936,7 +5548,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                             DropdownButtonFormField<String>(
                               initialValue: profileValue,
                               decoration: InputDecoration(
-                                labelText: 'Profile',
+                                labelText: 'User',
                                 border: const OutlineInputBorder(),
                                 focusedBorder: OutlineInputBorder(
                                   borderSide: BorderSide(
@@ -4974,7 +5586,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                                           : null,
                                       icon: const Icon(Icons.auto_fix_high),
                                       label: const Text(
-                                        'Apply preset to profile',
+                                        'Apply preset to user',
                                       ),
                                     ),
                                   ),
@@ -4993,7 +5605,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                                           : null,
                                       icon: const Icon(Icons.group_rounded),
                                       label: const Text(
-                                        'Apply preset to all profiles',
+                                        'Apply preset to all users',
                                       ),
                                     ),
                                   ),
@@ -5002,43 +5614,99 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'This replaces profile_athena.json for the selected account.',
+                              'This replaces profile_athena.json for the selected user.',
                               style: Theme.of(context).textTheme.bodySmall
                                   ?.copyWith(color: _onSurface(context, 0.6)),
                             ),
                             const SizedBox(height: 20),
-                            _HoverScale(
-                              enabled: _selectedProfile != null,
-                              child: OutlinedButton.icon(
-                                onPressed: _selectedProfile != null
-                                    ? _deleteProfile
-                                    : null,
-                                icon: const Icon(
-                                  Icons.delete_outline,
-                                  color: Colors.redAccent,
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _HoverScale(
+                                    enabled: _selectedProfile != null,
+                                    child: OutlinedButton.icon(
+                                      onPressed: _selectedProfile != null
+                                          ? _deleteProfile
+                                          : null,
+                                      icon: const Icon(
+                                        Icons.delete_outline,
+                                        color: Colors.redAccent,
+                                      ),
+                                      label: const Text('Delete user'),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.redAccent,
+                                      ),
+                                    ),
+                                  ),
                                 ),
-                                label: const Text('Delete profile'),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.redAccent,
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: _HoverScale(
+                                    enabled: _profiles.isNotEmpty,
+                                    child: OutlinedButton.icon(
+                                      onPressed: _profiles.isNotEmpty
+                                          ? _deleteAllProfiles
+                                          : null,
+                                      icon: const Icon(
+                                        Icons.delete_sweep,
+                                        color: Colors.redAccent,
+                                      ),
+                                      label: const Text('Delete all users'),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.redAccent,
+                                      ),
+                                    ),
+                                  ),
                                 ),
-                              ),
+                              ],
                             ),
                             const SizedBox(height: 8),
-                            _HoverScale(
-                              enabled: _profiles.isNotEmpty,
-                              child: OutlinedButton.icon(
-                                onPressed: _profiles.isNotEmpty
-                                    ? _deleteAllProfiles
-                                    : null,
-                                icon: const Icon(
-                                  Icons.delete_sweep,
-                                  color: Colors.redAccent,
+                            Text(
+                              'Permanently removes user data and game settings.',
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: _onSurface(context, 0.6)),
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _HoverScale(
+                                    enabled: !_loading && _selectedProfile != null,
+                                    child: OutlinedButton.icon(
+                                      onPressed: (_loading || _selectedProfile == null)
+                                          ? null
+                                          : () => _exportUserSettings(
+                                                _selectedProfile!,
+                                              ),
+                                      icon: const Icon(
+                                        Icons.download_rounded,
+                                      ),
+                                      label: const Text('Export User'),
+                                    ),
+                                  ),
                                 ),
-                                label: const Text('Delete all profiles'),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.redAccent,
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: _HoverScale(
+                                    enabled: !_loading,
+                                    child: OutlinedButton.icon(
+                                      onPressed:
+                                          _loading ? null : _importUserSettingsZip,
+                                      icon: const Icon(
+                                        Icons.file_upload_outlined,
+                                      ),
+                                      label:
+                                          const Text('Import User (Select ZIP)'),
+                                    ),
+                                  ),
                                 ),
-                              ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Export or import a user into the backend.',
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: _onSurface(context, 0.6)),
                             ),
                           ],
                         ),
@@ -5673,24 +6341,59 @@ class ProfileService {
     final profilesDir = Directory(
       joinPath([getBackendRoot(), 'static', 'profiles']),
     );
-    if (!await profilesDir.exists()) return [];
+    final clientSettingsRoot = Directory(
+      joinPath([getBackendRoot(), 'static', 'ClientSettings']),
+    );
+    
     final profiles = <ProfileSummary>[];
-    await for (final entity in profilesDir.list(recursive: false)) {
-      if (entity is! Directory) continue;
-      final accountId = _basename(entity.path);
-      if (accountId.trim().isEmpty) continue;
-      if (accountId == _profileTemplateBackupDirName ||
-          accountId.startsWith('.')) {
-        continue;
+    final seenAccountIds = <String>{};
+    
+    // Check profiles directory
+    if (await profilesDir.exists()) {
+      await for (final entity in profilesDir.list(recursive: false)) {
+        if (entity is! Directory) continue;
+        final accountId = _basename(entity.path);
+        if (accountId.trim().isEmpty) continue;
+        if (accountId == _profileTemplateBackupDirName ||
+            accountId.startsWith('.')) {
+          continue;
+        }
+        final profilePath = File(joinPath([entity.path, 'profile_athena.json']));
+        profiles.add(
+          ProfileSummary(
+            accountId: accountId,
+            hasAthena: await profilePath.exists(),
+          ),
+        );
+        seenAccountIds.add(accountId);
       }
-      final profilePath = File(joinPath([entity.path, 'profile_athena.json']));
-      profiles.add(
-        ProfileSummary(
-          accountId: accountId,
-          hasAthena: await profilePath.exists(),
-        ),
-      );
     }
+    
+    // Also check ClientSettings directory for accounts not in profiles
+    if (await clientSettingsRoot.exists()) {
+      await for (final entity in clientSettingsRoot.list(recursive: false)) {
+        if (entity is! Directory) continue;
+        final accountId = _basename(entity.path);
+        if (accountId.trim().isEmpty) continue;
+        if (accountId.toLowerCase() == 'config' || 
+            accountId == _profileTemplateBackupDirName ||
+            accountId.startsWith('.')) {
+          continue;
+        }
+        
+        // Only add if not already added from profiles directory
+        if (!seenAccountIds.contains(accountId)) {
+          profiles.add(
+            ProfileSummary(
+              accountId: accountId,
+              hasAthena: false,
+            ),
+          );
+          seenAccountIds.add(accountId);
+        }
+      }
+    }
+    
     profiles.sort((a, b) => a.accountId.compareTo(b.accountId));
     return profiles;
   }
@@ -5819,19 +6522,25 @@ class ProfileService {
     return appliedCount;
   }
 
-  static Future<void> deleteProfile(String accountId) async {
-    final profilesDir = Directory(
-      joinPath([getBackendRoot(), 'static', 'profiles', accountId]),
-    );
-    final clientSettingsDir = Directory(
-      joinPath([getBackendRoot(), 'static', 'ClientSettings', accountId]),
-    );
-    if (await profilesDir.exists()) {
-      await profilesDir.delete(recursive: true);
+  static Future<void> deleteProfile(String accountId, {required bool deleteProfile, required bool deleteClientSettings}) async {
+    if (deleteProfile) {
+      final profilesDir = Directory(
+        joinPath([getBackendRoot(), 'static', 'profiles', accountId]),
+      );
+      if (await profilesDir.exists()) {
+        await profilesDir.delete(recursive: true);
+      }
     }
-    if (await clientSettingsDir.exists()) {
-      await clientSettingsDir.delete(recursive: true);
+    
+    if (deleteClientSettings) {
+      final clientSettingsDir = Directory(
+        joinPath([getBackendRoot(), 'static', 'ClientSettings', accountId]),
+      );
+      if (await clientSettingsDir.exists()) {
+        await clientSettingsDir.delete(recursive: true);
+      }
     }
+    
     try {
       final client = HttpClient();
       final request = await client.postUrl(
@@ -5842,28 +6551,33 @@ class ProfileService {
     } catch (_) {}
   }
 
-  static Future<void> deleteAllProfiles() async {
-    final profilesRoot = Directory(
-      joinPath([getBackendRoot(), 'static', 'profiles']),
-    );
-    final clientSettingsRoot = Directory(
-      joinPath([getBackendRoot(), 'static', 'ClientSettings']),
-    );
-    if (await profilesRoot.exists()) {
-      await for (final entity in profilesRoot.list(recursive: false)) {
-        if (entity is! Directory) continue;
-        final name = _basename(entity.path);
-        if (name.isEmpty || name.startsWith('.')) continue;
-        await entity.delete(recursive: true);
+  static Future<void> deleteAllProfiles({required bool deleteProfiles, required bool deleteClientSettings}) async {
+    if (deleteProfiles) {
+      final profilesRoot = Directory(
+        joinPath([getBackendRoot(), 'static', 'profiles']),
+      );
+      if (await profilesRoot.exists()) {
+        await for (final entity in profilesRoot.list(recursive: false)) {
+          if (entity is! Directory) continue;
+          final name = _basename(entity.path);
+          if (name.isEmpty || name.startsWith('.')) continue;
+          await entity.delete(recursive: true);
+        }
       }
     }
-    if (await clientSettingsRoot.exists()) {
-      await for (final entity in clientSettingsRoot.list(recursive: false)) {
-        if (entity is! Directory) continue;
-        final name = _basename(entity.path);
-        if (name.isEmpty || name.startsWith('.')) continue;
-        if (name.toLowerCase() == 'config') continue;
-        await entity.delete(recursive: true);
+    
+    if (deleteClientSettings) {
+      final clientSettingsRoot = Directory(
+        joinPath([getBackendRoot(), 'static', 'ClientSettings']),
+      );
+      if (await clientSettingsRoot.exists()) {
+        await for (final entity in clientSettingsRoot.list(recursive: false)) {
+          if (entity is! Directory) continue;
+          final name = _basename(entity.path);
+          if (name.isEmpty || name.startsWith('.')) continue;
+          if (name.toLowerCase() == 'config') continue;
+          await entity.delete(recursive: true);
+        }
       }
     }
     try {
@@ -6007,50 +6721,174 @@ class CustomSniperSpreadService {
   }
 
   static Future<void> setEnabled(bool enabled, String amount) async {
-    final iniFile = File(BackendPaths.defaultGameIni);
-    final sniperFile = File(BackendPaths.sniperJson);
+    final iniPath = BackendPaths.defaultGameIni;
+    final sniperPath = BackendPaths.sniperJson;
+    
+    final iniFile = File(iniPath);
+    final sniperFile = File(sniperPath);
     if (!await iniFile.exists() || !await sniperFile.exists()) return;
     
+    await compute(_processSpreadInBackground, {
+      'iniPath': iniPath,
+      'sniperPath': sniperPath,
+      'enabled': enabled,
+      'amount': amount,
+    });
+  }
+  
+  static Future<void> _processSpreadInBackground(Map<String, dynamic> params) async {
+    final iniPath = params['iniPath'] as String;
+    final sniperPath = params['sniperPath'] as String;
+    final enabled = params['enabled'] as bool;
+    final amount = params['amount'] as String;
+    
+    final iniFile = File(iniPath);
+    final sniperFile = File(sniperPath);
+    
     var content = await iniFile.readAsString();
+    final sniperData = jsonDecode(await sniperFile.readAsString()) as Map<String, dynamic>;
+    final sniperLines = (sniperData['lines'] as List<dynamic>).cast<String>();
     
-    // Get the base lines from sniper.json
-    final baseLines = (jsonDecode(await sniperFile.readAsString())
-            as Map<String, dynamic>)['lines'] as List<dynamic>;
-    final sniperLines = baseLines.cast<String>();
-    
-    // Remove any existing custom sniper spread lines (any spread value)
+    // Remove any existing custom sniper spread lines
     for (final baseLine in sniperLines) {
-      // Remove the line with any spread value at the end
       final linePrefix = baseLine.substring(0, baseLine.lastIndexOf(';') + 1);
-      final regex = RegExp(
-        '${RegExp.escape(linePrefix)}[\\d.]+\\n?',
-        multiLine: true,
-      );
+      final regex = RegExp('${RegExp.escape(linePrefix)}[\\d.]+\n?', multiLine: true);
       content = content.replaceAll(regex, '');
+    }
+
+    // Remove orphan numeric lines inside Custom Sniper Spread block
+    if (content.contains(_commentLabel)) {
+      final start = content.indexOf(_commentLabel);
+      final nextComment = content.indexOf('\n#', start + 1);
+      final nextSection = content.indexOf('\n[', start + 1);
+      int end = content.length;
+      if (nextComment != -1 && (nextSection == -1 || nextComment < nextSection)) {
+        end = nextComment;
+      } else if (nextSection != -1) {
+        end = nextSection;
+      }
+      final block = content.substring(start, end);
+      final cleanedBlock = block.replaceAll(
+        RegExp(r'^\s*[\d.]+\s*\$', multiLine: true),
+        '',
+      );
+      content = content.substring(0, start) + cleanedBlock + content.substring(end);
     }
     
     if (enabled) {
-      // Ensure the section exists
-      final ensured = IniService.ensureAssetSection(content, _commentLabel);
+      final ensured = _ensureCustomSection(content);
       content = ensured.content;
       final insertPoint = ensured.insertPoint;
       
-      // Get custom spread lines with the specified amount
-      final customLines = await _getCustomSpreadLines(amount);
+      final customLines = sniperLines.map((line) {
+        if (line.endsWith(';0')) {
+          return '${line.substring(0, line.length - 2)};$amount';
+        }
+        return line;
+      }).toList();
       
-      // Insert all custom spread lines
-      content =
-          '${content.substring(0, insertPoint)}${customLines.join('\n')}\n${content.substring(insertPoint)}';
+      content = '${content.substring(0, insertPoint)}${customLines.join('\n')}\n${content.substring(insertPoint)}';
     } else {
-      // Remove the comment if no lines remain under it
-      if (content.contains(_commentLabel)) {
-        content = content.replaceAll('$_commentLabel\n', '');
+      // Remove all custom sniper spread lines while keeping the comment
+      for (final baseLine in sniperLines) {
+        final linePrefix = baseLine.substring(0, baseLine.lastIndexOf(';') + 1);
+        final regex = RegExp('${RegExp.escape(linePrefix)}[\\d.]+\n?', multiLine: true);
+        content = content.replaceAll(regex, '');
       }
     }
+
+    // Final pass: remove any orphan numeric-only lines under Custom Sniper Spread
+    if (content.contains(_commentLabel)) {
+      final start = content.indexOf(_commentLabel);
+      final nextComment = content.indexOf('\n#', start + 1);
+      final nextSection = content.indexOf('\n[', start + 1);
+      int end = content.length;
+      if (nextComment != -1 && (nextSection == -1 || nextComment < nextSection)) {
+        end = nextComment;
+      } else if (nextSection != -1) {
+        end = nextSection;
+      }
+      final block = content.substring(start, end);
+      final cleanedBlock = block.replaceAll(
+        RegExp(r'^\s*[\d.]+\s*$', multiLine: true),
+        '',
+      );
+      content = content.substring(0, start) + cleanedBlock + content.substring(end);
+    }
     
-    // Clean up multiple newlines
     content = content.replaceAll(RegExp('\n\n+'), '\n');
     await iniFile.writeAsString(content);
+  }
+
+  static Future<({bool enabled, String amount})> importFromIni(
+    String importPath,
+  ) async {
+    final source = File(importPath);
+    final sniperFile = File(BackendPaths.sniperJson);
+    if (!await source.exists() || !await sniperFile.exists()) {
+      return (enabled: false, amount: '0');
+    }
+
+    final importContent = await source.readAsString();
+    final sniperData =
+        jsonDecode(await sniperFile.readAsString()) as Map<String, dynamic>;
+    final sniperLines = (sniperData['lines'] as List<dynamic>).cast<String>();
+
+    String? foundAmount;
+    var foundAll = true;
+    for (final baseLine in sniperLines) {
+      final linePrefix = baseLine.substring(0, baseLine.lastIndexOf(';') + 1);
+      final regex = RegExp(
+        '^' + RegExp.escape(linePrefix) + r'([\d.]+)\r?$',
+        multiLine: true,
+      );
+      final match = regex.firstMatch(importContent);
+      if (match == null) {
+        foundAll = false;
+        break;
+      }
+      foundAmount ??= match.group(1);
+    }
+
+    if (!foundAll || foundAmount == null) {
+      await setEnabled(false, '0');
+      return (enabled: false, amount: '0');
+    }
+
+    await setEnabled(true, foundAmount);
+    return (enabled: true, amount: foundAmount);
+  }
+
+  static ({String content, int insertPoint}) _ensureCustomSection(
+    String content,
+  ) {
+    var updated = content;
+    final commentIndex = updated.indexOf(_commentLabel);
+    if (commentIndex != -1) {
+      final newlineAfterComment = updated.indexOf('\n', commentIndex);
+      final insertPoint = newlineAfterComment == -1
+          ? updated.length
+          : newlineAfterComment + 1;
+      return (content: updated, insertPoint: insertPoint);
+    }
+
+    final straightBloomIndex =
+        updated.indexOf(BackendPaths.straightBloomComment);
+    if (straightBloomIndex != -1) {
+      return (content: updated, insertPoint: straightBloomIndex);
+    }
+
+    final assetIndex = updated.indexOf('[AssetHotfix]');
+    if (assetIndex != -1) {
+      final newlineAfter = updated.indexOf('\n', assetIndex);
+      final insertPoint = newlineAfter == -1
+          ? updated.length
+          : newlineAfter + 1;
+      return (content: updated, insertPoint: insertPoint);
+    }
+
+    updated = '${updated.trimRight()}\n[AssetHotfix]\n';
+    return (content: updated, insertPoint: updated.length);
   }
 }
 
@@ -6760,12 +7598,15 @@ class CurveTableService {
     final insertPoint = ensured.insertPoint;
     content =
         '${content.substring(0, insertPoint)}${lines.join('\n')}\n${content.substring(insertPoint)}';
+    content = content.replaceAll(RegExp(r'\n\n+'), '\n');
     await iniFile.writeAsString(content);
   }
 
   static Future<void> clearAllCurveTables() async {
     final iniFile = File(BackendPaths.defaultGameIni);
     final backupFile = File(BackendPaths.modificationsBackup);
+    final curvesFile = File(BackendPaths.curvesJson);
+    
     if (!await iniFile.exists()) return;
     var content = await iniFile.readAsString();
     content = content.replaceAll(
@@ -6774,8 +7615,20 @@ class CurveTableService {
     );
     content = content.replaceAll(RegExp('\n\n+'), '\n');
     await iniFile.writeAsString(content);
+    
     if (await backupFile.exists()) {
       await backupFile.delete();
+    }
+    
+    // Remove all entries in the "Other" group
+    if (await curvesFile.exists()) {
+      final curvesContent = await curvesFile.readAsString();
+      final curvesData = jsonDecode(curvesContent) as Map<String, dynamic>;
+      curvesData.removeWhere((_, value) {
+        if (value is! Map<String, dynamic>) return false;
+        return value['groupId'] == 'other';
+      });
+      await curvesFile.writeAsString(jsonEncode(curvesData));
     }
   }
 
@@ -7802,7 +8655,7 @@ class DataService {
   static Future<void> clearBackendData(BuildContext context) async {
     final confirm = await _confirmDialog(
       context,
-      'Clear all backend data? This will reset profiles, client settings, CurveTables, and straight bloom.',
+      'Clear all backend data? This will reset user Profiles, Client settings, CurveTables, and Straight Bloom.',
     );
     if (!confirm) return;
     final profilesDir = Directory(
@@ -7834,8 +8687,32 @@ class DataService {
       }
     }
 
-    if (await iniFile.exists() && await sniperFile.exists()) {
-      await StraightBloomService.setEnabled(false);
+    if (await iniFile.exists()) {
+      if (await sniperFile.exists()) {
+        await StraightBloomService.setEnabled(false);
+        await CustomSniperSpreadService.setEnabled(false, '0');
+      }
+
+      var iniContent = await iniFile.readAsString();
+      if (iniContent.contains('# Custom Sniper Spread')) {
+        final start = iniContent.indexOf('# Custom Sniper Spread');
+        final nextComment = iniContent.indexOf('\n#', start + 1);
+        final nextSection = iniContent.indexOf('\n[', start + 1);
+        var end = iniContent.length;
+        if (nextComment != -1 && (nextSection == -1 || nextComment < nextSection)) {
+          end = nextComment;
+        } else if (nextSection != -1) {
+          end = nextSection;
+        }
+        final block = iniContent.substring(start, end);
+        final cleanedBlock = block.replaceAll(
+          RegExp(r'^\s*[\d.]+\s*$', multiLine: true),
+          '',
+        );
+        iniContent = iniContent.substring(0, start) + cleanedBlock + iniContent.substring(end);
+        iniContent = iniContent.replaceAll(RegExp('\n\n+'), '\n');
+        await iniFile.writeAsString(iniContent);
+      }
     }
 
     if (await iniFile.exists() && await curvesFile.exists()) {
@@ -8000,7 +8877,7 @@ class DataService {
   static Future<void> clearExportedData(BuildContext context) async {
     final confirm = await _confirmDialog(
       context,
-      'Clear exported data? This will remove DefaultGame, profiles, and client settings from exports/.',
+      'Clear exported data? This will remove all user Profiles, Client Settings, and DefaultGame.ini from exports/.',
     );
     if (!confirm) return;
     final exportsRoot = Directory(joinPath([getBackendRoot(), 'exports']));
@@ -9670,79 +10547,50 @@ String? _resolveBackgroundPath(String path) {
   return null;
 }
 
-  Widget _buildPodiumPillarContent({
-    required ArenaEntry entry,
-    required int rank,
-    required Color medalColor,
-    required Color nameColor,
-  }) {
-    final medalIcons = {
-      1: Icons.emoji_events,
-      2: Icons.military_tech,
-      3: Icons.military_tech,
-    };
+class VpnService {
+  static Future<String> getVpnIpAddress() async {
+    try {
+      // Use PowerShell to query Radmin VPN adapter IP address
+      final result = await Process.run(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-Command',
+          r'Get-NetIPAddress | Where-Object {$_.InterfaceAlias -like "*Radmin*" -and $_.AddressFamily -eq "IPv4"} | Select-Object -First 1 -ExpandProperty IPAddress',
+        ],
+      );
 
-    return Column(
-      children: [
-        Icon(
-          medalIcons[rank] ?? Icons.circle,
-          color: medalColor,
-          size: 20,
-        ),
-        const SizedBox(height: 4),
-        SizedBox(
-          width: 70,
-          child: Text(
-            entry.accountId,
-            textAlign: TextAlign.center,
-            overflow: TextOverflow.ellipsis,
-            maxLines: 2,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: nameColor,
-            ),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '${entry.hype}',
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            color: nameColor.withOpacity(0.8),
-          ),
-        ),
-      ],
-    );
+      if (result.exitCode == 0) {
+        final ip = result.stdout.toString().trim();
+        if (ip.isNotEmpty && !ip.contains('Error')) {
+          return ip;
+        }
+      }
+
+      // Fallback: Try alternative command for older Windows versions
+      final fallbackResult = await Process.run(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-Command',
+          r'Get-WmiObject Win32_NetworkAdapterConfiguration | Where-Object {$_.Description -like "*Radmin*" -and $_.IPAddress -ne $null} | Select-Object -First 1 -ExpandProperty IPAddress',
+        ],
+      );
+
+      if (fallbackResult.exitCode == 0) {
+        final ip = fallbackResult.stdout.toString().trim();
+        if (ip.isNotEmpty && !ip.contains('Error')) {
+          // WMI returns array format, extract first IPv4
+          final match = RegExp(r'\b(?:\d{1,3}\.){3}\d{1,3}\b').firstMatch(ip);
+          if (match != null) {
+            return match.group(0)!;
+          }
+        }
+      }
+
+      return 'Error: Radmin VPN adapter not found';
+    } catch (e) {
+      return 'Error: Failed to detect VPN IP - $e';
+    }
   }
-
-  Widget _buildEmptyPodiumPillarContent({required int rank}) {
-    final medalColor = rank == 2
-      ? const Color(0xFFC0C0C0)
-      : const Color(0xFFCD7F32);
-
-    return Column(
-      children: [
-        Icon(
-          Icons.military_tech,
-          color: medalColor,
-          size: 20,
-        ),
-        const SizedBox(height: 4),
-        const SizedBox(
-          width: 70,
-          child: Text(
-            'Empty',
-            textAlign: TextAlign.center,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+}
