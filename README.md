@@ -38,33 +38,12 @@ If you want to contribute just fork this repository and make a pull request!
 
 ### First Time Setup (For CLI Version)
 
-1. **Run the setup script** (This will install Bun if needed and install dependencies):
+1. **Run the installer MSI file** (This will install Bun if needed and install dependencies):
    ```bat
-   install_packages.bat
+   ATLAS-X.X.X.msi
    ```
 
-2. **Start ATLAS**:
-   ```bat
-   start.bat
-   ```
-
-That's it! The setup script will guide you through installing Bun if you don't have it already.
-
-### Manual Setup
-
-If you prefer to install manually:
-
-1. **Install Bun** from [bun.sh](https://bun.sh/docs/installation)
-
-2. **Install dependencies**:
-   ```bash
-   bun install
-   ```
-
-3. **Run ATLAS**:
-   ```bash
-   bun run src/index.ts
-   ```
+2. **Launch ATLAS as it is now a dedicated app**:
 
 ### How To Connect To Someone Else's ATLAS Server
 
@@ -90,4 +69,3 @@ If you prefer to install manually:
 ## To-Do List
 - Arena for Latest Versions
 - Fix applying MCP for Latest Versions
-- XMPP (maybe)
