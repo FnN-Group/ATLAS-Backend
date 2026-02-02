@@ -38,7 +38,7 @@ If you want to contribute just fork this repository and make a pull request!
 
 ### First Time Setup (For CLI Version)
 
-1. **Run the installer MSI file** (This will install Bun if needed and install dependencies):
+1. **Run the installer MSI file** (This will install Bun if needed and dependencies):
    ```bat
    ATLAS-X.X.X.msi
    ```
