@@ -2330,6 +2330,14 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
   Future<void> _updateSniperSpreadAmount(String value) async {
     final amount = value.trim();
     if (amount.isEmpty) return;
+    final isValid = RegExp(r'^\d+(?:\.\d+)?$|^\.\d+$').hasMatch(amount);
+    if (!isValid) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid numeric spread value.')),
+      );
+      return;
+    }
     if (!mounted) return;
     setState(() => _sniperSpreadAmount = amount);
     CustomSniperSpreadService.setEnabled(_customSniperSpread, amount).ignore();
@@ -2418,6 +2426,8 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
   Future<void> _toggleCurve(CurveEntry entry, bool value) async {
     if (!_curveTablesEnabled) return;
     if (value && entry.type == 'amount' && entry.staticValue == null) {
+      bool isValidNumeric(String input) =>
+          RegExp(r'^[+-]?(?:\d+\.?\d*|\.\d+)$').hasMatch(input.trim());
       final controller = _valueControllers[entry.id];
       final valueText = controller?.text.trim();
       if (valueText == null || valueText.isEmpty) {
@@ -2430,6 +2440,13 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
           customValue: promptedValue,
         );
       } else {
+        if (!isValidNumeric(valueText)) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Enter a valid numeric value.')),
+          );
+          return;
+        }
         await CurveTableService.setCurveEnabled(
           entry,
           value,
@@ -2446,6 +2463,15 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     if (!_curveTablesEnabled) return;
     final enabled = await CurveTableService.isCurveEnabled(entry);
     if (!enabled) return;
+    final isValid =
+        RegExp(r'^[+-]?(?:\d+\.?\d*|\.\d+)$').hasMatch(newValue.trim());
+    if (!isValid) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid numeric value.')),
+      );
+      return;
+    }
     await CurveTableService.setCurveEnabled(entry, true, customValue: newValue);
     await _load();
   }
@@ -2603,6 +2629,11 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
                         ),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'[0-9.]'),
+                          ),
+                        ],
                         onSubmitted: _updateSniperSpreadAmount,
                       ),
                     ),
@@ -2949,6 +2980,8 @@ class _CurveTablesScreenState extends State<CurveTablesScreen> {
   Future<void> _toggleCurve(CurveEntry entry, bool value) async {
     if (!_globalEnabled) return;
     if (value && entry.type == 'amount' && entry.staticValue == null) {
+      bool isValidNumeric(String input) =>
+          RegExp(r'^[+-]?(?:\d+\.?\d*|\.\d+)$').hasMatch(input.trim());
       final controller = _valueControllers[entry.id];
       final valueText = controller?.text.trim();
       if (valueText == null || valueText.isEmpty) {
@@ -2961,6 +2994,13 @@ class _CurveTablesScreenState extends State<CurveTablesScreen> {
           customValue: promptedValue,
         );
       } else {
+        if (!isValidNumeric(valueText)) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Enter a valid numeric value.')),
+          );
+          return;
+        }
         await CurveTableService.setCurveEnabled(
           entry,
           value,
@@ -2977,6 +3017,15 @@ class _CurveTablesScreenState extends State<CurveTablesScreen> {
     if (!_globalEnabled) return;
     final enabled = await CurveTableService.isCurveEnabled(entry);
     if (!enabled) return;
+    final isValid =
+        RegExp(r'^[+-]?(?:\d+\.?\d*|\.\d+)$').hasMatch(newValue.trim());
+    if (!isValid) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid numeric value.')),
+      );
+      return;
+    }
     await CurveTableService.setCurveEnabled(entry, true, customValue: newValue);
     await _load();
   }
@@ -4493,6 +4542,11 @@ class _CurveEntryTile extends StatelessWidget {
                         color: Color(0xFF6BE7FF),
                         fontWeight: FontWeight.w500,
                       ),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'[0-9+\-.]'),
+                        ),
+                      ],
                       decoration: const InputDecoration(
                         contentPadding: EdgeInsets.symmetric(
                           horizontal: 12,
@@ -6810,7 +6864,7 @@ class CustomSniperSpreadService {
       }
       final block = content.substring(start, end);
       final cleanedBlock = block.replaceAll(
-        RegExp(r'^\s*[\d.]+\s*$', multiLine: true),
+        RegExp(r'^\s*[+-]?(?:\d+\.?\d*|\.\d+)\s*$', multiLine: true),
         '',
       );
       content = content.substring(0, start) + cleanedBlock + content.substring(end);
@@ -8706,7 +8760,7 @@ class DataService {
         }
         final block = iniContent.substring(start, end);
         final cleanedBlock = block.replaceAll(
-          RegExp(r'^\s*[\d.]+\s*$', multiLine: true),
+          RegExp(r'^\s*[+-]?(?:\d+\.?\d*|\.\d+)\s*$', multiLine: true),
           '',
         );
         iniContent = iniContent.substring(0, start) + cleanedBlock + iniContent.substring(end);
@@ -9163,6 +9217,8 @@ class DataService {
 }
 
 Future<String?> _promptValue(BuildContext context, String name) async {
+  bool isValidNumeric(String value) =>
+      RegExp(r'^[+-]?(?:\d+\.?\d*|\.\d+)$').hasMatch(value.trim());
   final controller = TextEditingController();
   final result = await _showBlurDialog<String>(
     context: context,
@@ -9170,7 +9226,13 @@ Future<String?> _promptValue(BuildContext context, String name) async {
       title: Text('Set value for $name'),
       content: TextField(
         controller: controller,
-        keyboardType: TextInputType.number,
+        keyboardType: const TextInputType.numberWithOptions(
+          decimal: true,
+          signed: true,
+        ),
+        inputFormatters: [
+          FilteringTextInputFormatter.allow(RegExp(r'[0-9+\-.]')),
+        ],
         decoration: const InputDecoration(labelText: 'Value'),
       ),
       actions: [
@@ -9182,7 +9244,18 @@ Future<String?> _promptValue(BuildContext context, String name) async {
         ),
         _HoverScale(
           child: ElevatedButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            onPressed: () {
+              final value = controller.text.trim();
+              if (value.isEmpty || !isValidNumeric(value)) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Enter a valid numeric value.'),
+                  ),
+                );
+                return;
+              }
+              Navigator.pop(context, value);
+            },
             child: const Text('Save'),
           ),
         ),
