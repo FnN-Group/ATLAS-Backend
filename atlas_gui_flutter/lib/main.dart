@@ -2255,12 +2255,21 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
   bool _straightBloom = false;
   bool _customSniperSpread = false;
   String _sniperSpreadAmount = '0';
-  final TextEditingController _spreadController = TextEditingController();
   bool _curveTablesEnabled = true;
   bool _curveLoading = true;
   List<CurveEntry> _curves = [];
   String _selectedGroupId = 'shockwave';
   final Map<String, TextEditingController> _valueControllers = {};
+  
+  // DataTable state
+  bool _dataTablesEnabled = false;
+  bool _dataTablesLoading = true;
+  List<DataTableWeapon> _weapons = [];
+  String? _selectedWeaponId;
+  String? _selectedVariantWeaponId;
+  DataTableSettings? _selectedWeaponSettings;
+  final Map<String, TextEditingController> _dataTableControllers = {};
+  final Map<String, String> _weaponVariantSelections = {}; // weaponId -> variantWeaponId
 
   @override
   void initState() {
@@ -2270,8 +2279,10 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
 
   @override
   void dispose() {
-    _spreadController.dispose();
     for (final controller in _valueControllers.values) {
+      controller.dispose();
+    }
+    for (final controller in _dataTableControllers.values) {
       controller.dispose();
     }
     super.dispose();
@@ -2282,6 +2293,8 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     final customSpreadState = await CustomSniperSpreadService.getState();
     final curvesEnabled = await CurveTableService.areGlobalEnabled();
     final curves = await CurveTableService.loadCurves();
+    final weapons = await DataTableService.loadWeapons();
+    final dataTablesEnabled = await DataTableService.getUIEnabledState();
     if (!mounted) return;
     var finalBloom = bloom;
     var finalCustom = customSpreadState.enabled;
@@ -2293,11 +2306,13 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
       _straightBloom = finalBloom;
       _customSniperSpread = finalCustom;
       _sniperSpreadAmount = customSpreadState.amount;
-      _spreadController.text = customSpreadState.amount;
       _curveTablesEnabled = curvesEnabled;
       _curves = curves;
+      _weapons = weapons;
+      _dataTablesEnabled = dataTablesEnabled;
       _isLoading = false;
       _curveLoading = false;
+      _dataTablesLoading = false;
     });
   }
 
@@ -2603,38 +2618,21 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                           ? 'Custom Sniper Spread Enabled'
                           : 'Custom Sniper Spread Disabled',
                     ),
-                    subtitle: const Text(
-                      'Set a custom spread amount for snipers.',
-                    ),
+                    subtitle: _customSniperSpread
+                        ? Text('Current value: $_sniperSpreadAmount')
+                        : const Text('Set a custom spread amount for snipers.'),
                   ),
                   if (_customSniperSpread) ...[
-                    const SizedBox(height: 8),
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: TextField(
-                        controller: _spreadController,
-                        decoration: InputDecoration(
-                          labelText: 'Spread Amount',
-                          hintText: 'Enter spread value (e.g., 0, 0.5, 1)',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          suffixIcon: IconButton(
-                            icon: const Icon(Icons.check),
-                            onPressed: () {
-                              _updateSniperSpreadAmount(_spreadController.text);
-                            },
-                          ),
-                        ),
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(
-                            RegExp(r'[0-9.]'),
-                          ),
-                        ],
-                        onSubmitted: _updateSniperSpreadAmount,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          final promptedValue = await _promptValue(context, 'Sniper Spread');
+                          if (promptedValue == null) return;
+                          await _updateSniperSpreadAmount(promptedValue);
+                        },
+                        icon: const Icon(Icons.edit),
+                        label: const Text('Edit Spread Value'),
                       ),
                     ),
                   ],
@@ -2932,8 +2930,392 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                           ],
                         ),
                 ],
+                const SizedBox(height: 20),
+                const _SectionTitle(title: 'DataTables'),
+                SwitchListTile(
+                  value: _dataTablesEnabled,
+                  onChanged: (_) async {
+                    final newValue = !_dataTablesEnabled;
+                    await DataTableService.setUIEnabledState(newValue);
+                    setState(() => _dataTablesEnabled = newValue);
+                  },
+                  title: Text(
+                    _dataTablesEnabled
+                        ? 'DataTables Enabled'
+                        : 'DataTables Disabled',
+                  ),
+                  subtitle: const Text('Toggle weapon damage modifications'),
+                ),
+                const SizedBox(height: 8),
+                if (_dataTablesEnabled) ...[
+                  const SizedBox(height: 12),
+                  _dataTablesLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Weapons',
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                            const SizedBox(height: 12),
+                            Wrap(
+                              spacing: 12,
+                              runSpacing: 12,
+                              children: _weapons.map((weapon) {
+                                final isSelected = _selectedWeaponId == weapon.id;
+                                // Check if selected variant has its own image
+                                String? effectiveImagePath = weapon.imagePath;
+                                if (weapon.variants != null && weapon.variants!.isNotEmpty) {
+                                  // Use currently selected variant if this weapon is selected, otherwise use remembered variant
+                                  final variantWeaponId = isSelected 
+                                    ? _selectedVariantWeaponId 
+                                    : _weaponVariantSelections[weapon.id];
+                                  
+                                  if (variantWeaponId != null) {
+                                    final variant = weapon.variants!.firstWhere(
+                                      (v) => v.weaponId == variantWeaponId,
+                                      orElse: () => weapon.variants!.first,
+                                    );
+                                    if (variant.imagePath != null) {
+                                      effectiveImagePath = variant.imagePath;
+                                    }
+                                  }
+                                }
+                                final imagePath = effectiveImagePath != null
+                                    ? joinPath([getBackendRoot(), 'public', 'items', effectiveImagePath])
+                                    : null;
+                                final imageFile = imagePath != null ? File(imagePath) : null;
+                                return GestureDetector(
+                                  onTap: () async {
+                                    final hasVariants = weapon.variants != null && weapon.variants!.isNotEmpty;
+                                    // Check if we've previously selected a variant for this weapon
+                                    String? variantWeaponId;
+                                    if (hasVariants) {
+                                      variantWeaponId = _weaponVariantSelections[weapon.id] ?? weapon.variants!.first.weaponId;
+                                    }
+                                    final settings = await DataTableService.getWeaponSettings(weapon, variantWeaponId: variantWeaponId);
+                                    setState(() {
+                                      _selectedWeaponId = weapon.id;
+                                      _selectedVariantWeaponId = variantWeaponId;
+                                      _selectedWeaponSettings = settings;
+                                    });
+                                  },
+                                  child: _HoverRegion(
+                                    builder: (context, hovered) => AnimatedScale(
+                                      duration: const Duration(milliseconds: 140),
+                                      curve: Curves.easeOutCubic,
+                                      scale: hovered ? 1.03 : 1,
+                                      child: AnimatedContainer(
+                                        duration: const Duration(milliseconds: 180),
+                                        width: 140,
+                                        height: 130,
+                                        padding: const EdgeInsets.all(10),
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(16),
+                                          color: isSelected
+                                              ? Theme.of(context).colorScheme.secondary.withOpacity(0.18)
+                                              : Colors.black.withOpacity(0.08),
+                                          border: Border.all(
+                                            color: isSelected
+                                                ? Theme.of(context).colorScheme.secondary.withOpacity(0.6)
+                                                : _onSurface(context, 0.12),
+                                          ),
+                                        ),
+                                        child: Column(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            if (imageFile != null && imageFile.existsSync())
+                                              _HoverShadow(
+                                                opacity: 0.75,
+                                                blurSigma: 2,
+                                                baseOffset: const Offset(0, 2),
+                                                hoverOffset: const Offset(4, 2),
+                                                hovered: hovered,
+                                                child: Image.file(
+                                                  imageFile,
+                                                  width: 48,
+                                                  height: 48,
+                                                  fit: BoxFit.contain,
+                                                ),
+                                              )
+                                            else
+                                              _HoverShadow(
+                                                opacity: 0.75,
+                                                blurSigma: 2,
+                                                baseOffset: const Offset(0, 2),
+                                                hoverOffset: const Offset(4, 2),
+                                                hovered: hovered,
+                                                child: Icon(
+                                                  Icons.sports_esports,
+                                                  size: 38,
+                                                  color: Theme.of(context).colorScheme.secondary,
+                                                ),
+                                              ),
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              weapon.name,
+                                              textAlign: TextAlign.center,
+                                              style: Theme.of(context).textTheme.bodySmall,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                            if (_selectedWeaponId != null && _selectedWeaponSettings != null) ...[
+                              const SizedBox(height: 20),
+                              _buildWeaponSettings(),
+                            ],
+                          ],
+                        ),
+                ],
               ],
             ),
+    );
+  }
+
+  Widget _buildWeaponSettings() {
+    final weapon = _weapons.firstWhere((w) => w.id == _selectedWeaponId);
+    final settings = _selectedWeaponSettings!;
+    final hasVariants = weapon.variants != null && weapon.variants!.isNotEmpty;
+    
+    WeaponVariant? currentVariant;
+    if (hasVariants && _selectedVariantWeaponId != null) {
+      currentVariant = weapon.variants!.firstWhere(
+        (v) => v.weaponId == _selectedVariantWeaponId,
+        orElse: () => weapon.variants!.first,
+      );
+    }
+    
+    final displayDefaultDamage = currentVariant?.damagePB ?? weapon.damagePB;
+    final displayDefaultEnvDamage = currentVariant?.defaultEnvDamage ?? weapon.defaultEnvDamage;
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          weapon.name,
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        const SizedBox(height: 12),
+        if (hasVariants) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: DropdownButtonFormField<String>(
+              value: _selectedVariantWeaponId,
+              decoration: InputDecoration(
+                labelText: 'Variant',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              items: weapon.variants!.map((variant) {
+                return DropdownMenuItem(
+                  value: variant.weaponId,
+                  child: Text(variant.name),
+                );
+              }).toList(),
+              onChanged: (value) async {
+                if (value != null) {
+                  final newSettings = await DataTableService.getWeaponSettings(weapon, variantWeaponId: value);
+                  setState(() {
+                    _selectedVariantWeaponId = value;
+                    _selectedWeaponSettings = newSettings;
+                    _weaponVariantSelections[weapon.id] = value; // Remember this selection
+                  });
+                }
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+        SwitchListTile(
+          value: settings.damageEnabled,
+          onChanged: (value) async {
+            if (value) {
+              // Prompt for damage value
+              final promptedValue = await _promptValue(context, 'Damage');
+              if (promptedValue == null) return;
+              final newSettings = settings.copyWith(damageEnabled: value, damageValue: promptedValue);
+              await DataTableService.applyWeaponSettings(weapon, newSettings, variantWeaponId: _selectedVariantWeaponId);
+              final updated = await DataTableService.getWeaponSettings(weapon, variantWeaponId: _selectedVariantWeaponId);
+              setState(() => _selectedWeaponSettings = updated);
+            } else {
+              final newSettings = settings.copyWith(damageEnabled: value);
+              await DataTableService.applyWeaponSettings(weapon, newSettings, variantWeaponId: _selectedVariantWeaponId);
+              final updated = await DataTableService.getWeaponSettings(weapon, variantWeaponId: _selectedVariantWeaponId);
+              setState(() => _selectedWeaponSettings = updated);
+            }
+          },
+          title: const Text('Damage'),
+          subtitle: settings.damageEnabled && !settings.advancedMode
+              ? Text('Current value: ${settings.damageValue}')
+              : const Text('Enable custom damage values'),
+        ),
+        if (settings.damageEnabled && !settings.advancedMode) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: OutlinedButton.icon(
+              onPressed: () async {
+                final promptedValue = await _promptValue(context, 'Damage');
+                if (promptedValue == null) return;
+                final newSettings = settings.copyWith(damageValue: promptedValue);
+                await DataTableService.applyWeaponSettings(weapon, newSettings, variantWeaponId: _selectedVariantWeaponId);
+                final updated = await DataTableService.getWeaponSettings(weapon, variantWeaponId: _selectedVariantWeaponId);
+                setState(() => _selectedWeaponSettings = updated);
+              },
+              icon: const Icon(Icons.edit),
+              label: const Text('Edit Damage Value'),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+        SwitchListTile(
+          value: settings.envDamageEnabled,
+          onChanged: (value) async {
+            if (value) {
+              // Prompt for environmental damage value
+              final promptedValue = await _promptValue(context, 'Environmental Damage');
+              if (promptedValue == null) return;
+              final newSettings = settings.copyWith(envDamageEnabled: value, envDamageValue: promptedValue);
+              await DataTableService.applyWeaponSettings(weapon, newSettings, variantWeaponId: _selectedVariantWeaponId);
+              final updated = await DataTableService.getWeaponSettings(weapon, variantWeaponId: _selectedVariantWeaponId);
+              setState(() => _selectedWeaponSettings = updated);
+            } else {
+              final newSettings = settings.copyWith(envDamageEnabled: value);
+              await DataTableService.applyWeaponSettings(weapon, newSettings, variantWeaponId: _selectedVariantWeaponId);
+              final updated = await DataTableService.getWeaponSettings(weapon, variantWeaponId: _selectedVariantWeaponId);
+              setState(() => _selectedWeaponSettings = updated);
+            }
+          },
+          title: const Text('Environmental Damage'),
+          subtitle: settings.envDamageEnabled && !settings.advancedMode
+              ? Text('Current value: ${settings.envDamageValue}')
+              : const Text('Enable custom environmental damage'),
+        ),
+        if (settings.envDamageEnabled && !settings.advancedMode) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: OutlinedButton.icon(
+              onPressed: () async {
+                final promptedValue = await _promptValue(context, 'Environmental Damage');
+                if (promptedValue == null) return;
+                final newSettings = settings.copyWith(envDamageValue: promptedValue);
+                await DataTableService.applyWeaponSettings(weapon, newSettings, variantWeaponId: _selectedVariantWeaponId);
+                final updated = await DataTableService.getWeaponSettings(weapon, variantWeaponId: _selectedVariantWeaponId);
+                setState(() => _selectedWeaponSettings = updated);
+              },
+              icon: const Icon(Icons.edit),
+              label: const Text('Edit Environmental Damage Value'),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+        SwitchListTile(
+          value: settings.advancedMode,
+          onChanged: (value) async {
+            if (value) {
+              // Collect all relevant fields
+              final allFields = <String>[];
+              if (settings.damageEnabled) {
+                allFields.addAll(weapon.damageFields);
+              }
+              if (settings.envDamageEnabled) {
+                allFields.addAll(weapon.environmentalDamageFields);
+              }
+              
+              if (allFields.isEmpty) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Enable Damage or Environmental Damage first.'),
+                  ),
+                );
+                return;
+              }
+              
+              // Determine default values based on what's enabled
+              String defaultValue = displayDefaultDamage;
+              if (settings.damageEnabled && !settings.envDamageEnabled) {
+                defaultValue = displayDefaultDamage;
+              } else if (!settings.damageEnabled && settings.envDamageEnabled) {
+                defaultValue = displayDefaultEnvDamage;
+              }
+              
+              final values = await _promptAdvancedSettings(
+                context,
+                allFields,
+                settings.customValues,
+                defaultValue,
+              );
+              if (values == null) return;
+              
+              final newSettings = settings.copyWith(
+                advancedMode: value,
+                customValues: values,
+              );
+              await DataTableService.applyWeaponSettings(weapon, newSettings, variantWeaponId: _selectedVariantWeaponId);
+              final updated = await DataTableService.getWeaponSettings(weapon, variantWeaponId: _selectedVariantWeaponId);
+              setState(() => _selectedWeaponSettings = updated);
+            } else {
+              final newSettings = settings.copyWith(advancedMode: value);
+              // Re-apply settings to use simple mode values
+              await DataTableService.applyWeaponSettings(weapon, newSettings, variantWeaponId: _selectedVariantWeaponId);
+              final updated = await DataTableService.getWeaponSettings(weapon, variantWeaponId: _selectedVariantWeaponId);
+              setState(() => _selectedWeaponSettings = updated);
+            }
+          },
+          title: const Text('Advanced Settings'),
+          subtitle: const Text('Customize each damage field individually'),
+        ),
+        if (settings.advancedMode) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: OutlinedButton.icon(
+              onPressed: () async {
+                // Collect all relevant fields
+                final allFields = <String>[];
+                if (settings.damageEnabled) {
+                  allFields.addAll(weapon.damageFields);
+                }
+                if (settings.envDamageEnabled) {
+                  allFields.addAll(weapon.environmentalDamageFields);
+                }
+                
+                // Determine default values based on what's enabled
+                String defaultValue = displayDefaultDamage;
+                if (settings.damageEnabled && !settings.envDamageEnabled) {
+                  defaultValue = displayDefaultDamage;
+                } else if (!settings.damageEnabled && settings.envDamageEnabled) {
+                  defaultValue = displayDefaultEnvDamage;
+                }
+                
+                final values = await _promptAdvancedSettings(
+                  context,
+                  allFields,
+                  settings.customValues,
+                  defaultValue,
+                );
+                if (values == null) return;
+                
+                final newSettings = settings.copyWith(customValues: values);
+                await DataTableService.applyWeaponSettings(weapon, newSettings, variantWeaponId: _selectedVariantWeaponId);
+                final updated = await DataTableService.getWeaponSettings(weapon, variantWeaponId: _selectedVariantWeaponId);
+                setState(() => _selectedWeaponSettings = updated);
+              },
+              icon: const Icon(Icons.tune),
+              label: const Text('Edit Advanced Settings'),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+      ],
     );
   }
 }
@@ -6674,6 +7056,7 @@ class LogStore extends ChangeNotifier {
 class BackendPaths {
   static const String curveTableComment = '# CurveTables';
   static const String straightBloomComment = '# Straight Bloom';
+  static const String dataTableComment = '# DataTables';
   static const String defaultCurvePath =
       '/Game/Athena/Balance/DataTables/AthenaGameData';
 
@@ -6681,6 +7064,8 @@ class BackendPaths {
       joinPath([getBackendRoot(), 'static', 'hotfixes', 'DefaultGame.ini']);
   static String get curvesJson =>
       joinPath([getBackendRoot(), 'responses', 'curves.json']);
+  static String get dataTablesJson =>
+      joinPath([getBackendRoot(), 'responses', 'datatables.json']);
   static String get modificationsBackup =>
       joinPath([getBackendRoot(), 'responses', 'modifications-backup.json']);
   static String get sniperJson =>
@@ -7074,6 +7459,84 @@ class CustomCurveGroupInfo {
   final String id;
   final String name;
   final String? imagePath;
+}
+
+class DataTableWeapon {
+  const DataTableWeapon({
+    required this.id,
+    required this.name,
+    required this.weaponId,
+    required this.weaponPath,
+    required this.imagePath,
+    required this.damageFields,
+    required this.environmentalDamageFields,
+    required this.damagePB,
+    required this.defaultEnvDamage,
+    this.variants,
+  });
+
+  final String id;
+  final String name;
+  final String weaponId;
+  final String weaponPath;
+  final String? imagePath;
+  final List<String> damageFields;
+  final List<String> environmentalDamageFields;
+  final String damagePB;
+  final String defaultEnvDamage;
+  final List<WeaponVariant>? variants;
+}
+
+class WeaponVariant {
+  const WeaponVariant({
+    required this.name,
+    required this.weaponId,
+    required this.damagePB,
+    required this.defaultEnvDamage,
+    this.imagePath,
+  });
+
+  final String name;
+  final String weaponId;
+  final String damagePB;
+  final String defaultEnvDamage;
+  final String? imagePath;
+}
+
+class DataTableSettings {
+  const DataTableSettings({
+    required this.damageEnabled,
+    required this.envDamageEnabled,
+    required this.advancedMode,
+    required this.damageValue,
+    required this.envDamageValue,
+    required this.customValues,
+  });
+
+  final bool damageEnabled;
+  final bool envDamageEnabled;
+  final bool advancedMode;
+  final String damageValue;
+  final String envDamageValue;
+  final Map<String, String> customValues;
+
+  DataTableSettings copyWith({
+    bool? damageEnabled,
+    bool? envDamageEnabled,
+    bool? advancedMode,
+    String? damageValue,
+    String? envDamageValue,
+    Map<String, String>? customValues,
+  }) {
+    return DataTableSettings(
+      damageEnabled: damageEnabled ?? this.damageEnabled,
+      envDamageEnabled: envDamageEnabled ?? this.envDamageEnabled,
+      advancedMode: advancedMode ?? this.advancedMode,
+      damageValue: damageValue ?? this.damageValue,
+      envDamageValue: envDamageValue ?? this.envDamageValue,
+      customValues: customValues ?? this.customValues,
+    );
+  }
 }
 
 const List<CurveGroup> _baseCurveGroups = [
@@ -7945,6 +8408,228 @@ class CurveTableService {
     return last
         .replaceAllMapped(RegExp('[A-Z]'), (match) => ' ${match.group(0)}')
         .trim();
+  }
+}
+
+class DataTableService {
+  static Future<List<DataTableWeapon>> loadWeapons() async {
+    final dataTablesFile = File(BackendPaths.dataTablesJson);
+    if (!await dataTablesFile.exists()) {
+      return [];
+    }
+    final map = jsonDecode(await dataTablesFile.readAsString()) as Map<String, dynamic>;
+    final weapons = <DataTableWeapon>[];
+    for (final entry in map.entries) {
+      final data = entry.value as Map<String, dynamic>;
+      final variantsData = data['variants'] as List<dynamic>?;
+      List<WeaponVariant>? variants;
+      if (variantsData != null && variantsData.isNotEmpty) {
+        variants = variantsData.map((v) {
+          final vMap = v as Map<String, dynamic>;
+          return WeaponVariant(
+            name: vMap['name'] ?? '',
+            weaponId: vMap['weaponId'] ?? '',
+            damagePB: vMap['damagePB'] ?? '0',
+            defaultEnvDamage: vMap['defaultEnvDamage'] ?? '0',
+            imagePath: vMap['imagePath'],
+          );
+        }).toList();
+      }
+      weapons.add(DataTableWeapon(
+        id: entry.key,
+        name: data['name'] ?? 'Weapon ${entry.key}',
+        weaponId: data['weaponId'] ?? '',
+        weaponPath: data['weaponPath'] ?? '/Game/Athena/Items/Weapons/AthenaRangedWeapons',
+        imagePath: data['imagePath'],
+        damageFields: (data['damageFields'] as List<dynamic>?)?.cast<String>() ?? [],
+        environmentalDamageFields: (data['environmentalDamageFields'] as List<dynamic>?)?.cast<String>() ?? [],
+        damagePB: data['damagePB'] ?? '0',
+        defaultEnvDamage: data['defaultEnvDamage'] ?? '0',
+        variants: variants,
+      ));
+    }
+    return weapons;
+  }
+
+  static Future<bool> areDataTablesEnabled() async {
+    final iniFile = File(BackendPaths.defaultGameIni);
+    if (!await iniFile.exists()) return false;
+    final content = await iniFile.readAsString();
+    final regex = RegExp(r'^\+DataTable=.*$', multiLine: true);
+    return regex.hasMatch(content);
+  }
+
+  static Future<bool> getUIEnabledState() async {
+    final backupFile = File(BackendPaths.modificationsBackup);
+    if (!await backupFile.exists()) return false;
+    try {
+      final backup = jsonDecode(await backupFile.readAsString()) as Map<String, dynamic>;
+      return backup['dataTablesUIEnabled'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<void> setUIEnabledState(bool enabled) async {
+    final backupFile = File(BackendPaths.modificationsBackup);
+    Map<String, dynamic> backup = {};
+    if (await backupFile.exists()) {
+      try {
+        backup = jsonDecode(await backupFile.readAsString()) as Map<String, dynamic>;
+      } catch (_) {
+        backup = {};
+      }
+    }
+    backup['dataTablesUIEnabled'] = enabled;
+    await backupFile.parent.create(recursive: true);
+    await backupFile.writeAsString(jsonEncode(backup));
+  }
+
+  static Future<DataTableSettings> getWeaponSettings(DataTableWeapon weapon, {String? variantWeaponId}) async {
+    final weaponId = variantWeaponId ?? weapon.weaponId;
+    final iniFile = File(BackendPaths.defaultGameIni);
+    if (!await iniFile.exists()) {
+      return DataTableSettings(
+        damageEnabled: false,
+        envDamageEnabled: false,
+        advancedMode: false,
+        damageValue: weapon.damagePB,
+        envDamageValue: weapon.defaultEnvDamage,
+        customValues: {},
+      );
+    }
+    final content = await iniFile.readAsString();
+    final customValues = <String, String>{};
+    bool hasDamage = false;
+    bool hasEnvDamage = false;
+
+    for (final field in weapon.damageFields) {
+      final regex = RegExp(
+        r'^\+DataTable=' + RegExp.escape(weapon.weaponPath) + r';RowUpdate;' +
+        RegExp.escape(weaponId) + r';' + RegExp.escape(field) + r';(.+)$',
+        multiLine: true,
+      );
+      final match = regex.firstMatch(content);
+      if (match != null) {
+        customValues[field] = match.group(1)!;
+        hasDamage = true;
+      }
+    }
+
+    for (final field in weapon.environmentalDamageFields) {
+      final regex = RegExp(
+        r'^\+DataTable=' + RegExp.escape(weapon.weaponPath) + r';RowUpdate;' +
+        RegExp.escape(weaponId) + r';' + RegExp.escape(field) + r';(.+)$',
+        multiLine: true,
+      );
+      final match = regex.firstMatch(content);
+      if (match != null) {
+        customValues[field] = match.group(1)!;
+        hasEnvDamage = true;
+      }
+    }
+
+    // Check if values are consistent (simple mode) or different (advanced mode)
+    bool advancedMode = false;
+    String? dmgValue;
+    String? envDmgValue;
+    
+    if (hasDamage) {
+      final damageValues = weapon.damageFields.map((f) => customValues[f]).whereType<String>().toSet();
+      if (damageValues.length == 1) {
+        dmgValue = damageValues.first;
+      } else {
+        advancedMode = true;
+      }
+    }
+
+    if (hasEnvDamage) {
+      final envValues = weapon.environmentalDamageFields.map((f) => customValues[f]).whereType<String>().toSet();
+      if (envValues.length == 1) {
+        envDmgValue = envValues.first;
+      } else {
+        advancedMode = true;
+      }
+    }
+
+    return DataTableSettings(
+      damageEnabled: hasDamage,
+      envDamageEnabled: hasEnvDamage,
+      advancedMode: advancedMode,
+      damageValue: dmgValue ?? weapon.damagePB,
+      envDamageValue: envDmgValue ?? weapon.defaultEnvDamage,
+      customValues: customValues,
+    );
+  }
+
+  static Future<void> applyWeaponSettings(DataTableWeapon weapon, DataTableSettings settings, {String? variantWeaponId}) async {
+    final weaponId = variantWeaponId ?? weapon.weaponId;
+    final iniFile = File(BackendPaths.defaultGameIni);
+    if (!await iniFile.exists()) return;
+    var content = await iniFile.readAsString();
+
+    // Remove existing DataTable lines for this weapon
+    for (final field in [...weapon.damageFields, ...weapon.environmentalDamageFields]) {
+      final regex = RegExp(
+        r'^\+DataTable=' + RegExp.escape(weapon.weaponPath) + r';RowUpdate;' +
+        RegExp.escape(weaponId) + r';' + RegExp.escape(field) + r';.*$',
+        multiLine: true,
+      );
+      content = content.replaceAll(regex, '');
+    }
+    content = content.replaceAll(RegExp(r'\n\n+'), '\n');
+
+    // Add new lines if enabled
+    final linesToAdd = <String>[];
+    
+    if (settings.damageEnabled) {
+      if (settings.advancedMode) {
+        for (final field in weapon.damageFields) {
+          final value = settings.customValues[field] ?? weapon.damagePB;
+          linesToAdd.add('+DataTable=${weapon.weaponPath};RowUpdate;$weaponId;$field;$value');
+        }
+      } else {
+        for (final field in weapon.damageFields) {
+          linesToAdd.add('+DataTable=${weapon.weaponPath};RowUpdate;$weaponId;$field;${settings.damageValue}');
+        }
+      }
+    }
+
+    if (settings.envDamageEnabled) {
+      if (settings.advancedMode) {
+        for (final field in weapon.environmentalDamageFields) {
+          final value = settings.customValues[field] ?? weapon.defaultEnvDamage;
+          linesToAdd.add('+DataTable=${weapon.weaponPath};RowUpdate;$weaponId;$field;$value');
+        }
+      } else {
+        for (final field in weapon.environmentalDamageFields) {
+          linesToAdd.add('+DataTable=${weapon.weaponPath};RowUpdate;$weaponId;$field;${settings.envDamageValue}');
+        }
+      }
+    }
+
+    if (linesToAdd.isNotEmpty) {
+      final ensured = IniService.ensureAssetSection(
+        content,
+        BackendPaths.dataTableComment,
+        preferPrepend: true,
+      );
+      content = ensured.content;
+      final insertPoint = ensured.insertPoint;
+      content = '${content.substring(0, insertPoint)}${linesToAdd.join('\n')}\n${content.substring(insertPoint)}';
+    }
+
+    await iniFile.writeAsString(content);
+  }
+
+  static Future<void> clearAllDataTables() async {
+    final iniFile = File(BackendPaths.defaultGameIni);
+    if (!await iniFile.exists()) return;
+    var content = await iniFile.readAsString();
+    final regex = RegExp(r'^\+DataTable=.*$', multiLine: true);
+    content = content.replaceAll(regex, '');
+    content = content.replaceAll(RegExp(r'\n\n+'), '\n');
+    await iniFile.writeAsString(content);
   }
 }
 
@@ -9263,6 +9948,95 @@ Future<String?> _promptValue(BuildContext context, String name) async {
     ),
   );
   return result?.isEmpty == true ? null : result;
+}
+
+Future<Map<String, String>?> _promptAdvancedSettings(
+  BuildContext context,
+  List<String> fields,
+  Map<String, String> currentValues,
+  String defaultValue,
+) async {
+  bool isValidNumeric(String value) =>
+      RegExp(r'^[+-]?(?:\d+\.?\d*|\.\d+)$').hasMatch(value.trim());
+  
+  final controllers = <String, TextEditingController>{};
+  for (final field in fields) {
+    controllers[field] = TextEditingController(
+      text: currentValues[field] ?? defaultValue,
+    );
+  }
+  
+  final result = await _showBlurDialog<Map<String, String>>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Advanced Settings'),
+      content: SizedBox(
+        width: 500,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: fields.map((field) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: TextField(
+                  controller: controllers[field],
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                    signed: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9+\-.]')),
+                  ],
+                  decoration: InputDecoration(
+                    labelText: field,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ),
+      actions: [
+        _HoverScale(
+          child: TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ),
+        _HoverScale(
+          child: ElevatedButton(
+            onPressed: () {
+              final values = <String, String>{};
+              for (final field in fields) {
+                final value = controllers[field]!.text.trim();
+                if (value.isEmpty || !isValidNumeric(value)) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Enter a valid numeric value for $field.'),
+                    ),
+                  );
+                  return;
+                }
+                values[field] = value;
+              }
+              Navigator.pop(context, values);
+            },
+            child: const Text('Save All'),
+          ),
+        ),
+      ],
+    ),
+  );
+  
+  // Dispose controllers
+  for (final controller in controllers.values) {
+    controller.dispose();
+  }
+  
+  return result;
 }
 
 Future<void> _showCurveImportSummary(
