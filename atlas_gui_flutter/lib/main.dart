@@ -4608,6 +4608,171 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     }
   }
 
+  Future<void> _copyDirectory(Directory source, Directory destination) async {
+    await for (final entity in source.list(recursive: false)) {
+      if (entity is Directory) {
+        final newDir = Directory(joinPath([destination.path, entity.path.split(Platform.pathSeparator).last]));
+        await newDir.create(recursive: true);
+        await _copyDirectory(entity, newDir);
+      } else if (entity is File) {
+        final newFile = File(joinPath([destination.path, entity.path.split(Platform.pathSeparator).last]));
+        await entity.copy(newFile.path);
+      }
+    }
+  }
+
+  Future<void> _exportUserSettings(String accountId) async {
+    bool exportProfile = true;
+    bool exportClientSettings = true;
+
+    final profilesDir = Directory(joinPath([getBackendRoot(), 'static', 'profiles', accountId]));
+    final clientSettingsDir = Directory(joinPath([getBackendRoot(), 'static', 'ClientSettings', accountId]));
+    final profileFolderExists = await profilesDir.exists();
+    final clientSettingsFolderExists = await clientSettingsDir.exists();
+
+    if (!profileFolderExists && !clientSettingsFolderExists) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No profile or client settings found to export.')),
+      );
+      return;
+    }
+
+    final blurEnabled = appDialogBlurEnabled.value;
+
+    final result = await showDialog<Map<String, bool>>(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.3),
+      builder: (context) => blurEnabled
+          ? BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: StatefulBuilder(
+                builder: (context, setState) => AlertDialog(
+                  title: Text('Export "$accountId" settings'),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Select what to export:'),
+                      const SizedBox(height: 12),
+                      CheckboxListTile(
+                        value: exportProfile,
+                        onChanged: profileFolderExists ? (value) => setState(() => exportProfile = value ?? true) : null,
+                        title: const Text('User Profile'),
+                        subtitle: const Text('profile_athena.json and related profile data'),
+                        controlAffinity: ListTileControlAffinity.leading,
+                      ),
+                      CheckboxListTile(
+                        value: exportClientSettings,
+                        onChanged: clientSettingsFolderExists ? (value) => setState(() => exportClientSettings = value ?? true) : null,
+                        title: const Text('ClientSettings'),
+                        subtitle: const Text('Game settings and preferences'),
+                        controlAffinity: ListTileControlAffinity.leading,
+                      ),
+                    ],
+                  ),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                    ElevatedButton.icon(
+                      onPressed: (exportProfile || exportClientSettings)
+                          ? () => Navigator.pop(context, {'profile': exportProfile, 'settings': exportClientSettings})
+                          : null,
+                      icon: const Icon(Icons.download_rounded),
+                      label: const Text('Export'),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : StatefulBuilder(
+              builder: (context, setState) => AlertDialog(
+                title: Text('Export "$accountId" settings'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Select what to export:'),
+                    const SizedBox(height: 12),
+                    CheckboxListTile(
+                      value: exportProfile,
+                      onChanged: profileFolderExists ? (value) => setState(() => exportProfile = value ?? true) : null,
+                      title: const Text('User Profile'),
+                      subtitle: const Text('profile_athena.json and related profile data'),
+                      controlAffinity: ListTileControlAffinity.leading,
+                    ),
+                    CheckboxListTile(
+                      value: exportClientSettings,
+                      onChanged: clientSettingsFolderExists ? (value) => setState(() => exportClientSettings = value ?? true) : null,
+                      title: const Text('ClientSettings'),
+                      subtitle: const Text('Game settings and preferences'),
+                      controlAffinity: ListTileControlAffinity.leading,
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                  ElevatedButton.icon(
+                    onPressed: (exportProfile || exportClientSettings)
+                        ? () => Navigator.pop(context, {'profile': exportProfile, 'settings': exportClientSettings})
+                        : null,
+                    icon: const Icon(Icons.download_rounded),
+                    label: const Text('Export'),
+                  ),
+                ],
+              ),
+            ),
+    );
+
+    if (result == null) return;
+
+    try {
+      final backendRoot = getBackendRoot();
+      final downloadsPath = Directory.systemTemp.parent.parent.path;
+      final downloadsDir = Directory(joinPath([downloadsPath, 'Downloads']));
+
+      if (!await downloadsDir.exists()) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Downloads folder not found.')));
+        return;
+      }
+
+      final tempDir = Directory.systemTemp.createTempSync('atlas_export_');
+      final exportDir = Directory(joinPath([tempDir.path, accountId]));
+      await exportDir.create();
+
+      if (result['profile']!) {
+        final profileSource = Directory(joinPath([backendRoot, 'static', 'profiles', accountId]));
+        final profileDest = Directory(joinPath([exportDir.path, 'profiles', accountId]));
+        await profileDest.create(recursive: true);
+        await _copyDirectory(profileSource, profileDest);
+      }
+
+      if (result['settings']!) {
+        final settingsSource = Directory(joinPath([backendRoot, 'static', 'ClientSettings', accountId]));
+        final settingsDest = Directory(joinPath([exportDir.path, 'ClientSettings', accountId]));
+        await settingsDest.create(recursive: true);
+        await _copyDirectory(settingsSource, settingsDest);
+      }
+
+      final zipFileName = '${accountId}_export_${DateTime.now().millisecondsSinceEpoch}.zip';
+      final zipPath = joinPath([downloadsDir.path, zipFileName]);
+
+      await Process.run('powershell', [
+        '-NoProfile',
+        '-Command',
+        'Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::CreateFromDirectory(\'${exportDir.path}\', \'$zipPath\')',
+      ]);
+
+      await tempDir.delete(recursive: true);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Exported to Downloads: $zipFileName')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Export failed: $error')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final presetItems = {
@@ -4684,6 +4849,10 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                                             PopupMenuItem(
                                               child: const Text('Open Profile Folder'),
                                               onTap: () => _openProfileFolder(profile.accountId),
+                                            ),
+                                            PopupMenuItem(
+                                              child: const Text('Export User Settings'),
+                                              onTap: () => _exportUserSettings(profile.accountId),
                                             ),
                                           ],
                                         );
