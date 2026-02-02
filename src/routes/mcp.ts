@@ -652,4 +652,10 @@ export default function () {
       });
     }
   );
+
+  // Endpoint to clear the profile cache (used when presets are applied)
+  app.post("/atlas/clear-profile-cache", async (c) => {
+    profileCache.clear();
+    return c.json({ success: true, message: "Profile cache cleared" });
+  });
 }
