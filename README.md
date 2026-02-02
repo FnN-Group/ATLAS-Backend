@@ -3,16 +3,21 @@
 ATLAS is a Fortnite backend for all versions of fortnite designed for trickshotters!
 This backend has features such as the following:
 
-### 1. CurveTables
+### 1. Clean GUI (and CLI)
+- A well sorted and clean GUI with ease of access to all features
+- CLI version still exists under the old branch
+
+### 1. Straight Bloom
+- Toggle Straight Bloom (Straight Sniper Bullets)
+- Toggle Custom Sniper Spread 
+
+### 2. CurveTables
 - CurveTable Toggle
 - CurveTable Editor
-- CurveTable Importer/Presets (if .ini files added to exports, DefaultGame folder)
-
-### 2. Straight Bloom
-- Toggle Straight Bloom (Straight Sniper Bullets)
+- CurveTable Importer
 
 ### 3. Importing/Exporting Data
-- Bulk Importing/Exporting Client Settings, Profiles, CurveTables, Straight Bloom
+- Bulk Importing/Exporting Client Settings, Profiles
 
 ### 4. Other Features
 - Arena Playlist/Points (22.40 and under)
@@ -31,7 +36,7 @@ If you want to contribute just fork this repository and make a pull request!
 
 ## Quick Start (Windows)
 
-### First Time Setup
+### First Time Setup (For CLI Version)
 
 1. **Run the setup script** (This will install Bun if needed and install dependencies):
    ```bat
