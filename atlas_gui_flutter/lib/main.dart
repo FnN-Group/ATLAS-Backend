@@ -2685,6 +2685,50 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     await _load();
   }
 
+  Future<void> _addCustomDataTable() async {
+    final input = await _promptCustomDataTable(context);
+    if (input == null) return;
+    await DataTableService.addCustomWeapon(input);
+    await _load();
+  }
+
+  Future<void> _importDataTablesINI() async {
+    final picked = await FilePicker.platform.pickFiles(
+      dialogTitle: 'Import DefaultGame.ini',
+      type: FileType.custom,
+      allowedExtensions: ['ini'],
+    );
+    if (picked == null || picked.files.single.path == null) return;
+    final path = picked.files.single.path!;
+
+    final source = File(path);
+    if (!await source.exists()) return;
+    final importContent = await source.readAsString();
+    
+    // Match +DataTable= lines
+    final regex = RegExp(
+      r'^\+DataTable=(.+)$',
+      multiLine: true,
+    );
+    final matches = regex.allMatches(importContent).toList();
+    if (matches.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No DataTable entries found in file')),
+      );
+      return;
+    }
+
+    final lines = matches.map((m) => m.group(0)!).toList();
+    await DataTableService.importDataTableLines(lines);
+    await _load();
+    
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Imported ${lines.length} DataTable entries')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final visibleGroups = _groups
@@ -3035,6 +3079,22 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                     final newValue = !_dataTablesEnabled;
                     await DataTableService.setUIEnabledState(newValue);
                     setState(() => _dataTablesEnabled = newValue);
+                    
+                    // Auto-select first weapon when enabling
+                    if (newValue && _weapons.isNotEmpty && _selectedWeaponId == null) {
+                      final firstWeapon = _weapons.first;
+                      final hasVariants = firstWeapon.variants != null && firstWeapon.variants!.isNotEmpty;
+                      String? variantWeaponId;
+                      if (hasVariants) {
+                        variantWeaponId = firstWeapon.variants!.first.weaponId;
+                      }
+                      final settings = await DataTableService.getWeaponSettings(firstWeapon, variantWeaponId: variantWeaponId);
+                      setState(() {
+                        _selectedWeaponId = firstWeapon.id;
+                        _selectedVariantWeaponId = variantWeaponId;
+                        _selectedWeaponSettings = settings;
+                      });
+                    }
                   },
                   title: Text(
                     _dataTablesEnabled
@@ -3164,6 +3224,57 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                                   ),
                                 );
                               }).toList(),
+                            ),
+                            const SizedBox(height: 20),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  _HoverScale(
+                                    enabled: _dataTablesEnabled,
+                                    child: OutlinedButton.icon(
+                                      onPressed: _addCustomDataTable,
+                                      icon: const Icon(Icons.add_circle_outline),
+                                      label: const Text('Add Custom DataTable'),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: const Color(0xFF1E88E5),
+                                      ),
+                                    ),
+                                  ),
+                                  _HoverScale(
+                                    enabled: _dataTablesEnabled,
+                                    child: OutlinedButton.icon(
+                                      onPressed: _importDataTablesINI,
+                                      icon: const Icon(Icons.file_upload_outlined),
+                                      label: const Text('Import INI'),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: const Color(0xFF1E88E5),
+                                      ),
+                                    ),
+                                  ),
+                                  _HoverScale(
+                                    enabled: _dataTablesEnabled,
+                                    child: OutlinedButton.icon(
+                                      onPressed: () async {
+                                        final confirm = await DataService._confirmDialog(
+                                          context,
+                                          'Clear all DataTables from DefaultGame.ini?',
+                                        );
+                                        if (!confirm) return;
+                                        await DataTableService.clearAllDataTables();
+                                        await _load();
+                                      },
+                                      icon: const Icon(Icons.delete_sweep_outlined),
+                                      label: const Text('Clear All DataTables'),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: const Color(0xFF1E88E5),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                             if (_selectedWeaponId != null && _selectedWeaponSettings != null) ...[
                               const SizedBox(height: 20),
@@ -7651,6 +7762,30 @@ class CustomCurveGroupInfo {
   final String? imagePath;
 }
 
+class CustomDataTableInput {
+  const CustomDataTableInput({
+    required this.weaponName,
+    required this.weaponIdLine,
+    required this.damagePB,
+    required this.envDamage,
+    required this.advancedMode,
+    this.imageSourcePath,
+    this.damageMid,
+    this.damageLong,
+    this.damageMaxRange,
+  });
+
+  final String weaponName;
+  final String weaponIdLine;
+  final String damagePB;
+  final String envDamage;
+  final bool advancedMode;
+  final String? imageSourcePath;
+  final String? damageMid;
+  final String? damageLong;
+  final String? damageMaxRange;
+}
+
 class DataTableWeapon {
   const DataTableWeapon({
     required this.id,
@@ -8841,6 +8976,78 @@ class DataTableService {
     final regex = RegExp(r'^\+DataTable=.*$', multiLine: true);
     content = content.replaceAll(regex, '');
     content = content.replaceAll(RegExp(r'\n\n+'), '\n');
+    await iniFile.writeAsString(content);
+  }
+
+  static Future<void> addCustomWeapon(CustomDataTableInput input) async {
+    // Add weapon to datatables-ui.json
+    final dataTablesFile = File(BackendPaths.dataTablesJson);
+    Map<String, dynamic> data = {};
+    if (await dataTablesFile.exists()) {
+      data = jsonDecode(await dataTablesFile.readAsString()) as Map<String, dynamic>;
+    }
+
+    // Generate unique ID
+    final weaponId = 'custom-${DateTime.now().millisecondsSinceEpoch}';
+    
+    // Save image if provided
+    String? savedImagePath;
+    if (input.imageSourcePath != null && input.imageSourcePath!.isNotEmpty) {
+      final sourceFile = File(input.imageSourcePath!);
+      if (await sourceFile.exists()) {
+        final fileName = 'custom_${DateTime.now().millisecondsSinceEpoch}.png';
+        final targetPath = joinPath([getBackendRoot(), 'public', 'items', fileName]);
+        await sourceFile.copy(targetPath);
+        savedImagePath = fileName;
+      }
+    }
+
+    // Determine damage fields based on advanced mode
+    List<String> damageFields;
+    List<String> envDamageFields;
+    
+    if (input.advancedMode) {
+      damageFields = ['DamagePB', 'DamageMid', 'DamageLong', 'DamageMaxRange'];
+      envDamageFields = ['EnvironmentalDamagePB', 'EnvironmentalDamageMid', 'EnvironmentalDamageLong', 'EnvironmentalDamageMaxRange'];
+    } else {
+      damageFields = ['DamagePB'];
+      envDamageFields = ['EnvironmentalDamagePB'];
+    }
+
+    data[weaponId] = {
+      'name': input.weaponName,
+      'weaponId': input.weaponIdLine,
+      'weaponPath': '/Game/Athena/Items/Weapons/AthenaRangedWeapons',
+      'imagePath': savedImagePath,
+      'damageFields': damageFields,
+      'environmentalDamageFields': envDamageFields,
+      'damagePB': input.damagePB,
+      'defaultEnvDamage': input.envDamage,
+    };
+
+    await dataTablesFile.parent.create(recursive: true);
+    await dataTablesFile.writeAsString(
+      const JsonEncoder.withIndent('  ').convert(data),
+    );
+  }
+
+  static Future<void> importDataTableLines(List<String> lines) async {
+    final iniFile = File(BackendPaths.defaultGameIni);
+    if (!await iniFile.exists()) return;
+    
+    var content = await iniFile.readAsString();
+    final ensured = IniService.ensureAssetSection(
+      content,
+      BackendPaths.dataTableComment,
+      preferPrepend: true,
+    );
+    content = ensured.content;
+    final insertPoint = ensured.insertPoint;
+    
+    // Insert the imported lines
+    final linesToAdd = lines.join('\n');
+    content = '${content.substring(0, insertPoint)}$linesToAdd\n${content.substring(insertPoint)}';
+    
     await iniFile.writeAsString(content);
   }
 }
@@ -10820,6 +11027,207 @@ Future<List<CustomCurveInput>?> _promptCustomCurves(
                   );
                 }
                 Navigator.pop(context, inputs);
+              },
+              child: const Text('Add'),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+  return result;
+}
+
+Future<CustomDataTableInput?> _promptCustomDataTable(BuildContext context) async {
+  final weaponNameController = TextEditingController();
+  final weaponIdController = TextEditingController();
+  final damagePBController = TextEditingController(text: '50');
+  final envDamageController = TextEditingController(text: '50');
+  final damageMidController = TextEditingController(text: '40');
+  final damageLongController = TextEditingController(text: '30');
+  final damageMaxRangeController = TextEditingController(text: '20');
+  
+  String? imagePath;
+  bool advancedMode = false;
+  String? errorText;
+
+  final result = await _showBlurDialog<CustomDataTableInput>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) => AlertDialog(
+        title: const Text('Add Custom DataTable'),
+        content: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: weaponNameController,
+                  decoration: InputDecoration(
+                    labelText: 'Weapon Name',
+                    hintText: 'Assault Rifle',
+                    hintStyle: TextStyle(color: Colors.grey.shade600),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: weaponIdController,
+                  decoration: InputDecoration(
+                    labelText: 'DataTable RowName',
+                    hintText: 'Assault_Auto_Athena_C_Ore_T03',
+                    hintStyle: TextStyle(color: Colors.grey.shade600),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        imagePath == null
+                            ? 'No image selected'
+                            : imagePath!.split(Platform.pathSeparator).last,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    _HoverScale(
+                      child: TextButton.icon(
+                        onPressed: () async {
+                          final picked = await FilePicker.platform.pickFiles(
+                            type: FileType.image,
+                          );
+                          if (picked == null || picked.files.single.path == null) {
+                            return;
+                          }
+                          setState(() {
+                            imagePath = picked.files.single.path;
+                            errorText = null;
+                          });
+                        },
+                        icon: const Icon(Icons.image_outlined),
+                        label: const Text('Choose image'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: damagePBController,
+                  decoration: InputDecoration(
+                    labelText: advancedMode ? 'DamagePB' : 'Base Damage',
+                    hintText: '50',
+                    hintStyle: TextStyle(color: Colors.grey.shade600),
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                if (advancedMode) ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: damageMidController,
+                    decoration: InputDecoration(
+                      labelText: 'DamageMid',
+                      hintText: '40',
+                      hintStyle: TextStyle(color: Colors.grey.shade600),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: damageLongController,
+                    decoration: InputDecoration(
+                      labelText: 'DamageLong',
+                      hintText: '30',
+                      hintStyle: TextStyle(color: Colors.grey.shade600),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: damageMaxRangeController,
+                    decoration: InputDecoration(
+                      labelText: 'DamageMaxRange',
+                      hintText: '20',
+                      hintStyle: TextStyle(color: Colors.grey.shade600),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                ],
+                const SizedBox(height: 12),
+                TextField(
+                  controller: envDamageController,
+                  decoration: InputDecoration(
+                    labelText: 'Base Environmental Damage',
+                    hintText: '50',
+                    hintStyle: TextStyle(color: Colors.grey.shade600),
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 16),
+                SwitchListTile(
+                  value: advancedMode,
+                  onChanged: (value) => setState(() => advancedMode = value),
+                  title: const Text('Advanced Options'),
+                  subtitle: const Text('Configure damage for different ranges'),
+                ),
+                if (errorText != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    errorText!,
+                    style: const TextStyle(color: Colors.redAccent),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          _HoverScale(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+          ),
+          _HoverScale(
+            child: ElevatedButton(
+              onPressed: () {
+                final weaponName = weaponNameController.text.trim();
+                final weaponId = weaponIdController.text.trim();
+                final damagePB = damagePBController.text.trim();
+                final envDamage = envDamageController.text.trim();
+
+                if (weaponName.isEmpty) {
+                  setState(() => errorText = 'Weapon name is required.');
+                  return;
+                }
+                if (weaponId.isEmpty) {
+                  setState(() => errorText = 'DataTable line (weaponId) is required.');
+                  return;
+                }
+                if (damagePB.isEmpty) {
+                  setState(() => errorText = 'Base DamagePB is required.');
+                  return;
+                }
+                if (envDamage.isEmpty) {
+                  setState(() => errorText = 'Base Environmental Damage is required.');
+                  return;
+                }
+
+                Navigator.pop(
+                  context,
+                  CustomDataTableInput(
+                    weaponName: weaponName,
+                    weaponIdLine: weaponId,
+                    damagePB: damagePB,
+                    envDamage: envDamage,
+                    advancedMode: advancedMode,
+                    imageSourcePath: imagePath,
+                    damageMid: advancedMode ? damageMidController.text.trim() : null,
+                    damageLong: advancedMode ? damageLongController.text.trim() : null,
+                    damageMaxRange: advancedMode ? damageMaxRangeController.text.trim() : null,
+                  ),
+                );
               },
               child: const Text('Add'),
             ),
