@@ -1075,7 +1075,7 @@ class _AtlasHomePageState extends State<AtlasHomePage>
   static const List<MenuItemData> _menuItems = [
     MenuItemData(
       title: 'Modifications',
-      subtitle: 'Manage Straight Bloom and CurveTables',
+      subtitle: 'Manage Straight Bloom, CurveTables and DataTables',
       icon: Icons.tune,
       accent: Color(0xFF6BE7FF),
       actions: [
@@ -1095,7 +1095,7 @@ class _AtlasHomePageState extends State<AtlasHomePage>
     ),
     MenuItemData(
       title: 'Arena',
-      subtitle: 'Leaderboard and Point Saving',
+      subtitle: 'Leaderboard and other arena settings',
       icon: Icons.emoji_events,
       accent: Color(0xFFFF6A8C),
       enabled: true,
@@ -8923,6 +8923,8 @@ class ConfigService {
         lastShownUpdateNotesVersion: '',
       );
     }
+    final lastShownUpdateNotesVersion =
+        gui['LastShownUpdateNotesVersion'] ?? '';
     return ConfigSettings(
       rufusStage: int.tryParse(map['RufusStage'] ?? '') ?? 1,
       waterLevel: int.tryParse(map['WaterLevel'] ?? '') ?? 1,
@@ -8937,7 +8939,7 @@ class ConfigService {
       backgroundBlur: double.tryParse(map['BackgroundBlur'] ?? '') ?? 18,
       dialogBlurEnabled:
           (map['DialogBlurEnabled'] ?? 'true').toLowerCase() == 'true',
-      lastShownUpdateNotesVersion: map['LastShownUpdateNotesVersion'] ?? '',
+      lastShownUpdateNotesVersion: lastShownUpdateNotesVersion,
     );
   }
 
