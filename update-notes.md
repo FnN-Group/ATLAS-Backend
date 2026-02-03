@@ -19,9 +19,11 @@ Markdown Quick Key
 - Datatable section added
 - Share button for connection details added
 - Singular user profile exports/deletion added
+- User creation with presets before launch
 
 # Fixes
 - Minor stability fixes
 - Fixed profile presets not applying
+- Light mode appearance for some menus
 
 [Full release notes](https://github.com/cipherfps/ATLAS-Backend/releases)

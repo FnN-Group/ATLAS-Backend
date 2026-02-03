@@ -1520,7 +1520,8 @@ async function customCosmeticProfilesMenu() {
       const profilesDir = path.join(__dirname, '../static/profiles');
       const profileDirs = fs.readdirSync(profilesDir).filter(item => {
         const itemPath = path.join(profilesDir, item);
-        return fs.statSync(itemPath).isDirectory();
+        if (!fs.statSync(itemPath).isDirectory()) return false;
+        return item.toLowerCase() !== 'host';
       });
       
       console.log('\n\x1b[36m═══════════════════════════════════════════════════════════\x1b[0m');

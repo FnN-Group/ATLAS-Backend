@@ -5255,6 +5255,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   bool _loading = true;
   List<ProfileSummary> _profiles = [];
   List<ProfilePreset> _presets = [];
+  bool _hasAnyUsers = false;
   String? _selectedProfile;
   String? _selectedPreset;
 
@@ -5268,10 +5269,12 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     try {
       final profiles = await ProfileService.listProfiles();
       final presets = await ProfileService.listPresets();
+      final hasAnyUsers = await ProfileService.hasAnyUsers();
       if (!mounted) return;
       setState(() {
         _profiles = profiles;
         _presets = presets;
+        _hasAnyUsers = hasAnyUsers;
         _selectedProfile = profiles.isNotEmpty
             ? profiles.first.accountId
             : null;
@@ -5280,9 +5283,164 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       });
     } catch (error) {
       if (!mounted) return;
-      setState(() => _loading = false);
+      setState(() {
+        _loading = false;
+        _hasAnyUsers = false;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to load profiles: $error')),
+      );
+    }
+  }
+
+  String? _validateNewUserName(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return 'User name is required.';
+    }
+    if (trimmed == '.' || trimmed == '..') {
+      return 'That name is not allowed.';
+    }
+    if (trimmed.startsWith('.')) {
+      return 'User name cannot start with a dot.';
+    }
+    if (RegExp(r'[<>:"/\\|?*]').hasMatch(trimmed)) {
+      return 'User name contains invalid characters.';
+    }
+    if (trimmed.endsWith(' ') || trimmed.endsWith('.')) {
+      return 'User name cannot end with a space or dot.';
+    }
+    if (trimmed.toLowerCase() == 'host') {
+      return 'The name "host" is reserved.';
+    }
+    return null;
+  }
+
+  Future<_CreateUserResult?> _showCreateUserDialog() async {
+    if (_presets.isEmpty) {
+      if (!mounted) return null;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No presets found.')),
+      );
+      return null;
+    }
+
+    final controller = TextEditingController();
+    String? selectedPreset = _presets.any((preset) => preset.folder == _selectedPreset)
+        ? _selectedPreset
+        : _presets.first.folder;
+    String? errorText;
+
+    return _showBlurDialog<_CreateUserResult>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Create User'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: controller,
+                  decoration: InputDecoration(
+                    labelText: 'User name',
+                    errorText: errorText,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: selectedPreset,
+                  decoration: const InputDecoration(
+                    labelText: 'Preset',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: _presets
+                      .map(
+                        (preset) => DropdownMenuItem(
+                          value: preset.folder,
+                          child: _PresetLabel(
+                            name: preset.name,
+                            tag: preset.versionTag,
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  selectedItemBuilder: (context) => _presets
+                      .map(
+                        (preset) => _PresetLabel(
+                          name: preset.name,
+                          tag: preset.versionTag,
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) => setState(
+                    () => selectedPreset = value ?? _presets.first.folder,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            _HoverScale(
+              child: TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+            ),
+            _HoverScale(
+              child: ElevatedButton(
+                onPressed: () async {
+                  final name = controller.text.trim();
+                  final validationError = _validateNewUserName(name);
+                  if (validationError != null) {
+                    setState(() => errorText = validationError);
+                    return;
+                  }
+                  if (await ProfileService.userExists(name)) {
+                    setState(() => errorText = 'That user already exists.');
+                    return;
+                  }
+                  final presetFolder = selectedPreset ?? _presets.first.folder;
+                  Navigator.pop(
+                    context,
+                    _CreateUserResult(
+                      accountId: name,
+                      presetFolder: presetFolder,
+                    ),
+                  );
+                },
+                child: const Text('Create'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _createUser() async {
+    final result = await _showCreateUserDialog();
+    if (result == null) return;
+    try {
+      await ProfileService.createUser(
+        result.accountId,
+        presetFolder: result.presetFolder,
+      );
+      await _load();
+      if (!mounted) return;
+      setState(() => _selectedProfile = result.accountId);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Created "${result.accountId}" with preset "${result.presetFolder}".',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to create user: $error')),
       );
     }
   }
@@ -5936,13 +6094,27 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
         : null;
     return _BaseScreen(
       title: 'Users',
-      trailing: _HoverScale(
-        enabled: !_loading,
-        child: IconButton(
-          tooltip: 'Refresh users',
-          onPressed: _loading ? null : _load,
-          icon: const Icon(Icons.refresh_rounded),
-        ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _HoverScale(
+            enabled: !_loading,
+            child: IconButton(
+              tooltip: 'Create user',
+              onPressed: _loading ? null : _createUser,
+              icon: const Icon(Icons.person_add_alt_1_rounded),
+            ),
+          ),
+          const SizedBox(width: 8),
+          _HoverScale(
+            enabled: !_loading,
+            child: IconButton(
+              tooltip: 'Refresh users',
+              onPressed: _loading ? null : _load,
+              icon: const Icon(Icons.refresh_rounded),
+            ),
+          ),
+        ],
       ),
       child: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -6176,9 +6348,9 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: _HoverScale(
-                                    enabled: _profiles.isNotEmpty,
+                                    enabled: _hasAnyUsers,
                                     child: OutlinedButton.icon(
-                                      onPressed: _profiles.isNotEmpty
+                                      onPressed: _hasAnyUsers
                                           ? _deleteAllProfiles
                                           : null,
                                       icon: const Icon(
@@ -6860,8 +7032,30 @@ class ProfilePreset {
       versionTag == null ? name : '$name (${versionTag!})';
 }
 
+class _CreateUserResult {
+  const _CreateUserResult({
+    required this.accountId,
+    required this.presetFolder,
+  });
+
+  final String accountId;
+  final String presetFolder;
+}
+
 class ProfileService {
   static const String _profileTemplateBackupDirName = '.defaults';
+  static const String _hostAccountId = 'host';
+  static const Set<String> _profileTemplateFiles = {
+    'profile_campaign.json',
+    'profile_collections.json',
+    'profile_common_core.json',
+    'profile_common_public.json',
+    'profile_creative.json',
+    'profile_metadata.json',
+    'profile_outpost0.json',
+    'profile_profile0.json',
+    'profile_theater0.json',
+  };
 
   static String _basename(String path) {
     final parts = path.split(Platform.pathSeparator);
@@ -6869,6 +7063,76 @@ class ProfileService {
       if (parts[i].trim().isNotEmpty) return parts[i];
     }
     return path;
+  }
+
+  static bool _isHostAccountId(String accountId) {
+    return accountId.trim().toLowerCase() == _hostAccountId;
+  }
+
+  static Future<bool> userExists(String accountId) async {
+    final trimmed = accountId.trim();
+    if (trimmed.isEmpty) return false;
+    final profilesDir = Directory(
+      joinPath([getBackendRoot(), 'static', 'profiles', trimmed]),
+    );
+    if (await profilesDir.exists()) return true;
+    final clientSettingsDir = Directory(
+      joinPath([getBackendRoot(), 'static', 'ClientSettings', trimmed]),
+    );
+    return await clientSettingsDir.exists();
+  }
+
+  static Future<void> createUser(
+    String accountId, {
+    required String presetFolder,
+  }) async {
+    final trimmed = accountId.trim();
+    if (trimmed.isEmpty) {
+      throw Exception('User name is required.');
+    }
+    if (_isHostAccountId(trimmed)) {
+      throw Exception('The name "host" is reserved.');
+    }
+    if (await userExists(trimmed)) {
+      throw Exception('User already exists.');
+    }
+    final presetPath = File(
+      joinPath([
+        getBackendRoot(),
+        'static',
+        'athenaprofiles',
+        'Profile Presets',
+        presetFolder,
+        'profile_athena.json',
+      ]),
+    );
+    if (!await presetPath.exists()) {
+      throw Exception('Preset profile not found.');
+    }
+    final profilesRoot = Directory(
+      joinPath([getBackendRoot(), 'static', 'profiles']),
+    );
+    if (!await profilesRoot.exists()) {
+      throw Exception('Profiles directory not found.');
+    }
+    final profileDir = Directory(joinPath([profilesRoot.path, trimmed]));
+    await profileDir.create(recursive: true);
+    for (final templateName in _profileTemplateFiles) {
+      final templatePath = File(joinPath([profilesRoot.path, templateName]));
+      if (await templatePath.exists()) {
+        await templatePath.copy(joinPath([profileDir.path, templateName]));
+      }
+    }
+    final profilePath = File(joinPath([profileDir.path, 'profile_athena.json']));
+    await presetPath.copy(profilePath.path);
+    try {
+      final client = HttpClient();
+      final request = await client.postUrl(
+        Uri.parse('http://127.0.0.1:3551/atlas/clear-profile-cache'),
+      );
+      await request.close();
+      client.close();
+    } catch (_) {}
   }
 
   static Future<List<ProfileSummary>> listProfiles() async {
@@ -6890,6 +7154,9 @@ class ProfileService {
         if (accountId.trim().isEmpty) continue;
         if (accountId == _profileTemplateBackupDirName ||
             accountId.startsWith('.')) {
+          continue;
+        }
+        if (_isHostAccountId(accountId)) {
           continue;
         }
         final profilePath = File(joinPath([entity.path, 'profile_athena.json']));
@@ -6914,6 +7181,9 @@ class ProfileService {
             accountId.startsWith('.')) {
           continue;
         }
+        if (_isHostAccountId(accountId)) {
+          continue;
+        }
         
         // Only add if not already added from profiles directory
         if (!seenAccountIds.contains(accountId)) {
@@ -6930,6 +7200,44 @@ class ProfileService {
     
     profiles.sort((a, b) => a.accountId.compareTo(b.accountId));
     return profiles;
+  }
+
+  static Future<bool> hasAnyUsers() async {
+    final profilesDir = Directory(
+      joinPath([getBackendRoot(), 'static', 'profiles']),
+    );
+    final clientSettingsRoot = Directory(
+      joinPath([getBackendRoot(), 'static', 'ClientSettings']),
+    );
+
+    if (await profilesDir.exists()) {
+      await for (final entity in profilesDir.list(recursive: false)) {
+        if (entity is! Directory) continue;
+        final accountId = _basename(entity.path);
+        if (accountId.trim().isEmpty) continue;
+        if (accountId == _profileTemplateBackupDirName ||
+            accountId.startsWith('.')) {
+          continue;
+        }
+        return true;
+      }
+    }
+
+    if (await clientSettingsRoot.exists()) {
+      await for (final entity in clientSettingsRoot.list(recursive: false)) {
+        if (entity is! Directory) continue;
+        final accountId = _basename(entity.path);
+        if (accountId.trim().isEmpty) continue;
+        if (accountId.toLowerCase() == 'config' ||
+            accountId == _profileTemplateBackupDirName ||
+            accountId.startsWith('.')) {
+          continue;
+        }
+        return true;
+      }
+    }
+
+    return false;
   }
 
   static Future<List<ProfilePreset>> listPresets() async {
