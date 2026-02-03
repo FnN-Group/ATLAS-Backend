@@ -63,6 +63,8 @@ Copy-Item -Path (Join-Path $releaseDir "*") -Destination $buildRoot -Recurse -Fo
 $backendItems = @(
   "package.json",
   "bun.lockb",
+  "update-notes.md",
+  "update-notes.txt",
   "src",
   "static",
   "public",
