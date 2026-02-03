@@ -1,0 +1,65 @@
+{
+  "contentType": "collection",
+  "contentId": "motd-default-collection",
+  "tcId": "634e8e85-e2fc-4c68-bb10-93604cf6605f",
+  "contentMeta": "{\"ATLAS\":[\"ATLAS-item-1\"]}",
+  "contentItems": [
+    {
+      "contentType": "content-item",
+      "contentId": "ATLAS-item-1",
+      "tcId": "61fb3dd8-f23d-45cc-9058-058ab223ba5c",
+      "contentFields": {
+        "entryType": "Website",
+        "title": "ATLAS",
+        "body": "@cipherfps\nDiscord: https://discord.gg/G9MAF77V7R",
+        "FullScreenTitle": "ATLAS",
+        "FullScreenBody": "@cipherfps\nDiscord: https://discord.gg/G9MAF77V7R",
+        "TeaserTitle": "ATLAS",
+        "tabTitleOverride": "ATLAS",
+        "image": [
+          {
+            "width": 1920,
+            "height": 1080,
+            "url": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/images/ATLAS-Backend-Banner.png"
+          }
+        ],
+        "tileImage": [
+          {
+            "width": 1024,
+            "height": 512,
+            "url": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/images/ATLAS-Backend-Banner-Slim.png"
+          }
+        ],
+        "FullScreenBackground": {
+          "Image": [
+            {
+              "width": 1920,
+              "height": 1080,
+              "url": "https://fortnite-public-service-prod11.ol.epicgames.com/images/motd.png"
+            }
+          ],
+          "_type": "FullScreenBackground"
+        },
+        "TeaserBackground": {
+          "Image": [
+            {
+              "width": 1024,
+              "height": 512,
+              "url": "https://fortnite-public-service-prod11.ol.epicgames.com/images/motd-s.png"
+            }
+          ],
+          "_type": "TeaserBackground"
+        },
+        "VerticalTextLayout": false,
+        "videoAutoplay": false,
+        "videoLoop": false,
+        "videoMute": false,
+        "videoStreamingEnabled": false,
+        "websiteButtonText": "Discord",
+        "websiteURL": "https://discord.gg/G9MAF77V7R"
+      },
+      "contentHash": "ATLAS-contenthash",
+      "contentSchemaName": "MotdWebsiteNewsWithVideo"
+    }
+  ]
+}

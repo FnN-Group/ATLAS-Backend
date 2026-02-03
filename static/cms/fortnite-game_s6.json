@@ -1,0 +1,88 @@
+{
+  "_title": "fortnite-game",
+  "_activeDate": "1970-01-01T00:00:00.000Z",
+  "_locale": "en-US",
+  "emergencynotice": {
+    "news": {
+      "_type": "Battle Royale News",
+      "platform_messages": [],
+      "messages": [
+        {
+          "_type": "CommonUI Simple Message Base",
+          "title": "ATLAS",
+          "body": "@cipherfps\nDiscord: https://discord.gg/G9MAF77V7R",
+          "hidden": false,
+          "spotlight": false,
+          "subgame": "br"
+        }
+      ]
+    },
+    "_title": "emergencynotice",
+    "alwaysShow": true,
+    "_activeDate": "1970-01-01T00:00:00.000Z",
+    "lastModified": "9999-12-31T23:59:59.999Z",
+    "_locale": "en-US"
+  },
+  "battleroyalenews": {
+    "news": {
+      "_type": "Battle Royale News",
+      "messages": [
+        {
+          "_type": "CommonUI Simple Message Base",
+          "title": "ATLAS",
+          "body": "@cipherfps\nDiscord: https://discord.gg/G9MAF77V7R",
+          "image": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/images/ATLAS-Backend-Banner.png",
+          "hidden": false,
+          "spotlight": false
+        }
+      ]
+    },
+    "_title": "battleroyalenews",
+    "_activeDate": "1970-01-01T00:00:00.000Z",
+    "lastModified": "9999-12-31T23:59:59.999Z",
+    "_locale": "en-US"
+  },
+  "savetheworldnews": {
+    "news": {
+      "_type": "Save the World News",
+      "messages": []
+    },
+    "_title": "savetheworldnews",
+    "_activeDate": "1970-01-01T00:00:00.000Z",
+    "lastModified": "9999-12-31T23:59:59.999Z",
+    "_locale": "en-US"
+  },
+  "playlistinformation": {
+    "playlist_info": {
+      "playlists": []
+    },
+    "_title": "playlistinformation",
+    "_activeDate": "1970-01-01T00:00:00.000Z",
+    "lastModified": "9999-12-31T23:59:59.999Z",
+    "_locale": "en-US"
+  },
+  "dynamicbackgrounds": {
+    "backgrounds": {
+      "backgrounds": [
+        {
+          "stage": "season6",
+          "backgroundimage": ""
+        }
+      ]
+    },
+    "_title": "dynamicbackgrounds",
+    "_activeDate": "1970-01-01T00:00:00.000Z",
+    "lastModified": "9999-12-31T23:59:59.999Z",
+    "_locale": "en-US"
+  },
+  "subgameinfo": {
+    "battleroyale": {
+      "enabled": true,
+      "population": "Normal"
+    },
+    "savetheworld": {
+      "enabled": false,
+      "population": "Offline"
+    }
+  }
+}
