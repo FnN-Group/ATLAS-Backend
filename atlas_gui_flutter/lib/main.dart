@@ -2253,8 +2253,6 @@ class ModificationsScreen extends StatefulWidget {
 class _ModificationsScreenState extends State<ModificationsScreen> {
   bool _isLoading = true;
   bool _straightBloom = false;
-  bool _customSniperSpread = false;
-  String _sniperSpreadAmount = '0';
   bool _curveTablesEnabled = true;
   bool _curveLoading = true;
   List<CurveEntry> _curves = [];
@@ -2290,22 +2288,13 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
 
   Future<void> _load() async {
     final bloom = await StraightBloomService.isEnabled();
-    final customSpreadState = await CustomSniperSpreadService.getState();
     final curvesEnabled = await CurveTableService.areGlobalEnabled();
     final curves = await CurveTableService.loadCurves();
     final weapons = await DataTableService.loadWeapons();
     final dataTablesEnabled = await DataTableService.getUIEnabledState();
     if (!mounted) return;
-    var finalBloom = bloom;
-    var finalCustom = customSpreadState.enabled;
-    if (finalBloom && finalCustom) {
-      finalBloom = false;
-      StraightBloomService.setEnabled(false).ignore();
-    }
     setState(() {
-      _straightBloom = finalBloom;
-      _customSniperSpread = finalCustom;
-      _sniperSpreadAmount = customSpreadState.amount;
+      _straightBloom = bloom;
       _curveTablesEnabled = curvesEnabled;
       _curves = curves;
       _weapons = weapons;
@@ -2318,44 +2307,10 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
 
   Future<void> _toggleStraightBloom(bool value) async {
     if (!mounted) return;
-    final wasCustomSpread = _customSniperSpread;
     setState(() {
       _straightBloom = value;
-      if (value) _customSniperSpread = false;
     });
     StraightBloomService.setEnabled(value).ignore();
-    if (value && wasCustomSpread) {
-      CustomSniperSpreadService.setEnabled(false, _sniperSpreadAmount).ignore();
-    }
-  }
-
-  Future<void> _toggleCustomSniperSpread(bool value) async {
-    if (!mounted) return;
-    final wasStraightBloom = _straightBloom;
-    setState(() {
-      _customSniperSpread = value;
-      if (value) _straightBloom = false;
-    });
-    CustomSniperSpreadService.setEnabled(value, _sniperSpreadAmount).ignore();
-    if (value && wasStraightBloom) {
-      StraightBloomService.setEnabled(false).ignore();
-    }
-  }
-
-  Future<void> _updateSniperSpreadAmount(String value) async {
-    final amount = value.trim();
-    if (amount.isEmpty) return;
-    final isValid = RegExp(r'^\d+(?:\.\d+)?$|^\.\d+$').hasMatch(amount);
-    if (!isValid) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid numeric spread value.')),
-      );
-      return;
-    }
-    if (!mounted) return;
-    setState(() => _sniperSpreadAmount = amount);
-    CustomSniperSpreadService.setEnabled(_customSniperSpread, amount).ignore();
   }
 
   Future<void> _toggleCurveTables() async {
@@ -2595,48 +2550,18 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
           : ListView(
               children: [
                 const _SectionTitle(title: 'Straight Bloom'),
-                if (!_customSniperSpread)
-                  SwitchListTile(
-                    value: _straightBloom,
-                    onChanged: _toggleStraightBloom,
-                    title: Text(
-                      _straightBloom
-                          ? 'Straight Bloom Enabled'
-                          : 'Straight Bloom Disabled',
-                    ),
-                    subtitle: const Text(
-                      'Toggles no-spread for all snipers.',
-                    ),
+                SwitchListTile(
+                  value: _straightBloom,
+                  onChanged: _toggleStraightBloom,
+                  title: Text(
+                    _straightBloom
+                        ? 'Straight Bloom Enabled'
+                        : 'Straight Bloom Disabled',
                   ),
-                if (!_straightBloom) ...[
-                  const SizedBox(height: 12),
-                  SwitchListTile(
-                    value: _customSniperSpread,
-                    onChanged: _toggleCustomSniperSpread,
-                    title: Text(
-                      _customSniperSpread
-                          ? 'Custom Sniper Spread Enabled'
-                          : 'Custom Sniper Spread Disabled',
-                    ),
-                    subtitle: _customSniperSpread
-                        ? Text('Current value: $_sniperSpreadAmount')
-                        : const Text('Set a custom spread amount for snipers.'),
+                  subtitle: const Text(
+                    'Toggles no-spread for all snipers.',
                   ),
-                  if (_customSniperSpread) ...[
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                      child: OutlinedButton.icon(
-                        onPressed: () async {
-                          final promptedValue = await _promptValue(context, 'Sniper Spread');
-                          if (promptedValue == null) return;
-                          await _updateSniperSpreadAmount(promptedValue);
-                        },
-                        icon: const Icon(Icons.edit),
-                        label: const Text('Edit Spread Value'),
-                      ),
-                    ),
-                  ],
-                ],
+                ),
                 const SizedBox(height: 20),
                 const _SectionTitle(title: 'CurveTables'),
                 SwitchListTile(
@@ -2650,8 +2575,6 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                   subtitle: const Text('Toggle all CurveTable entries on/off'),
                 ),
                 const SizedBox(height: 8),
-                if (!_curveTablesEnabled)
-                  const Text('CurveTables are disabled. Enable them to edit.'),
                 if (_curveTablesEnabled) ...[
                   const SizedBox(height: 12),
                   _curveLoading
@@ -7109,228 +7032,6 @@ class IniService {
   }
 }
 
-class CustomSniperSpreadService {
-  static const String _commentLabel = '# Custom Sniper Spread';
-
-  static Future<({bool enabled, String amount})> getState() async {
-    final iniFile = File(BackendPaths.defaultGameIni);
-    final sniperFile = File(BackendPaths.sniperJson);
-    if (!await iniFile.exists() || !await sniperFile.exists()) {
-      return (enabled: false, amount: '0');
-    }
-    
-    final content = await iniFile.readAsString();
-    if (!content.contains(_commentLabel)) {
-      return (enabled: false, amount: '0');
-    }
-    
-    // Check if any custom spread lines exist by looking for a DataTable line
-    // and extracting the spread value
-    final regex = RegExp(
-      r'\+DataTable=/Game/Athena/Items/Weapons/AthenaRangedWeapons;RowUpdate;[^;]+;(?:Spread|AthenaJumpingFallingSpreadMultiplier);([\d.]+)',
-    );
-    final match = regex.firstMatch(content);
-    if (match == null) {
-      return (enabled: false, amount: '0');
-    }
-    final amount = match.group(1) ?? '0';
-    
-    // Verify that we have custom spread lines (not straight bloom which is 0)
-    final lines = await _getCustomSpreadLines(amount);
-    final hasCustomLines = lines.any((line) => content.contains(line));
-    
-    return (enabled: hasCustomLines, amount: amount);
-  }
-
-  static Future<List<String>> _getCustomSpreadLines(String amount) async {
-    final sniperFile = File(BackendPaths.sniperJson);
-    if (!await sniperFile.exists()) return [];
-    
-    final lines = (jsonDecode(await sniperFile.readAsString())
-            as Map<String, dynamic>)['lines'] as List<dynamic>;
-    
-    // Replace the ;0 at the end of each line with ;{amount}
-    return lines.cast<String>().map((line) {
-      // Each line ends with ;0, replace it with ;{amount}
-      if (line.endsWith(';0')) {
-        return '${line.substring(0, line.length - 2)};$amount';
-      }
-      return line;
-    }).toList();
-  }
-
-  static Future<void> setEnabled(bool enabled, String amount) async {
-    final iniPath = BackendPaths.defaultGameIni;
-    final sniperPath = BackendPaths.sniperJson;
-    
-    final iniFile = File(iniPath);
-    final sniperFile = File(sniperPath);
-    if (!await iniFile.exists() || !await sniperFile.exists()) return;
-    
-    await compute(_processSpreadInBackground, {
-      'iniPath': iniPath,
-      'sniperPath': sniperPath,
-      'enabled': enabled,
-      'amount': amount,
-    });
-  }
-  
-  static Future<void> _processSpreadInBackground(Map<String, dynamic> params) async {
-    final iniPath = params['iniPath'] as String;
-    final sniperPath = params['sniperPath'] as String;
-    final enabled = params['enabled'] as bool;
-    final amount = params['amount'] as String;
-    
-    final iniFile = File(iniPath);
-    final sniperFile = File(sniperPath);
-    
-    var content = await iniFile.readAsString();
-    final sniperData = jsonDecode(await sniperFile.readAsString()) as Map<String, dynamic>;
-    final sniperLines = (sniperData['lines'] as List<dynamic>).cast<String>();
-    
-    // Remove any existing custom sniper spread lines
-    for (final baseLine in sniperLines) {
-      final linePrefix = baseLine.substring(0, baseLine.lastIndexOf(';') + 1);
-      final regex = RegExp('${RegExp.escape(linePrefix)}[\\d.]+\n?', multiLine: true);
-      content = content.replaceAll(regex, '');
-    }
-
-    // Remove orphan numeric lines inside Custom Sniper Spread block
-    if (content.contains(_commentLabel)) {
-      final start = content.indexOf(_commentLabel);
-      final nextComment = content.indexOf('\n#', start + 1);
-      final nextSection = content.indexOf('\n[', start + 1);
-      int end = content.length;
-      if (nextComment != -1 && (nextSection == -1 || nextComment < nextSection)) {
-        end = nextComment;
-      } else if (nextSection != -1) {
-        end = nextSection;
-      }
-      final block = content.substring(start, end);
-      final cleanedBlock = block.replaceAll(
-        RegExp(r'^\s*[\d.]+\s*\$', multiLine: true),
-        '',
-      );
-      content = content.substring(0, start) + cleanedBlock + content.substring(end);
-    }
-    
-    if (enabled) {
-      final ensured = _ensureCustomSection(content);
-      content = ensured.content;
-      final insertPoint = ensured.insertPoint;
-      
-      final customLines = sniperLines.map((line) {
-        if (line.endsWith(';0')) {
-          return '${line.substring(0, line.length - 2)};$amount';
-        }
-        return line;
-      }).toList();
-      
-      content = '${content.substring(0, insertPoint)}${customLines.join('\n')}\n${content.substring(insertPoint)}';
-    } else {
-      // Remove all custom sniper spread lines while keeping the comment
-      for (final baseLine in sniperLines) {
-        final linePrefix = baseLine.substring(0, baseLine.lastIndexOf(';') + 1);
-        final regex = RegExp('${RegExp.escape(linePrefix)}[\\d.]+\n?', multiLine: true);
-        content = content.replaceAll(regex, '');
-      }
-    }
-
-    // Final pass: remove any orphan numeric-only lines under Custom Sniper Spread
-    if (content.contains(_commentLabel)) {
-      final start = content.indexOf(_commentLabel);
-      final nextComment = content.indexOf('\n#', start + 1);
-      final nextSection = content.indexOf('\n[', start + 1);
-      int end = content.length;
-      if (nextComment != -1 && (nextSection == -1 || nextComment < nextSection)) {
-        end = nextComment;
-      } else if (nextSection != -1) {
-        end = nextSection;
-      }
-      final block = content.substring(start, end);
-      final cleanedBlock = block.replaceAll(
-        RegExp(r'^\s*[+-]?(?:\d+\.?\d*|\.\d+)\s*$', multiLine: true),
-        '',
-      );
-      content = content.substring(0, start) + cleanedBlock + content.substring(end);
-    }
-    
-    content = content.replaceAll(RegExp('\n\n+'), '\n');
-    await iniFile.writeAsString(content);
-  }
-
-  static Future<({bool enabled, String amount})> importFromIni(
-    String importPath,
-  ) async {
-    final source = File(importPath);
-    final sniperFile = File(BackendPaths.sniperJson);
-    if (!await source.exists() || !await sniperFile.exists()) {
-      return (enabled: false, amount: '0');
-    }
-
-    final importContent = await source.readAsString();
-    final sniperData =
-        jsonDecode(await sniperFile.readAsString()) as Map<String, dynamic>;
-    final sniperLines = (sniperData['lines'] as List<dynamic>).cast<String>();
-
-    String? foundAmount;
-    var foundAll = true;
-    for (final baseLine in sniperLines) {
-      final linePrefix = baseLine.substring(0, baseLine.lastIndexOf(';') + 1);
-      final regex = RegExp(
-        '^' + RegExp.escape(linePrefix) + r'([\d.]+)\r?$',
-        multiLine: true,
-      );
-      final match = regex.firstMatch(importContent);
-      if (match == null) {
-        foundAll = false;
-        break;
-      }
-      foundAmount ??= match.group(1);
-    }
-
-    if (!foundAll || foundAmount == null) {
-      await setEnabled(false, '0');
-      return (enabled: false, amount: '0');
-    }
-
-    await setEnabled(true, foundAmount);
-    return (enabled: true, amount: foundAmount);
-  }
-
-  static ({String content, int insertPoint}) _ensureCustomSection(
-    String content,
-  ) {
-    var updated = content;
-    final commentIndex = updated.indexOf(_commentLabel);
-    if (commentIndex != -1) {
-      final newlineAfterComment = updated.indexOf('\n', commentIndex);
-      final insertPoint = newlineAfterComment == -1
-          ? updated.length
-          : newlineAfterComment + 1;
-      return (content: updated, insertPoint: insertPoint);
-    }
-
-    final straightBloomIndex =
-        updated.indexOf(BackendPaths.straightBloomComment);
-    if (straightBloomIndex != -1) {
-      return (content: updated, insertPoint: straightBloomIndex);
-    }
-
-    final assetIndex = updated.indexOf('[AssetHotfix]');
-    if (assetIndex != -1) {
-      final newlineAfter = updated.indexOf('\n', assetIndex);
-      final insertPoint = newlineAfter == -1
-          ? updated.length
-          : newlineAfter + 1;
-      return (content: updated, insertPoint: insertPoint);
-    }
-
-    updated = '${updated.trimRight()}\n[AssetHotfix]\n';
-    return (content: updated, insertPoint: updated.length);
-  }
-}
-
 class StraightBloomService {
   static Future<bool> isEnabled() async {
     final iniFile = File(BackendPaths.defaultGameIni);
@@ -9429,28 +9130,6 @@ class DataService {
     if (await iniFile.exists()) {
       if (await sniperFile.exists()) {
         await StraightBloomService.setEnabled(false);
-        await CustomSniperSpreadService.setEnabled(false, '0');
-      }
-
-      var iniContent = await iniFile.readAsString();
-      if (iniContent.contains('# Custom Sniper Spread')) {
-        final start = iniContent.indexOf('# Custom Sniper Spread');
-        final nextComment = iniContent.indexOf('\n#', start + 1);
-        final nextSection = iniContent.indexOf('\n[', start + 1);
-        var end = iniContent.length;
-        if (nextComment != -1 && (nextSection == -1 || nextComment < nextSection)) {
-          end = nextComment;
-        } else if (nextSection != -1) {
-          end = nextSection;
-        }
-        final block = iniContent.substring(start, end);
-        final cleanedBlock = block.replaceAll(
-          RegExp(r'^\s*[+-]?(?:\d+\.?\d*|\.\d+)\s*$', multiLine: true),
-          '',
-        );
-        iniContent = iniContent.substring(0, start) + cleanedBlock + iniContent.substring(end);
-        iniContent = iniContent.replaceAll(RegExp('\n\n+'), '\n');
-        await iniFile.writeAsString(iniContent);
       }
     }
 

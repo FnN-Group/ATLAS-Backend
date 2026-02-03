@@ -9,7 +9,6 @@ This backend has features such as the following:
 
 ### 1. Straight Bloom
 - Toggle Straight Bloom (Straight Sniper Bullets)
-- Toggle Custom Sniper Spread 
 
 ### 2. CurveTables
 - CurveTable Toggle
