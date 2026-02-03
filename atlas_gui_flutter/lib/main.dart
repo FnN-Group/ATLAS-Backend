@@ -13,6 +13,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
 import 'package:archive/archive_io.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:markdown/markdown.dart' as md;
 
 final ValueNotifier<ThemeMode> appThemeMode = ValueNotifier(ThemeMode.dark);
 final ValueNotifier<String> appBackgroundPath = ValueNotifier('');
@@ -351,9 +353,10 @@ class _AtlasHomePageState extends State<AtlasHomePage>
   late final BackendController _controller;
   bool _exitInProgress = false;
   bool _checkingUpdate = false;
-  String _backendVersionLabel = '1.0.0';
+  bool _showingShareDialog = false;
   bool _loadingReleaseHistory = false;
   List<ReleaseInfo> _releaseHistory = const [];
+  String _backendVersionLabel = '1.0.0';
 
   @override
   void initState() {
@@ -362,9 +365,10 @@ class _AtlasHomePageState extends State<AtlasHomePage>
     _controller = BackendController()..startPolling();
     unawaited(_initStartup());
     unawaited(_loadBackendVersion());
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _maybeCheckForUpdatesOnLaunch(),
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _maybeCheckForUpdatesOnLaunch();
+      await _maybeShowUpdateNotesOnLaunch();
+    });
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => UpdateBackupService.restoreIfNeeded(context),
     );
@@ -387,19 +391,25 @@ class _AtlasHomePageState extends State<AtlasHomePage>
   }
 
   Future<void> _loadBackendVersion() async {
+    final version = await _readBackendVersion();
+    if (version.isEmpty) return;
+    if (!mounted) return;
+    setState(() {
+      _backendVersionLabel = version;
+    });
+  }
+
+  Future<String> _readBackendVersion() async {
     final packageFile = File(joinPath([getBackendRoot(), 'package.json']));
-    if (!await packageFile.exists()) return;
+    if (!await packageFile.exists()) return '';
     try {
       final json =
           jsonDecode(await packageFile.readAsString()) as Map<String, dynamic>;
       final version = json['version']?.toString().trim();
-      if (version == null || version.isEmpty) return;
-      if (!mounted) return;
-      setState(() {
-        _backendVersionLabel = version;
-      });
+      if (version == null || version.isEmpty) return '';
+      return version;
     } catch (_) {
-      // Keep fallback label if parsing fails.
+      return '';
     }
   }
 
@@ -420,207 +430,344 @@ class _AtlasHomePageState extends State<AtlasHomePage>
     await _showUpdateDialog(info);
   }
 
-  Future<void> _showShareDialog() async {
-    String vpnIp = 'Detecting...';
-    bool isLoading = true;
-    bool hasError = false;
-
-    try {
-      vpnIp = await VpnService.getVpnIpAddress();
-      hasError = vpnIp.startsWith('Error:');
-      isLoading = false;
-    } catch (e) {
-      vpnIp = 'Error: $e';
-      hasError = true;
-      isLoading = false;
+  Future<void> _maybeShowUpdateNotesOnLaunch() async {
+    final currentVersion = await _readBackendVersion();
+    if (currentVersion.isEmpty) return;
+    final config = await ConfigService.load();
+    final normalizedCurrent = _normalizeVersion(currentVersion);
+    final normalizedLast = _normalizeVersion(
+      config.lastShownUpdateNotesVersion,
+    );
+    if (normalizedCurrent.isEmpty || normalizedCurrent == normalizedLast) {
+      return;
     }
 
+    final notesPayload = await UpdateNotesService.loadNotes();
+    if (notesPayload == null) return;
     if (!mounted) return;
-
-    final widget = StatefulBuilder(
-      builder: (context, setState) {
-        Widget buildStep(int index, List<InlineSpan> spans) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 22,
-                  height: 22,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.white24),
-                  ),
-                  child: Text(
-                    '$index',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: RichText(
-                    text: TextSpan(
-                      style: const TextStyle(fontSize: 12.8, color: Colors.white70),
-                      children: spans,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-
-        return AlertDialog(
-        title: const Text('Share Connection Details'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Radmin VPN IP for Reboot Launcher:'),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white10,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white24),
-              ),
-              child: SelectableText(
-                isLoading ? 'Detecting...' : vpnIp,
-                style: const TextStyle(
-                  fontFamily: 'Courier',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            if (hasError) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Make sure Radmin VPN is installed and running',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.redAccent.withOpacity(0.8),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextButton.icon(
-                onPressed: () async {
-                  final url = Uri.parse('https://www.radmin-vpn.com/');
-                  final opened = await launchUrl(
-                    url,
-                    mode: LaunchMode.externalApplication,
-                  );
-                  if (!opened && mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Unable to open download link.')),
-                    );
-                  }
-                },
-                icon: const Icon(Icons.open_in_new),
-                label: const Text('Download Radmin VPN'),
-              ),
-            ],
-            if (!isLoading && !hasError) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white10,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.white12),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.school_rounded, size: 18, color: Colors.white70),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Quick setup in Reboot Launcher for others',
-                          style: TextStyle(
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white.withOpacity(0.95),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    buildStep(1, const [
-                      TextSpan(text: 'Open '),
-                      TextSpan(text: 'Reboot Launcher', style: TextStyle(fontWeight: FontWeight.w700)),
-                      TextSpan(text: '.'),
-                    ]),
-                    buildStep(2, const [
-                      TextSpan(text: 'Go to '),
-                      TextSpan(text: 'Backend', style: TextStyle(fontWeight: FontWeight.w700)),
-                      TextSpan(text: ' and switch '),
-                      TextSpan(text: 'Embedded', style: TextStyle(fontWeight: FontWeight.w700)),
-                      TextSpan(text: ' to '),
-                      TextSpan(text: 'Remote', style: TextStyle(fontWeight: FontWeight.w700)),
-                      TextSpan(text: '.'),
-                    ]),
-                    buildStep(3, const [
-                      TextSpan(text: 'Paste the Host IP into the '),
-                      TextSpan(text: 'Host', style: TextStyle(fontWeight: FontWeight.w700)),
-                      TextSpan(text: ' field.'),
-                    ]),
-                    buildStep(4, const [
-                      TextSpan(text: 'Click '),
-                      TextSpan(text: 'Start Backend', style: TextStyle(fontWeight: FontWeight.w700)),
-                      TextSpan(text: '.'),
-                    ]),
-                    buildStep(5, const [
-                      TextSpan(text: 'Confirm you see '),
-                      TextSpan(
-                        text: '“The backend was started successfully”',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      TextSpan(text: ' then launch your game!'),
-                    ]),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-          if (!isLoading && !hasError)
-            ElevatedButton.icon(
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: vpnIp));
-                Navigator.pop(context);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('VPN IP copied to clipboard!')),
-                  );
-                }
-              },
-              icon: const Icon(Icons.copy),
-              label: const Text('Copy'),
-            ),
-        ],
-      );
-      },
+    await _showUpdateNotesDialog(
+      normalizedCurrent,
+      notesPayload.notes,
+      notesPayload.style,
     );
+    if (!mounted) return;
+    await ConfigService.save(
+      config.copyWith(lastShownUpdateNotesVersion: normalizedCurrent),
+    );
+  }
 
+  Future<void> _showUpdateNotesDialog(
+    String version,
+    String notes,
+    UpdateNotesStyle style,
+  ) async {
     await _showBlurDialog<void>(
       context: context,
-      barrierDismissible: !isLoading,
-      builder: (_) => widget,
+      builder: (dialogContext) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.auto_awesome_rounded),
+            const SizedBox(width: 10),
+            const Text('What\'s New'),
+            const Spacer(),
+            _VersionTag(
+              label: _formatVersion(version),
+              color: Colors.greenAccent,
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 520,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 360),
+            child: SingleChildScrollView(
+              child: MarkdownBody(
+                data: notes,
+                styleSheet: MarkdownStyleSheet.fromTheme(
+                  Theme.of(dialogContext),
+                ).copyWith(
+                  p: Theme.of(dialogContext).textTheme.bodyMedium,
+                ),
+                blockSyntaxes: _roundedHrBlockSyntaxes,
+                inlineSyntaxes: _roundedHrInlineSyntaxes,
+                builders: {
+                  'rounded-hr': _MarkdownHrBuilder(
+                    color: _onSurface(
+                      dialogContext,
+                      style.hrOpacity.clamp(0.0, 1.0),
+                    ),
+                    thickness: style.hrThickness <= 0
+                        ? UpdateNotesService._defaultStyle.hrThickness
+                        : style.hrThickness,
+                    verticalPadding: 10,
+                  ),
+                },
+                onTapLink: (text, href, title) async {
+                  if (href == null) return;
+                  final url = Uri.tryParse(href);
+                  if (url == null) return;
+                  await launchUrl(url, mode: LaunchMode.externalApplication);
+                },
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          _HoverScale(
+            child: TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Close'),
+            ),
+          ),
+        ],
+      ),
     );
+  }
+
+  Future<void> _showShareDialog() async {
+    if (_showingShareDialog) return;
+    _showingShareDialog = true;
+    try {
+      String vpnIp = 'Detecting...';
+      bool isLoading = true;
+      bool hasError = false;
+
+      try {
+        vpnIp = await VpnService.getVpnIpAddress();
+        hasError = vpnIp.startsWith('Error:');
+        isLoading = false;
+      } catch (e) {
+        vpnIp = 'Error: $e';
+        hasError = true;
+        isLoading = false;
+      }
+
+      if (!mounted) return;
+
+      final widget = StatefulBuilder(
+        builder: (context, setState) {
+          final colorScheme = Theme.of(context).colorScheme;
+          final onSurface = colorScheme.onSurface;
+          final onSurfaceMuted = onSurface.withOpacity(0.7);
+          final cardFill = colorScheme.surfaceVariant.withOpacity(0.6);
+          final cardBorder = onSurface.withOpacity(0.18);
+
+          Widget buildStep(int index, List<InlineSpan> spans) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 22,
+                    height: 22,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: onSurface.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: onSurface.withOpacity(0.2)),
+                    ),
+                    child: Text(
+                      '$index',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: onSurface,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: RichText(
+                      text: TextSpan(
+                        style: TextStyle(
+                          fontSize: 12.8,
+                          color: onSurfaceMuted,
+                        ),
+                        children: spans,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return AlertDialog(
+            title: const Text('Share Connection Details'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Radmin VPN IP for Reboot Launcher:'),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: cardFill,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: cardBorder),
+                  ),
+                  child: SelectableText(
+                    isLoading ? 'Detecting...' : vpnIp,
+                    style: TextStyle(
+                      fontFamily: 'Courier',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: onSurface,
+                    ),
+                  ),
+                ),
+                if (hasError) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Make sure Radmin VPN is installed and running',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.redAccent.withOpacity(0.8),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: () async {
+                      final url = Uri.parse('https://www.radmin-vpn.com/');
+                      final opened = await launchUrl(
+                        url,
+                        mode: LaunchMode.externalApplication,
+                      );
+                      if (!opened && mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Unable to open download link.'),
+                          ),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.open_in_new),
+                    label: const Text('Download Radmin VPN'),
+                  ),
+                ],
+                if (!isLoading && !hasError) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: cardFill,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: cardBorder),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.school_rounded,
+                              size: 18,
+                              color: onSurfaceMuted,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Quick setup in Reboot Launcher for others',
+                              style: TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w700,
+                                color: onSurface.withOpacity(0.92),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        buildStep(1, const [
+                          TextSpan(text: 'Open '),
+                          TextSpan(
+                            text: 'Reboot Launcher',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          TextSpan(text: '.'),
+                        ]),
+                        buildStep(2, const [
+                          TextSpan(text: 'Go to '),
+                          TextSpan(
+                            text: 'Backend',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          TextSpan(text: ' and switch '),
+                          TextSpan(
+                            text: 'Embedded',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          TextSpan(text: ' to '),
+                          TextSpan(
+                            text: 'Remote',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          TextSpan(text: '.'),
+                        ]),
+                        buildStep(3, const [
+                          TextSpan(text: 'Paste the Host IP into the '),
+                          TextSpan(
+                            text: 'Host',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          TextSpan(text: ' field.'),
+                        ]),
+                        buildStep(4, const [
+                          TextSpan(text: 'Click '),
+                          TextSpan(
+                            text: 'Start Backend',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          TextSpan(text: '.'),
+                        ]),
+                        buildStep(5, const [
+                          TextSpan(text: 'Confirm you see '),
+                          TextSpan(
+                            text: '“The backend was started successfully”',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          TextSpan(text: ' then launch your game!'),
+                        ]),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+              if (!isLoading && !hasError)
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: vpnIp));
+                    Navigator.pop(context);
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('VPN IP copied to clipboard!'),
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.copy),
+                  label: const Text('Copy'),
+                ),
+            ],
+          );
+        },
+      );
+
+      await _showBlurDialog<void>(
+        context: context,
+        barrierDismissible: !isLoading,
+        builder: (_) => widget,
+      );
+    } finally {
+      _showingShareDialog = false;
+    }
   }
 
   Future<void> _showVersionHistoryMenu(BuildContext anchorContext) async {
@@ -681,7 +828,9 @@ class _AtlasHomePageState extends State<AtlasHomePage>
       clipBehavior: Clip.antiAlias,
       items: [
         PopupMenuItem<ReleaseInfo>(
-          enabled: false,
+          onTap: () {
+            unawaited(_showCurrentVersionNotes(anchorContext));
+          },
           child: Text(
             'Current: ${_formatVersion(currentVersion)}',
             style: TextStyle(color: _onSurface(context, 0.7)),
@@ -728,6 +877,31 @@ class _AtlasHomePageState extends State<AtlasHomePage>
       info,
       title: 'Downgrade available',
       actionLabel: 'Downgrade',
+    );
+  }
+
+  Future<void> _showCurrentVersionNotes(BuildContext _) async {
+    final currentVersion = await _readBackendVersion();
+    if (currentVersion.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Current version unavailable.')),
+      );
+      return;
+    }
+
+    final notesPayload = await UpdateNotesService.loadNotes();
+    if (!mounted) return;
+    if (notesPayload == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No update notes found.')),
+      );
+      return;
+    }
+
+    await _showUpdateNotesDialog(
+      _normalizeVersion(currentVersion),
+      notesPayload.notes,
+      notesPayload.style,
     );
   }
 
@@ -1521,7 +1695,7 @@ class _SidePanel extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              'Welcome to ATLAS Backend! - @cipherfps',
+              'Welcome to ATLAS Backend!',
               style: Theme.of(
                 context,
               ).textTheme.bodySmall?.copyWith(color: _onSurface(context, 0.6)),
@@ -4485,6 +4659,7 @@ class _GameConfigurationScreenState extends State<GameConfigurationScreen> {
       backgroundImagePath: existing.backgroundImagePath,
       backgroundBlur: existing.backgroundBlur,
       dialogBlurEnabled: existing.dialogBlurEnabled,
+      lastShownUpdateNotesVersion: existing.lastShownUpdateNotesVersion,
     );
     await ConfigService.save(config);
     if (!mounted) return;
@@ -6989,12 +7164,18 @@ class BackendPaths {
       joinPath([getBackendRoot(), 'responses', 'curves.json']);
   static String get dataTablesJson =>
       joinPath([getBackendRoot(), 'responses', 'datatables.json']);
+  static String get dataTablesUiState =>
+      joinPath([getBackendRoot(), 'responses', 'datatables-ui.json']);
   static String get modificationsBackup =>
       joinPath([getBackendRoot(), 'responses', 'modifications-backup.json']);
   static String get sniperJson =>
       joinPath([getBackendRoot(), 'responses', 'sniper.json']);
   static String get configIni =>
       joinPath([getBackendRoot(), 'src', 'config', 'config.ini']);
+  static String get updateNotesMarkdown =>
+      joinPath([getBackendRoot(), 'update-notes.md']);
+  static String get updateNotesText =>
+      joinPath([getBackendRoot(), 'update-notes.txt']);
 }
 
 class IniService {
@@ -8161,29 +8342,51 @@ class DataTableService {
   }
 
   static Future<bool> getUIEnabledState() async {
+    final stateFile = File(BackendPaths.dataTablesUiState);
+    if (await stateFile.exists()) {
+      try {
+        final state =
+            jsonDecode(await stateFile.readAsString()) as Map<String, dynamic>;
+        return state['enabled'] == true;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    // Legacy fallback: migrate from modifications-backup.json if present.
     final backupFile = File(BackendPaths.modificationsBackup);
     if (!await backupFile.exists()) return false;
     try {
-      final backup = jsonDecode(await backupFile.readAsString()) as Map<String, dynamic>;
-      return backup['dataTablesUIEnabled'] == true;
+      final backup =
+          jsonDecode(await backupFile.readAsString()) as Map<String, dynamic>;
+      final enabled = backup['dataTablesUIEnabled'] == true;
+      try {
+        await _writeUiState(enabled);
+      } catch (_) {}
+      if (!backup.containsKey('curveTableLines')) {
+        final extraKeys = backup.keys
+            .where((key) => key != 'dataTablesUIEnabled')
+            .toList();
+        if (extraKeys.isEmpty) {
+          try {
+            await backupFile.delete();
+          } catch (_) {}
+        }
+      }
+      return enabled;
     } catch (_) {
       return false;
     }
   }
 
   static Future<void> setUIEnabledState(bool enabled) async {
-    final backupFile = File(BackendPaths.modificationsBackup);
-    Map<String, dynamic> backup = {};
-    if (await backupFile.exists()) {
-      try {
-        backup = jsonDecode(await backupFile.readAsString()) as Map<String, dynamic>;
-      } catch (_) {
-        backup = {};
-      }
-    }
-    backup['dataTablesUIEnabled'] = enabled;
-    await backupFile.parent.create(recursive: true);
-    await backupFile.writeAsString(jsonEncode(backup));
+    await _writeUiState(enabled);
+  }
+
+  static Future<void> _writeUiState(bool enabled) async {
+    final stateFile = File(BackendPaths.dataTablesUiState);
+    await stateFile.parent.create(recursive: true);
+    await stateFile.writeAsString(jsonEncode({'enabled': enabled}));
   }
 
   static Future<DataTableSettings> getWeaponSettings(DataTableWeapon weapon, {String? variantWeaponId}) async {
@@ -8346,6 +8549,7 @@ class ConfigSettings {
     required this.backgroundImagePath,
     required this.backgroundBlur,
     required this.dialogBlurEnabled,
+    required this.lastShownUpdateNotesVersion,
   });
 
   final int rufusStage;
@@ -8358,6 +8562,7 @@ class ConfigSettings {
   final String backgroundImagePath;
   final double backgroundBlur;
   final bool dialogBlurEnabled;
+  final String lastShownUpdateNotesVersion;
 
   ConfigSettings copyWith({
     int? rufusStage,
@@ -8370,6 +8575,7 @@ class ConfigSettings {
     String? backgroundImagePath,
     double? backgroundBlur,
     bool? dialogBlurEnabled,
+    String? lastShownUpdateNotesVersion,
   }) {
     return ConfigSettings(
       rufusStage: rufusStage ?? this.rufusStage,
@@ -8383,6 +8589,8 @@ class ConfigSettings {
       backgroundImagePath: backgroundImagePath ?? this.backgroundImagePath,
       backgroundBlur: backgroundBlur ?? this.backgroundBlur,
       dialogBlurEnabled: dialogBlurEnabled ?? this.dialogBlurEnabled,
+      lastShownUpdateNotesVersion:
+          lastShownUpdateNotesVersion ?? this.lastShownUpdateNotesVersion,
     );
   }
 }
@@ -8404,6 +8612,7 @@ class ConfigService {
         backgroundImagePath: '',
         backgroundBlur: 18,
         dialogBlurEnabled: true,
+        lastShownUpdateNotesVersion: '',
       );
     }
     return ConfigSettings(
@@ -8420,6 +8629,7 @@ class ConfigService {
       backgroundBlur: double.tryParse(map['BackgroundBlur'] ?? '') ?? 18,
       dialogBlurEnabled:
           (map['DialogBlurEnabled'] ?? 'true').toLowerCase() == 'true',
+      lastShownUpdateNotesVersion: map['LastShownUpdateNotesVersion'] ?? '',
     );
   }
 
@@ -8436,7 +8646,10 @@ class ConfigService {
       ..writeln('UseDarkMode=${settings.useDarkMode}')
       ..writeln('BackgroundImagePath=${settings.backgroundImagePath}')
       ..writeln('BackgroundBlur=${settings.backgroundBlur}')
-      ..writeln('DialogBlurEnabled=${settings.dialogBlurEnabled}');
+      ..writeln('DialogBlurEnabled=${settings.dialogBlurEnabled}')
+      ..writeln(
+        'LastShownUpdateNotesVersion=${settings.lastShownUpdateNotesVersion}',
+      );
     final backendFile = File(BackendPaths.configIni);
     try {
       await backendFile.writeAsString(buffer.toString());
@@ -8787,6 +9000,7 @@ class UpdateService {
     if (normalized.startsWith('node_modules/')) return true;
     if (normalized.startsWith('exports/')) return true;
     if (normalized.startsWith('responses/curves.json')) return true;
+    if (normalized.startsWith('responses/datatables-ui.json')) return true;
     if (normalized.startsWith('responses/modifications-backup.json')) {
       return true;
     }
@@ -8803,6 +9017,150 @@ class UpdateService {
       return !rest.startsWith('config/');
     }
     return false;
+  }
+}
+
+class UpdateNotesService {
+  static const UpdateNotesStyle _defaultStyle = UpdateNotesStyle(
+    hrThickness: 0.6,
+    hrOpacity: 0.18,
+  );
+
+  static Future<UpdateNotesPayload?> loadNotes() async {
+    final target = await _findNotesFile();
+    if (target == null) return null;
+    final content = await target.readAsString();
+    final parsed = _extractStyleAndContent(content);
+    if (parsed.notes.trim().isEmpty) return null;
+    return parsed;
+  }
+
+  static Future<File?> _findNotesFile() async {
+    final candidates = <String>[
+      BackendPaths.updateNotesMarkdown,
+      BackendPaths.updateNotesText,
+      joinPath([getInstallationRoot(), 'update-notes.md']),
+      joinPath([getInstallationRoot(), 'update-notes.txt']),
+      joinPath([Directory.current.path, 'update-notes.md']),
+      joinPath([Directory.current.path, 'update-notes.txt']),
+    ];
+
+    for (final path in candidates) {
+      final file = File(path);
+      if (await file.exists()) return file;
+    }
+    return null;
+  }
+
+  static UpdateNotesPayload _extractStyleAndContent(String content) {
+    final regex = RegExp(
+      r'<!--\s*hr:\s*thickness\s*=\s*([0-9]*\.?[0-9]+)\s+opacity\s*=\s*([0-9]*\.?[0-9]+)\s*-->',
+      caseSensitive: false,
+    );
+    final match = regex.firstMatch(content);
+    var style = _defaultStyle;
+    var notes = content;
+    if (match != null) {
+      final thickness = double.tryParse(match.group(1) ?? '');
+      final opacity = double.tryParse(match.group(2) ?? '');
+      if (thickness != null || opacity != null) {
+        style = style.copyWith(
+          hrThickness: thickness,
+          hrOpacity: opacity,
+        );
+      }
+      notes = content.replaceFirst(match.group(0) ?? '', '').trim();
+    }
+    return UpdateNotesPayload(notes: notes, style: style);
+  }
+}
+
+class UpdateNotesPayload {
+  const UpdateNotesPayload({
+    required this.notes,
+    required this.style,
+  });
+
+  final String notes;
+  final UpdateNotesStyle style;
+}
+
+class UpdateNotesStyle {
+  const UpdateNotesStyle({
+    required this.hrThickness,
+    required this.hrOpacity,
+  });
+
+  final double hrThickness;
+  final double hrOpacity;
+
+  UpdateNotesStyle copyWith({
+    double? hrThickness,
+    double? hrOpacity,
+  }) {
+    return UpdateNotesStyle(
+      hrThickness: hrThickness ?? this.hrThickness,
+      hrOpacity: hrOpacity ?? this.hrOpacity,
+    );
+  }
+}
+
+final List<md.BlockSyntax> _roundedHrBlockSyntaxes = [
+  _RoundedHrSyntax(),
+  ...md.ExtensionSet.gitHubFlavored.blockSyntaxes,
+];
+
+final List<md.InlineSyntax> _roundedHrInlineSyntaxes =
+    md.ExtensionSet.gitHubFlavored.inlineSyntaxes;
+
+class _RoundedHrSyntax extends md.BlockSyntax {
+  const _RoundedHrSyntax();
+
+  @override
+  RegExp get pattern =>
+      RegExp(r'^ {0,3}([-*_])[ \t]*\1[ \t]*\1(?:\1|[ \t])*$');
+
+  @override
+  md.Node parse(md.BlockParser parser) {
+    parser.advance();
+    return md.Element.empty('rounded-hr');
+  }
+}
+
+class _MarkdownHrBuilder extends MarkdownElementBuilder {
+  _MarkdownHrBuilder({
+    required this.color,
+    required this.thickness,
+    required this.verticalPadding,
+  });
+
+  final Color color;
+  final double thickness;
+  final double verticalPadding;
+
+  @override
+  bool isBlockElement() => true;
+
+  @override
+  Widget? visitElementAfterWithContext(
+    BuildContext context,
+    md.Element element,
+    TextStyle? preferredStyle,
+    TextStyle? parentStyle,
+  ) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: verticalPadding),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(999),
+        child: SizedBox(
+          height: thickness,
+          width: double.infinity,
+          child: DecoratedBox(
+            decoration: BoxDecoration(color: color),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -8825,6 +9183,9 @@ class UpdateBackupService {
       // Don't backup curves.json - let new version provide updated curves
       _BackupEntry.file(
         joinPath([backendRoot, 'responses', 'modifications-backup.json']),
+      ),
+      _BackupEntry.file(
+        joinPath([backendRoot, 'responses', 'datatables-ui.json']),
       ),
       _BackupEntry.file(joinPath([backendRoot, 'src', 'config', 'config.ini'])),
       _BackupEntry.dir(
@@ -8881,6 +9242,9 @@ class UpdateBackupService {
       // Don't restore curves.json - keep new version's curves with new entries
       _BackupEntry.file(
         joinPath([backupRoot.path, 'responses', 'modifications-backup.json']),
+      ),
+      _BackupEntry.file(
+        joinPath([backupRoot.path, 'responses', 'datatables-ui.json']),
       ),
       _BackupEntry.file(
         joinPath([backupRoot.path, 'src', 'config', 'config.ini']),
@@ -11120,3 +11484,4 @@ class VpnService {
     }
   }
 }
+
