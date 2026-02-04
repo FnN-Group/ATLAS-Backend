@@ -14,15 +14,10 @@ Markdown Quick Key
 ---
 
 # Improvements
-- UI polish
-- Added update notes popup
-- Datatable section added
-- Share button for connection details added
-- Singular user profile exports/deletion added
-- User creation with presets before launch
-
+- DataTable in Modifcations is now fully available with completed features
+- Profile Creation was added with a button top right of the Profiles menu
 # Fixes
-- Minor stability fixes
+- Crashes on certian versions due to a faulty CMS
 - Fixed profile presets not applying
 - Light mode appearance for some menus
 
