@@ -742,7 +742,7 @@ class _AtlasHomePageState extends State<AtlasHomePage>
               if (!isLoading && !hasError)
                 ElevatedButton.icon(
                   onPressed: () {
-                    Clipboard.setData(ClipboardData(text: vpnIp));
+                    Clipboard.setData(ClipboardData(text: 'open $vpnIp'));
                     Navigator.pop(context);
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -1134,6 +1134,10 @@ class _AtlasHomePageState extends State<AtlasHomePage>
         MenuAction(
           title: 'Apply Preset',
           description: 'Replace a user with a preset.',
+        ),
+        MenuAction(
+          title: 'Edit User Values',
+          description: 'Modify level, V-Bucks, and other attributes.',
         ),
       ],
     ),
@@ -2397,6 +2401,8 @@ Widget _pageForMenu(String title) {
       return const GameConfigurationScreen();
     case 'Users':
       return const ProfilesScreen();
+    case 'Edit User Values':
+      return const UserValuesScreen();
     case 'Logs':
       return const LogsScreen();
     default:
@@ -6232,6 +6238,52 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Quick Actions
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.flash_on_rounded,
+                        color: const Color(0xFF7EE081),
+                        size: 20,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Quick Actions',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      _HoverScale(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              _buildRoute(const UserValuesScreen()),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF7EE081).withOpacity(0.15),
+                            foregroundColor: const Color(0xFF7EE081),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          icon: const Icon(Icons.edit, size: 18),
+                          label: const Text('Edit User Values'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
                 _SectionTitle(title: 'Users (${_profiles.length})'),
                 const SizedBox(height: 12),
                 Expanded(
@@ -6535,6 +6587,330 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
             ),
     );
   }
+}
+
+class UserValuesScreen extends StatefulWidget {
+  const UserValuesScreen({super.key});
+
+  @override
+  State<UserValuesScreen> createState() => _UserValuesScreenState();
+}
+
+class _UserValuesScreenState extends State<UserValuesScreen> {
+  bool _loading = true;
+  List<ProfileSummary> _profiles = [];
+  String? _selectedProfile;
+  
+  final TextEditingController _levelController = TextEditingController();
+  final TextEditingController _vbucksController = TextEditingController();
+  
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _levelController.dispose();
+    _vbucksController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final profiles = await ProfileService.listProfiles();
+    if (!mounted) return;
+    setState(() {
+      _profiles = profiles;
+      _loading = false;
+      if (_profiles.isNotEmpty && _selectedProfile == null) {
+        _selectedProfile = _profiles.first.accountId;
+        unawaited(_loadUserValues());
+      }
+    });
+  }
+
+  Future<void> _loadUserValues() async {
+    if (_selectedProfile == null) return;
+    
+    final values = await UserValuesService.loadUserValues(_selectedProfile!);
+    if (!mounted) return;
+    
+    setState(() {
+      // Use level as the single source, but fall back to accountLevel if level is 1
+      final displayLevel = values.level > 1 ? values.level : values.accountLevel;
+      _levelController.text = displayLevel.toString();
+      _vbucksController.text = values.vbucks.toString();
+    });
+  }
+
+  Future<void> _saveUserValues() async {
+    if (_selectedProfile == null || _saving) return;
+    
+    setState(() => _saving = true);
+    
+    final level = int.tryParse(_levelController.text) ?? 1;
+    final vbucks = int.tryParse(_vbucksController.text) ?? 0;
+    
+    // Use the same level value for all three level fields
+    await UserValuesService.saveUserValues(
+      _selectedProfile!,
+      UserValues(
+        level: level,
+        bookLevel: level,
+        accountLevel: level,
+        vbucks: vbucks,
+      ),
+    );
+    
+    if (!mounted) return;
+    setState(() => _saving = false);
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('User values saved successfully!')),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = isDark
+        ? const Color(0xFF1A1F2E).withOpacity(0.5)
+        : Colors.white.withOpacity(0.5);
+    final borderColor = _onSurface(context, 0.12);
+
+    return _BaseScreen(
+      title: 'Edit User Values',
+      child: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _profiles.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.person_off,
+                        size: 64,
+                        color: _onSurface(context, 0.3),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No users found',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Create a user first from the Users menu',
+                        style: TextStyle(color: _onSurface(context, 0.6)),
+                      ),
+                    ],
+                  ),
+                )
+              : SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const _SectionTitle(title: 'Select User'),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: cardColor,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: borderColor),
+                        ),
+                        child: DropdownButtonFormField<String>(
+                          value: _selectedProfile,
+                          decoration: const InputDecoration(
+                            labelText: 'User',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: _profiles.map((profile) {
+                            return DropdownMenuItem(
+                              value: profile.accountId,
+                              child: Text(profile.accountId),
+                            );
+                          }).toList(),
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() => _selectedProfile = value);
+                              unawaited(_loadUserValues());
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      
+                      const _SectionTitle(title: 'Level Settings'),
+                      const SizedBox(height: 12),
+                      _buildValueCard(
+                        context,
+                        cardColor,
+                        borderColor,
+                        icon: Icons.trending_up,
+                        title: 'Level',
+                        description: 'Sets level, book_level, and accountLevel to the same value',
+                        imagePath: 'public/items/levels.webp',
+                        fields: [
+                          _ValueField(
+                            label: 'Level',
+                            controller: _levelController,
+                            hint: 'e.g., 100 or 999',
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      
+                      const _SectionTitle(title: 'Currency Settings'),
+                      const SizedBox(height: 12),
+                      _buildValueCard(
+                        context,
+                        cardColor,
+                        borderColor,
+                        icon: Icons.monetization_on,
+                        title: 'V-Bucks',
+                        imagePath: 'public/items/VBucks.webp',
+                        fields: [
+                          _ValueField(
+                            label: 'V-Bucks Amount',
+                            controller: _vbucksController,
+                            hint: 'Total V-Bucks (e.g., 13500)',
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 32),
+                      
+                      Center(
+                        child: _HoverScale(
+                          child: ElevatedButton.icon(
+                            onPressed: _saving ? null : _saveUserValues,
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 32,
+                                vertical: 16,
+                              ),
+                            ),
+                            icon: _saving
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.save),
+                            label: Text(_saving ? 'Saving...' : 'Save Changes'),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+    );
+  }
+
+  Widget _buildValueCard(
+    BuildContext context,
+    Color cardColor,
+    Color borderColor, {
+    required IconData icon,
+    required String title,
+    String? description,
+    required String imagePath,
+    required List<_ValueField> fields,
+  }) {
+    final fullImagePath = joinPath([getBackendRoot(), imagePath]);
+    final imageFile = File(fullImagePath);
+    
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (imageFile.existsSync())
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.file(
+                imageFile,
+                width: 80,
+                height: 80,
+                fit: BoxFit.cover,
+              ),
+            )
+          else
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: _onSurface(context, 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                icon,
+                size: 40,
+                color: _onSurface(context, 0.3),
+              ),
+            ),
+          const SizedBox(width: 20),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (description != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    description,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: _onSurface(context, 0.6),
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                ...fields.map((field) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: TextField(
+                    controller: field.controller,
+                    decoration: InputDecoration(
+                      labelText: field.label,
+                      hintText: field.hint,
+                      border: const OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                )),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ValueField {
+  const _ValueField({
+    required this.label,
+    required this.controller,
+    required this.hint,
+  });
+
+  final String label;
+  final TextEditingController controller;
+  final String hint;
 }
 
 class LogsScreen extends StatelessWidget {
@@ -7151,6 +7527,162 @@ class _CreateUserResult {
 
   final String accountId;
   final String presetFolder;
+}
+
+class UserValues {
+  const UserValues({
+    required this.level,
+    required this.bookLevel,
+    required this.accountLevel,
+    required this.vbucks,
+  });
+
+  final int level;
+  final int bookLevel;
+  final int accountLevel;
+  final int vbucks;
+}
+
+class UserValuesService {
+  static Future<UserValues> loadUserValues(String accountId) async {
+    int level = 1;
+    int bookLevel = 1;
+    int accountLevel = 1;
+    int vbucks = 0;
+
+    final athenaPath = joinPath([
+      getBackendRoot(),
+      'static',
+      'profiles',
+      accountId,
+      'profile_athena.json',
+    ]);
+    final athenaFile = File(athenaPath);
+    if (await athenaFile.exists()) {
+      try {
+        final content = await athenaFile.readAsString();
+        final json = jsonDecode(content) as Map<String, dynamic>;
+        
+        // Navigate to stats.attributes where the level data is stored
+        final stats = json['stats'] as Map<String, dynamic>?;
+        if (stats != null) {
+          final attributes = stats['attributes'] as Map<String, dynamic>?;
+          if (attributes != null) {
+            // Read actual values, with fallbacks
+            if (attributes.containsKey('level')) {
+              level = (attributes['level'] is int) ? attributes['level'] as int : int.tryParse(attributes['level'].toString()) ?? 1;
+            }
+            if (attributes.containsKey('book_level')) {
+              bookLevel = (attributes['book_level'] is int) ? attributes['book_level'] as int : int.tryParse(attributes['book_level'].toString()) ?? 1;
+            }
+            if (attributes.containsKey('accountLevel')) {
+              accountLevel = (attributes['accountLevel'] is int) ? attributes['accountLevel'] as int : int.tryParse(attributes['accountLevel'].toString()) ?? 1;
+            }
+          }
+        }
+      } catch (e) {
+        print('Error reading athena profile: $e');
+      }
+    }
+
+    final commonCorePath = joinPath([
+      getBackendRoot(),
+      'static',
+      'profiles',
+      accountId,
+      'profile_common_core.json',
+    ]);
+    final commonCoreFile = File(commonCorePath);
+    if (await commonCoreFile.exists()) {
+      try {
+        final content = await commonCoreFile.readAsString();
+        final json = jsonDecode(content) as Map<String, dynamic>;
+        final items = json['items'] as Map<String, dynamic>?;
+        if (items != null) {
+          final mtxPurchased = items['Currency:MtxPurchased'] as Map<String, dynamic>?;
+          if (mtxPurchased != null && mtxPurchased.containsKey('quantity')) {
+            vbucks = (mtxPurchased['quantity'] is int) 
+                ? mtxPurchased['quantity'] as int 
+                : int.tryParse(mtxPurchased['quantity'].toString()) ?? 0;
+          }
+        }
+      } catch (e) {
+        print('Error reading common_core profile: $e');
+      }
+    }
+
+    return UserValues(
+      level: level,
+      bookLevel: bookLevel,
+      accountLevel: accountLevel,
+      vbucks: vbucks,
+    );
+  }
+
+  static Future<void> saveUserValues(String accountId, UserValues values) async {
+    final athenaPath = joinPath([
+      getBackendRoot(),
+      'static',
+      'profiles',
+      accountId,
+      'profile_athena.json',
+    ]);
+    final athenaFile = File(athenaPath);
+    if (await athenaFile.exists()) {
+      try {
+        final content = await athenaFile.readAsString();
+        final json = jsonDecode(content) as Map<String, dynamic>;
+        
+        // Navigate to stats.attributes to set the level values
+        final stats = json['stats'] as Map<String, dynamic>?;
+        if (stats != null) {
+          final attributes = stats['attributes'] as Map<String, dynamic>?;
+          if (attributes != null) {
+            attributes['level'] = values.level;
+            attributes['book_level'] = values.bookLevel;
+            attributes['accountLevel'] = values.accountLevel;
+            
+            await athenaFile.writeAsString(
+              const JsonEncoder.withIndent('  ').convert(json),
+            );
+          }
+        }
+      } catch (e) {
+        print('Error saving athena profile: $e');
+      }
+    }
+
+    final commonCorePath = joinPath([
+      getBackendRoot(),
+      'static',
+      'profiles',
+      accountId,
+      'profile_common_core.json',
+    ]);
+    final commonCoreFile = File(commonCorePath);
+    if (await commonCoreFile.exists()) {
+      try {
+        final content = await commonCoreFile.readAsString();
+        final json = jsonDecode(content) as Map<String, dynamic>;
+        final items = json['items'] as Map<String, dynamic>?;
+        if (items != null) {
+          if (!items.containsKey('Currency:MtxPurchased')) {
+            items['Currency:MtxPurchased'] = {
+              'templateId': 'Currency:MtxPurchased',
+              'attributes': {'platform': 'EpicPC'},
+              'quantity': values.vbucks,
+            };
+          } else {
+            final mtxPurchased = items['Currency:MtxPurchased'] as Map<String, dynamic>;
+            mtxPurchased['quantity'] = values.vbucks;
+          }
+          await commonCoreFile.writeAsString(
+            const JsonEncoder.withIndent('  ').convert(json),
+          );
+        }
+      } catch (_) {}
+    }
+  }
 }
 
 class ProfileService {
