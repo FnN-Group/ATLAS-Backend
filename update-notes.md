@@ -14,10 +14,11 @@ Markdown Quick Key
 ---
 
 # Improvements
-- DataTable in Modifcations is now fully available with completed features
+- DataTable section in Modifcations is now fully available with completed features
 - Profile Creation was added with a button top right of the Profiles menu
+
 # Fixes
-- Crashes on certian versions due to a faulty CMS
+- Crashes on certain versions due to a faulty CMS
 - Fixed profile presets not applying
 - Light mode appearance for some menus
 
