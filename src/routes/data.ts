@@ -1,61 +1,11 @@
 import app from "../index";
 import axios from "axios";
 import getVersion from "../utils/handlers/getVersion";
-import fs from "node:fs";
-import path from "node:path";
-import logger from "../utils/logger/logger";
-
-const cmsDir = path.join(__dirname, "..", "..", "static", "cms");
-
-function loadCmsJson(fileName: string): any | null {
-  try {
-    const raw = fs.readFileSync(path.join(cmsDir, fileName), "utf8");
-    return JSON.parse(raw.replace(/^\uFEFF/, ""));
-  } catch (err) {
-    logger.error(
-      `[CMS] Failed to load ${fileName}: ${(err as Error).message ?? String(err)}`
-    );
-    return null;
-  }
-}
-
-const legacyCms = loadCmsJson("fortnite-game_s6.json");
-const s7Cms = loadCmsJson("fortnite-game_s7.json");
-const s15ContentPages = loadCmsJson("contentpages_s15.json");
-const s15Motd = loadCmsJson("fortnite-game_s15.json");
 
 export default function () {
   app.get("/content/api/pages/fortnite-game", async (c) => {
     const version = getVersion(c);
-    const userAgent = c.req.header("user-agent") ?? "";
-    logger.debug(
-      `CMS request UA="${userAgent}" season=${version.season} build=${version.build} CL=${version.CL}`
-    );
 
-    if (version.season > 0 && version.season <= 6 && legacyCms) {
-      logger.debug("CMS served: legacy s6");
-      return c.json(legacyCms);
-    }
-    if (version.season === 7 && s7Cms) {
-      logger.debug("CMS served: s7");
-      return c.json(s7Cms);
-    }
-    if (version.season === 0 && userAgent.includes("Release-7.") && s7Cms) {
-      logger.debug("CMS served: s7 (UA fallback)");
-      return c.json(s7Cms);
-    }
-    if (version.season === 15 && s15ContentPages) {
-      logger.debug("CMS served: s15 contentpages");
-      return c.json(s15ContentPages);
-    }
-    if (
-      version.season === 0 &&
-      userAgent.includes("Release-15.") &&
-      s15ContentPages
-    ) {
-      logger.debug("CMS served: s15 contentpages (UA fallback)");
-      return c.json(s15ContentPages);
-    }
     const game: any = await axios.get(
       "https://fortnitecontent-website-prod07.ol.epicgames.com/content/api/pages/fortnite-game"
     );
@@ -401,37 +351,6 @@ export default function () {
   });
 
   app.get("/content/api/pages/*", async (c) => {
-    const version = getVersion(c);
-    const userAgent = c.req.header("user-agent") ?? "";
-    logger.debug(
-      `ContentPages request UA="${userAgent}" season=${version.season} build=${version.build} CL=${version.CL}`
-    );
-
-    if (version.season > 0 && version.season <= 6 && legacyCms) {
-      logger.debug("ContentPages served: legacy s6");
-      return c.json(legacyCms);
-    }
-    if (version.season === 7 && s7Cms) {
-      logger.debug("ContentPages served: s7");
-      return c.json(s7Cms);
-    }
-    if (version.season === 0 && userAgent.includes("Release-7.") && s7Cms) {
-      logger.debug("ContentPages served: s7 (UA fallback)");
-      return c.json(s7Cms);
-    }
-    if (version.season === 15 && s15ContentPages) {
-      logger.debug("ContentPages served: s15");
-      return c.json(s15ContentPages);
-    }
-    if (
-      version.season === 0 &&
-      userAgent.includes("Release-15.") &&
-      s15ContentPages
-    ) {
-      logger.debug("ContentPages served: s15 (UA fallback)");
-      return c.json(s15ContentPages);
-    }
-
     const game: any = await axios.get(
       "https://fortnitecontent-website-prod07.ol.epicgames.com/content/api/pages/fortnite-game"
     );
@@ -439,32 +358,6 @@ export default function () {
   });
   // credits to neonite / hybridfnbr
   app.post("/api/v1/fortnite-br/surfaces/*/target", async (c) => {
-    const version = getVersion(c);
-    const userAgent = c.req.header("user-agent") ?? "";
-
-    if (
-      (version.season === 15 ||
-        (version.season === 0 && userAgent.includes("Release-15."))) &&
-      s15Motd
-    ) {
-      const motd = JSON.parse(JSON.stringify(s15Motd));
-      const body = await c.req.json().catch(() => ({} as any));
-      const tags = body?.tags ?? body?.parameters?.tags ?? [];
-      if (Array.isArray(tags) && tags.length > 0) {
-        motd.contentItems?.forEach((item: any) => {
-          item.placements = [];
-          tags.forEach((tag: string) => {
-            item.placements.push({
-              trackingId: "atlas-tracking",
-              tag,
-              position: 0,
-            });
-          });
-        });
-      }
-      return c.json(motd);
-    }
-
     return c.json({
       contentType: "collection",
       contentId: "fortnite-br-br-motd-collection",

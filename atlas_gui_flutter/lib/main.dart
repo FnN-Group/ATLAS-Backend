@@ -6235,60 +6235,15 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       ),
       child: _loading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
+          : Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Quick Actions
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white10),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.flash_on_rounded,
-                        color: const Color(0xFF7EE081),
-                        size: 20,
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        'Quick Actions',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      _HoverScale(
-                        child: ElevatedButton.icon(
-                          onPressed: () {
-                            Navigator.of(context).push(
-                              _buildRoute(const UserValuesScreen()),
-                            );
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF7EE081).withOpacity(0.15),
-                            foregroundColor: const Color(0xFF7EE081),
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          icon: const Icon(Icons.edit, size: 18),
-                          label: const Text('Edit User Values'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-                _SectionTitle(title: 'Users (${_profiles.length})'),
-                const SizedBox(height: 12),
                 Expanded(
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      _SectionTitle(title: 'Users (${_profiles.length})'),
+                      const SizedBox(height: 12),
                       Expanded(
                         child: Container(
                           padding: const EdgeInsets.all(12),
@@ -6368,8 +6323,60 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                                 ),
                         ),
                       ),
-                      const SizedBox(width: 20),
-                      Expanded(
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.white10),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.flash_on_rounded,
+                              color: const Color(0xFF7EE081),
+                              size: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              'Level and Currency',
+                              style: Theme.of(
+                                context,
+                              ).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const Spacer(),
+                            _HoverScale(
+                              child: ElevatedButton.icon(
+                                onPressed: () {
+                                  Navigator.of(context).push(
+                                    _buildRoute(const UserValuesScreen()),
+                                  );
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(
+                                    0xFF7EE081,
+                                  ).withOpacity(0.15),
+                                  foregroundColor: const Color(0xFF7EE081),
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                icon: const Icon(Icons.edit, size: 18),
+                                label: const Text('Edit User Values'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 20),
+                Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -6580,11 +6587,8 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                           ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+                ],
+              ),
     );
   }
 }
