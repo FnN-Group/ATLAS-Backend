@@ -177,12 +177,14 @@ dist
 
 # Atlas
 tools/bun/
-static/profiles/profile_athena.json
 static/profiles/*
 static/ClientSettings/*
 .vscode/settings.json
 profiles
-profile_athena.json
+!static/profiles/
+!static/profiles/profile_athena.json
+!static/athenaprofiles/Profile Presets/
+!static/athenaprofiles/Profile Presets/**
 exports/*
 !exports/.gitkeep
 responses/modifications-backup.json
