@@ -3,8 +3,10 @@
 ## Credits
 
 - [andr1ww](https://github.com/andr1ww) ATLAS is a fork of [Nexa](https://github.com/andr1ww/Nexa)
-- [Ralzify](https://github.com/Ralzify) ATLAS uses the CurveTable and Straight Bloom code from [FortBackend](https://github.com/Ralzify/FortBackend) and has helped develop the project along the way!
-- [Lawin](https://github.com/Lawin0129) for references
+- [Ralzify](https://github.com/Ralzify) ATLAS uses the CurveTable and Straight Bloom code from [FortBackend](https://github.com/Ralzify/FortBackend)
+- [Lawin](https://github.com/Lawin0129) For some references and code
+
+## ATLAS
 
 ATLAS is a Fortnite backend for all versions of fortnite designed for trickshotters!
 This backend has features such as the following:
@@ -29,7 +31,7 @@ This backend has features such as the following:
 - Arena Points Saving (Unfinished)
 - Arena Point Leaderboard with all Profiles
 - Game Configuration (GUI Rufus/Water Stage Editor/Water Storm Toggle)
-- Custom Cosmetic Profiles (Reboot x Retrac, Stellar, Tozo)
+- Custom Cosmetic Profiles (Reboot x Retrac, Stellar, Tozo, Pulse)
 
 If you want to contribute just fork this repository and make a pull request!
 
