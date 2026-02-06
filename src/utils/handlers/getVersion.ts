@@ -1,6 +1,7 @@
 import app from "../..";
 import fs from "node:fs";
 import path from "node:path";
+import logger from "../logger/logger";
 
 interface Version {
   season: number;
@@ -32,6 +33,7 @@ export default function getVersion(c: any): Version {
       try {
         const logDir = path.join(__dirname, "../../../logs");
         if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+        logger.debug(`Missing Release- in user-agent: ${userAgent}`);
         fs.appendFileSync(
           path.join(logDir, "ua-debug.log"),
           `[${new Date().toISOString()}] Missing Release- in user-agent: ${userAgent}\n`
@@ -44,6 +46,7 @@ export default function getVersion(c: any): Version {
     try {
       const logDir = path.join(__dirname, "../../../logs");
       if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+      logger.debug("Missing user-agent header");
       fs.appendFileSync(
         path.join(logDir, "ua-debug.log"),
         `[${new Date().toISOString()}] Missing user-agent header\n`

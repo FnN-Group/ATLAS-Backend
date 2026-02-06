@@ -2,38 +2,12 @@ import app from "..";
 import fs from "node:fs";
 import path from "node:path";
 import { v4 as uuidv4 } from "uuid";
-import getVersion from "../utils/handlers/getVersion";
 
 const userpath = new Set();
 const profilesDir = path.join(__dirname, "..", "..", "static", "profiles");
-const legacyProfilesDir = path.join(
-  __dirname,
-  "..",
-  "..",
-  "static",
-  "profiles_legacy"
-);
 
 function parseJson(raw: string): any {
   return JSON.parse(raw.replace(/^\uFEFF/, ""));
-}
-
-function getProfilesDirForRequest(c: any): { dir: string; cachePrefix: string } {
-  if (!fs.existsSync(legacyProfilesDir)) {
-    return { dir: profilesDir, cachePrefix: "main" };
-  }
-
-  const version = getVersion(c);
-  const userAgent = c.req.header("user-agent") ?? "";
-  const uaSeasonMatch = userAgent.match(/Release-(\d+)\./);
-  const uaSeason = uaSeasonMatch ? Number(uaSeasonMatch[1]) : 0;
-  const season =
-    version.season > 0 ? version.season : Number.isFinite(uaSeason) ? uaSeason : 0;
-
-  const shouldUseLegacy = season > 0 && season <= 7;
-  return shouldUseLegacy
-    ? { dir: legacyProfilesDir, cachePrefix: "legacy" }
-    : { dir: profilesDir, cachePrefix: "main" };
 }
 
 // In-memory cache to avoid repeated file reads
@@ -58,16 +32,13 @@ export default function () {
 
       const profileId = query.profileId;
 
-      const { dir: activeProfilesDir, cachePrefix } =
-        getProfilesDirForRequest(c);
-
-      const accountProfilesDir = path.join(activeProfilesDir, accountId);
+      const accountProfilesDir = path.join(profilesDir, accountId);
       const profilePath = path.join(
         accountProfilesDir,
         `profile_${profileId}.json`
       );
 
-      const cacheKey = `${cachePrefix}:${accountId}_${profileId}`;
+      const cacheKey = `${accountId}_${profileId}`;
       
       // Check cache first
       if (profileCache.has(cacheKey)) {
@@ -83,38 +54,20 @@ export default function () {
           await fs.promises.mkdir(accountProfilesDir, { recursive: true });
           
           const templatePath = path.join(
-            activeProfilesDir,
+            profilesDir,
             `profile_${profileId}.json`
           );
           try {
             const templateData = await fs.promises.readFile(templatePath, "utf8");
             profile = parseJson(templateData);
           } catch {
-            if (activeProfilesDir !== profilesDir) {
-              try {
-                const fallbackTemplateData = await fs.promises.readFile(
-                  path.join(profilesDir, `profile_${profileId}.json`),
-                  "utf8"
-                );
-                profile = parseJson(fallbackTemplateData);
-              } catch {
-                // No template, create empty
-                profile = {
-                  rvn: 0,
-                  items: {},
-                  stats: { attributes: {} },
-                  commandRevision: 0,
-                };
-              }
-            } else {
-              // No template, create empty
-              profile = {
-                rvn: 0,
-                items: {},
-                stats: { attributes: {} },
-                commandRevision: 0,
-              };
-            }
+            // No template, create empty
+            profile = {
+              rvn: 0,
+              items: {},
+              stats: { attributes: {} },
+              commandRevision: 0,
+            };
           }
           
           // Save and cache the new profile
@@ -617,9 +570,7 @@ export default function () {
       }
 
       const profileId = query.profileId;
-      const { dir: activeProfilesDir, cachePrefix } =
-        getProfilesDirForRequest(c);
-      const cacheKey = `${cachePrefix}:${accountId}_${profileId}`;
+      const cacheKey = `${accountId}_${profileId}`;
       let profile: any;
 
       // Check cache first
@@ -627,7 +578,7 @@ export default function () {
         profile = profileCache.get(cacheKey);
       } else {
         // Load from disk
-        const accountProfilesDir = path.join(activeProfilesDir, accountId);
+        const accountProfilesDir = path.join(profilesDir, accountId);
         const profilePath = path.join(accountProfilesDir, `profile_${profileId}.json`);
 
         try {
@@ -637,36 +588,19 @@ export default function () {
         } catch {
           // No profile found, use template
           const templatePath = path.join(
-            activeProfilesDir,
+            profilesDir,
             `profile_${profileId}.json`
           );
           try {
             const templateData = await fs.promises.readFile(templatePath, "utf8");
             profile = parseJson(templateData);
           } catch {
-            if (activeProfilesDir !== profilesDir) {
-              try {
-                const fallbackTemplateData = await fs.promises.readFile(
-                  path.join(profilesDir, `profile_${profileId}.json`),
-                  "utf8"
-                );
-                profile = parseJson(fallbackTemplateData);
-              } catch {
-                profile = {
-                  rvn: 0,
-                  items: {},
-                  stats: { attributes: {} },
-                  commandRevision: 0,
-                };
-              }
-            } else {
-              profile = {
-                rvn: 0,
-                items: {},
-                stats: { attributes: {} },
-                commandRevision: 0,
-              };
-            }
+            profile = {
+              rvn: 0,
+              items: {},
+              stats: { attributes: {} },
+              commandRevision: 0,
+            };
           }
         }
       }
@@ -695,9 +629,7 @@ export default function () {
       }
 
       const profileId = query.profileId;
-      const { dir: activeProfilesDir, cachePrefix } =
-        getProfilesDirForRequest(c);
-      const cacheKey = `${cachePrefix}:${accountId}_${profileId}`;
+      const cacheKey = `${accountId}_${profileId}`;
       let profile: any;
 
       // Check cache first
@@ -705,7 +637,7 @@ export default function () {
         profile = profileCache.get(cacheKey);
       } else {
         // Load from disk
-        const accountProfilesDir = path.join(activeProfilesDir, accountId);
+        const accountProfilesDir = path.join(profilesDir, accountId);
         const profilePath = path.join(accountProfilesDir, `profile_${profileId}.json`);
 
         try {
@@ -715,36 +647,19 @@ export default function () {
         } catch {
           // No profile found, use template
           const templatePath = path.join(
-            activeProfilesDir,
+            profilesDir,
             `profile_${profileId}.json`
           );
           try {
             const templateData = await fs.promises.readFile(templatePath, "utf8");
             profile = parseJson(templateData);
           } catch {
-            if (activeProfilesDir !== profilesDir) {
-              try {
-                const fallbackTemplateData = await fs.promises.readFile(
-                  path.join(profilesDir, `profile_${profileId}.json`),
-                  "utf8"
-                );
-                profile = parseJson(fallbackTemplateData);
-              } catch {
-                profile = {
-                  rvn: 0,
-                  items: {},
-                  stats: { attributes: {} },
-                  commandRevision: 0,
-                };
-              }
-            } else {
-              profile = {
-                rvn: 0,
-                items: {},
-                stats: { attributes: {} },
-                commandRevision: 0,
-              };
-            }
+            profile = {
+              rvn: 0,
+              items: {},
+              stats: { attributes: {} },
+              commandRevision: 0,
+            };
           }
         }
       }

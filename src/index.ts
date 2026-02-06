@@ -41,11 +41,7 @@ app.use("*", cors());
 app.notFound((c) => c.json(Atlas.basic.notFound, 404));
 
 app.use(async (c, next) => {
-  if (c.req.path === "/images/icons/gear.png" || c.req.path === "/favicon.ico") {
-    await next();
-  } else {
-    await next();
-  }
+  await next();
 
   if (c.req.path === "/unknown" && c.req.method === "GET") {
     if (!hasLoggedLauncherPing) {
@@ -54,6 +50,12 @@ app.use(async (c, next) => {
     }
     return c.text("OK"); // Return a response and prevent further logging
   }
+
+  if (c.req.path === "/images/icons/gear.png" || c.req.path === "/favicon.ico") {
+    return;
+  }
+
+  logger.backend(`${c.req.path} | ${c.req.method} | Status ${c.res.status}`);
 });
 
 await loadRoutes(path.join(__dirname, "routes"), app);

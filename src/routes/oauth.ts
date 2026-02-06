@@ -39,6 +39,8 @@ function logAuth(message: string, data?: Record<string, unknown>) {
           )
         )
       : "";
+    const logSuffix = payload ? ` ${payload}` : "";
+    logger.debug(`[AUTH] ${message}${logSuffix}`);
     fs.appendFileSync(authLogPath, `[${timestamp}] ${message} ${payload}\n`);
   } catch (err) {
     logger.error(`Failed to write auth debug log: ${err}`);

@@ -1,10 +1,396 @@
 import app from "../index";
 import axios from "axios";
 import getVersion from "../utils/handlers/getVersion";
+import fs from "fs";
+import path from "path";
+import logger from "../utils/logger/logger";
+
+const cmsDir = path.join(process.cwd(), "static", "cms");
+const legacyCms = JSON.parse(
+  fs.readFileSync(path.join(cmsDir, "fortnite-game_s6.json"), "utf8")
+);
+const s7ContentPages = JSON.parse(
+  fs.readFileSync(path.join(cmsDir, "contentpages_s7.json"), "utf8")
+);
+const s10ContentPages = JSON.parse(
+  fs.readFileSync(path.join(cmsDir, "contentpages_s10.json"), "utf8")
+);
+const s15ContentPages = JSON.parse(
+  fs.readFileSync(path.join(cmsDir, "contentpages_s15.json"), "utf8")
+);
+const s15Motd = JSON.parse(
+  fs.readFileSync(path.join(cmsDir, "fortnite-game_s15.json"), "utf8")
+);
+
+interface CmsVersionInfo {
+  season: number;
+  build: number;
+  CL?: string;
+}
+
+interface ReleaseInfo {
+  season: number;
+  minor: number;
+  patch: number;
+}
+
+function parseReleaseInfo(userAgent: string): ReleaseInfo {
+  const releaseMatches = [
+    ...userAgent.matchAll(/Release-(\d+)\.(\d+)(?:\.(\d+))?/g),
+  ];
+
+  if (releaseMatches.length === 0) {
+    return { season: 0, minor: 0, patch: 0 };
+  }
+
+  let selected: ReleaseInfo = { season: 0, minor: 0, patch: 0 };
+  for (const match of releaseMatches) {
+    const candidate: ReleaseInfo = {
+      season: Number(match[1]),
+      minor: Number(match[2]),
+      patch: Number(match[3] ?? 0),
+    };
+
+    if (
+      candidate.season > selected.season ||
+      (candidate.season === selected.season &&
+        candidate.minor > selected.minor) ||
+      (candidate.season === selected.season &&
+        candidate.minor === selected.minor &&
+        candidate.patch > selected.patch)
+    ) {
+      selected = candidate;
+    }
+  }
+
+  return selected;
+}
+
+function getResolvedSeason(version: CmsVersionInfo, userAgent: string): number {
+  const release = parseReleaseInfo(userAgent);
+  if (release.season > 0) {
+    return release.season;
+  }
+  return version.season > 0 ? version.season : 0;
+}
+
+function getResolvedMinor(version: CmsVersionInfo, userAgent: string): number {
+  const release = parseReleaseInfo(userAgent);
+  const resolvedSeason = getResolvedSeason(version, userAgent);
+
+  if (
+    release.season === resolvedSeason &&
+    (release.minor > 0 || release.patch > 0)
+  ) {
+    return release.minor;
+  }
+
+  if (version.season !== resolvedSeason) {
+    return 0;
+  }
+
+  if (!Number.isFinite(version.build)) {
+    return 0;
+  }
+
+  const fractional = Number(
+    (version.build - Math.trunc(version.build)).toFixed(3)
+  );
+  return Math.round(fractional * 100);
+}
+
+function cloneCmsContent<T>(content: T): T {
+  return JSON.parse(JSON.stringify(content));
+}
+
+function setCmsNoCacheHeaders(c: any): void {
+  c.header("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  c.header("Pragma", "no-cache");
+  c.header("Expires", "0");
+  c.header("Surrogate-Control", "no-store");
+  c.header("Vary", "User-Agent");
+}
+
+function appendCmsDebugLog(line: string): void {
+  try {
+    const logDir = path.join(process.cwd(), "logs");
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
+    }
+    fs.appendFileSync(path.join(logDir, "cms-debug.log"), `${line}\n`);
+  } catch {
+    // ignore log write failures
+  }
+}
+
+function sendCmsResponse(
+  c: any,
+  content: any,
+  version: CmsVersionInfo,
+  userAgent: string,
+  source: string
+) {
+  setCmsNoCacheHeaders(c);
+
+  const season = getResolvedSeason(version, userAgent);
+  const minor = getResolvedMinor(version, userAgent);
+  c.header("X-ATLAS-CMS-SEASON", String(season));
+  c.header("X-ATLAS-CMS-MINOR", String(minor));
+  c.header("X-ATLAS-CMS-SOURCE", source);
+
+  const now = new Date().toISOString();
+  if (content && typeof content === "object") {
+    content.lastModified = now;
+    if (content.dynamicbackgrounds && typeof content.dynamicbackgrounds === "object") {
+      content.dynamicbackgrounds.lastModified = now;
+    }
+    if (content.lobby && typeof content.lobby === "object") {
+      content.lobby.lastModified = now;
+    }
+  }
+
+  const stage = content?.dynamicbackgrounds?.backgrounds?.backgrounds?.[0]?.stage ?? "";
+  const backgroundimage =
+    content?.dynamicbackgrounds?.backgrounds?.backgrounds?.[0]?.backgroundimage ??
+    content?.lobby?.backgroundimage ??
+    "";
+  appendCmsDebugLog(
+    `[${now}] source=${source} resolved=${season}.${minor} rawSeason=${version.season} rawBuild=${version.build} stage=${stage} bg=${backgroundimage} ua=${userAgent}`
+  );
+  logger.debug(
+    `CMS served: ${source} resolved=${season}.${minor} rawSeason=${version.season} rawBuild=${version.build} stage=${stage || "none"} bg=${backgroundimage || "none"}`
+  );
+
+  return c.json(content);
+}
+
+function applySeasonSpecificBackground(
+  content: any,
+  version: CmsVersionInfo,
+  userAgent: string
+): void {
+  const backgrounds = content?.dynamicbackgrounds?.backgrounds?.backgrounds;
+  if (!Array.isArray(backgrounds) || backgrounds.length === 0) {
+    return;
+  }
+
+  const primary = backgrounds[0];
+  const secondary = backgrounds.length > 1 ? backgrounds[1] : null;
+  const season = getResolvedSeason(version, userAgent);
+  const minor = getResolvedMinor(version, userAgent);
+
+  const setPrimary = (stage: string, backgroundimage: string) => {
+    primary.stage = stage;
+    primary.backgroundimage = backgroundimage;
+    if (!content.lobby || typeof content.lobby !== "object") {
+      content.lobby = {};
+    }
+    content.lobby.stage = stage;
+    content.lobby.backgroundimage = backgroundimage;
+  };
+
+  switch (season) {
+    case 8:
+      setPrimary("season8", "");
+      return;
+    case 9:
+      setPrimary("season9", "");
+      return;
+    case 10:
+      setPrimary(minor === 40 ? "blackmonday" : "seasonx", "");
+      return;
+    case 11:
+      setPrimary(minor === 31 || minor === 40 ? "Winter19" : "season11", "");
+      return;
+    case 12:
+      setPrimary("season12", "");
+      return;
+    case 13:
+      setPrimary("season13", "");
+      return;
+    case 14:
+      setPrimary("season14", "");
+      return;
+    case 15:
+      setPrimary(
+        "season15",
+        "https://static.wikia.nocookie.net/fortnite/images/c/cf/Chapter_2_Season_5_-_Lobby_Background_-_Fortnite.png/revision/latest?cb=20210331061751"
+      );
+      if (secondary) {
+        secondary.stage = "season15";
+      }
+      return;
+    case 16:
+      setPrimary("season16", "");
+      return;
+    case 17:
+      setPrimary("season17", "");
+      return;
+    case 18:
+      setPrimary("season18", "");
+      return;
+    case 19:
+      if (minor === 1) {
+        setPrimary(
+          "winter2021",
+          "https://cdn2.unrealengine.com/t-bp19-lobby-xmas-2048x1024-f85d2684b4af.png"
+        );
+      } else {
+        setPrimary("season19", "");
+      }
+      return;
+    case 20:
+      if (minor === 40) {
+        setPrimary(
+          "season20",
+          "https://cdn2.unrealengine.com/t-bp20-40-armadillo-glowup-lobby-2048x2048-2048x2048-3b83b887cc7f.jpg"
+        );
+      } else {
+        setPrimary(
+          "season20",
+          "https://cdn2.unrealengine.com/s20-landscapev4-2048x1024-2494a103ae6c.png"
+        );
+      }
+      return;
+    case 21:
+      if (minor === 30) {
+        setPrimary(
+          "season2130",
+          "https://cdn2.unrealengine.com/nss-lobbybackground-2048x1024-f74a14565061.jpg"
+        );
+      } else {
+        setPrimary(
+          "season2100",
+          "https://cdn2.unrealengine.com/s21-lobby-background-2048x1024-2e7112b25dc3.jpg"
+        );
+      }
+      return;
+    case 22:
+      setPrimary(
+        "defaultnotris",
+        "https://cdn2.unrealengine.com/t-bp22-lobby-square-2048x2048-2048x2048-e4e90c6e8018.jpg"
+      );
+      return;
+    case 23:
+      if (minor === 10) {
+        setPrimary(
+          "defaultnotris",
+          "https://cdn2.unrealengine.com/t-bp23-winterfest-lobby-square-2048x2048-2048x2048-277a476e5ca6.png"
+        );
+      } else {
+        setPrimary(
+          "defaultnotris",
+          "https://cdn2.unrealengine.com/t-bp23-lobby-2048x1024-2048x1024-26f2c1b27f63.png"
+        );
+      }
+      return;
+    case 24:
+      setPrimary(
+        "defaultnotris",
+        "https://static.wikia.nocookie.net/fortnite/images/e/e7/Chapter_4_Season_2_-_Lobby_Background_-_Fortnite.png"
+      );
+      return;
+    case 25:
+      setPrimary(
+        "defaultnotris",
+        "https://static.wikia.nocookie.net/fortnite/images/c/ca/Chapter_4_Season_3_-_Lobby_Background_-_Fortnite.png"
+      );
+      return;
+    case 26:
+      if (minor === 30) {
+        setPrimary(
+          "season2630",
+          "https://cdn2.unrealengine.com/s26-lobby-timemachine-final-2560x1440-a3ce0018e3fa.jpg"
+        );
+      } else {
+        setPrimary(
+          "season2600",
+          "https://cdn2.unrealengine.com/0814-ch4s4-lobby-2048x1024-2048x1024-e3c2cf8d342d.png"
+        );
+      }
+      return;
+    case 27:
+      if (minor === 11) {
+        setPrimary(
+          "defaultnotris",
+          "https://cdn2.unrealengine.com/durianlobby2-4096x2048-242a51b6a8ee.jpg"
+        );
+      } else {
+        setPrimary("season2700", "");
+      }
+      return;
+    case 28:
+      if (minor === 20) {
+        setPrimary(
+          "defaultnotris",
+          "https://cdn2.unrealengine.com/s28-tmnt-lobby-4096x2048-e6c06a310c05.jpg"
+        );
+      } else {
+        setPrimary(
+          "defaultnotris",
+          "https://cdn2.unrealengine.com/ch5s1-lobbybg-3640x2048-0974e0c3333c.jpg"
+        );
+      }
+      return;
+    case 29:
+      if (minor === 20) {
+        setPrimary(
+          "defaultnotris",
+          "https://cdn2.unrealengine.com/iceberg-lobby-3840x2160-217bb6ea8af9.jpg"
+        );
+      } else if (minor === 40) {
+        setPrimary(
+          "defaultnotris",
+          "https://cdn2.unrealengine.com/mkart-2940-sw-fnbr-lobby-3840x2160-4f1f1486a54a.jpg"
+        );
+      } else {
+        setPrimary(
+          "defaultnotris",
+          "https://cdn2.unrealengine.com/br-lobby-ch5s2-4096x2304-a0879ccdaafc.jpg"
+        );
+      }
+      return;
+    case 30:
+      setPrimary("season3000", "");
+      return;
+    case 31:
+      setPrimary(
+        "season3100",
+        "https://cdn2.unrealengine.com/ch5s4-lobbybg-final-2136x1202-e5885322faf1.jpg"
+      );
+      return;
+    default:
+      setPrimary("", "");
+  }
+}
 
 export default function () {
   app.get("/content/api/pages/fortnite-game", async (c) => {
     const version = getVersion(c);
+    const userAgent = c.req.header("user-agent") ?? "";
+    const season = getResolvedSeason(version, userAgent);
+    logger.debug(
+      `CMS request UA="${userAgent}" season=${version.season} build=${version.build} CL=${version.CL ?? "unknown"}`
+    );
+
+    if (season > 0 && season <= 6) {
+      return sendCmsResponse(c, cloneCmsContent(legacyCms), version, userAgent, "legacy-s6");
+    }
+    if (season === 7) {
+      const content = cloneCmsContent(s7ContentPages);
+      applySeasonSpecificBackground(content, version, userAgent);
+      return sendCmsResponse(c, content, version, userAgent, "contentpages-s7");
+    }
+    if (season === 10) {
+      const content = cloneCmsContent(s10ContentPages);
+      applySeasonSpecificBackground(content, version, userAgent);
+      return sendCmsResponse(c, content, version, userAgent, "contentpages-s10");
+    }
+    if (season === 15) {
+      const content = cloneCmsContent(s15ContentPages);
+      applySeasonSpecificBackground(content, version, userAgent);
+      return sendCmsResponse(c, content, version, userAgent, "contentpages-s15");
+    }
 
     const game: any = await axios.get(
       "https://fortnitecontent-website-prod07.ol.epicgames.com/content/api/pages/fortnite-game"
@@ -164,200 +550,72 @@ export default function () {
       }
     }
 
-    if (version.season === 10) {
-      if (version.build === 10.40) {
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].stage =
-          "blackmonday";
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-          "";
-      }
-      else {
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].stage = 
-        "seasonx";
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage = 
-        "";
-      }
-    } else if (version.season === 11) {
-      if (version.build === 11.31 || version.build === 11.4) {
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].stage =
-          "Winter19";
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-          "";
-      } else {
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].stage =
-          "season11";
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-          "";
-      }
-    } else if (version.season === 12) {
-      content.dynamicbackgrounds.backgrounds.backgrounds[0].stage = "season12";
-      content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-        "";
-    } else if (version.season === 13) {
-      content.dynamicbackgrounds.backgrounds.backgrounds[0].stage = "season13";
-      content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-        "";
-    } else if (version.season === 14) {
-      content.dynamicbackgrounds.backgrounds.backgrounds[0].stage = "season14";
-      content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-        "";
-    } else if (version.season === 15) {
-      content.dynamicbackgrounds.backgrounds.backgrounds[0].stage = "season15";
-      content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-        "";
+    applySeasonSpecificBackground(content, version, userAgent);
 
-      if (version.build === 15.1) {
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].stage =
-          "season15xmas";
-        content.dynamicbackgrounds.backgrounds.backgrounds[1].stage =
-          "XmasStore2020";
-      }
-    } else if (version.season === 16) {
-      content.dynamicbackgrounds.backgrounds.backgrounds[0].stage = "season16";
-      content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-        "";
-    } else if (version.season === 17) {
-      content.dynamicbackgrounds.backgrounds.backgrounds[0].stage = "season17";
-      content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-        "";
-    } else if (version.season === 18) {
-      content.dynamicbackgrounds.backgrounds.backgrounds[0].stage = "season18";
-      content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-        "";
-    } else if (version.season === 19) {
-      if (version.build === 19.01) {
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].stage =
-          "winter2021";
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-          "https://cdn2.unrealengine.com/t-bp19-lobby-xmas-2048x1024-f85d2684b4af.png";
-      } else {
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].stage =
-          "season19";
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-          "";
-      }
-    } else if (version.season === 20) {
-      if (version.build === 20.4) {
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].stage =
-          "season20";
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-          "https://cdn2.unrealengine.com/t-bp20-40-armadillo-glowup-lobby-2048x2048-2048x2048-3b83b887cc7f.jpg";
-      } else {
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].stage =
-          "season20";
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-          "https://cdn2.unrealengine.com/s20-landscapev4-2048x1024-2494a103ae6c.png";
-      }
-    } else if (version.season === 21) {
-      if (version.build === 21.3) {
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].stage =
-          "season2130";
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-          "https://cdn2.unrealengine.com/nss-lobbybackground-2048x1024-f74a14565061.jpg";
-      } else {
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].stage =
-          "season2100";
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-          "https://cdn2.unrealengine.com/s21-lobby-background-2048x1024-2e7112b25dc3.jpg";
-      }
-    } else if (version.season === 22) {
-      content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-        "https://cdn2.unrealengine.com/t-bp22-lobby-square-2048x2048-2048x2048-e4e90c6e8018.jpg";
-    } else if (version.season === 23) {
-      if (version.build === 23.1) {
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-          "https://cdn2.unrealengine.com/t-bp23-winterfest-lobby-square-2048x2048-2048x2048-277a476e5ca6.png";
-      } else {
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-          "https://cdn2.unrealengine.com/t-bp23-lobby-2048x1024-2048x1024-26f2c1b27f63.png";
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].stage =
-          "defaultnotris";
-      }
-    } else if (version.season === 24) {
-      content.dynamicbackgrounds.backgrounds.backgrounds[0].stage =
-        "defaultnotris";
-      content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-        "https://static.wikia.nocookie.net/fortnite/images/e/e7/Chapter_4_Season_2_-_Lobby_Background_-_Fortnite.png";
-    } else if (version.season === 25) {
-      content.dynamicbackgrounds.backgrounds.backgrounds[0].stage =
-        "defaultnotris";
-      content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-        "https://static.wikia.nocookie.net/fortnite/images/c/ca/Chapter_4_Season_3_-_Lobby_Background_-_Fortnite.png";
-    } else if (version.season === 26) {
-      if (version.build === 26.3) {
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].stage =
-          "season2630";
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-          "https://cdn2.unrealengine.com/s26-lobby-timemachine-final-2560x1440-a3ce0018e3fa.jpg";
-      } else {
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].stage =
-          "season2600";
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-          "https://cdn2.unrealengine.com/0814-ch4s4-lobby-2048x1024-2048x1024-e3c2cf8d342d.png";
-      }
-    } else if (version.season === 27) {
-      if (version.build === 27.11) {
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].stage =
-          "defaultnotris";
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-          "https://cdn2.unrealengine.com/durianlobby2-4096x2048-242a51b6a8ee.jpg";
-      } else {
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].stage =
-          "season2700";
-      }
-    } else if (version.season === 28) {
-      if (version.build === 28.2) {
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].stage =
-          "defaultnotris";
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-          "https://cdn2.unrealengine.com/s28-tmnt-lobby-4096x2048-e6c06a310c05.jpg";
-      } else {
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-          "https://cdn2.unrealengine.com/ch5s1-lobbybg-3640x2048-0974e0c3333c.jpg";
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].stage =
-          "defaultnotris";
-      }
-    } else if (version.season === 29) {
-      if (version.build === 29.2) {
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].stage =
-          "defaultnotris";
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-          "https://cdn2.unrealengine.com/iceberg-lobby-3840x2160-217bb6ea8af9.jpg";
-      } else if (version.build === 29.4) {
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].stage =
-          "defaultnotris";
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-          "https://cdn2.unrealengine.com/mkart-2940-sw-fnbr-lobby-3840x2160-4f1f1486a54a.jpg";
-      } else {
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].stage =
-          "defaultnotris";
-        content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-          "https://cdn2.unrealengine.com/br-lobby-ch5s2-4096x2304-a0879ccdaafc.jpg";
-      }
-    } else if (version.season === 29) {
-      content.dynamicbackgrounds.backgrounds.backgrounds[0].stage =
-        "season3100";
-      content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-        "https://cdn2.unrealengine.com/ch5s4-lobbybg-final-2136x1202-e5885322faf1.jpg";
-    } else {
-      content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage =
-        "";
-      content.dynamicbackgrounds.backgrounds.backgrounds[0].backgroundimage;
-      content.dynamicbackgrounds.backgrounds.backgrounds[0].stage = "";
-      content.dynamicbackgrounds.backgrounds.backgrounds[0].stage;
-    }
-
-    return c.json(content);
+    return sendCmsResponse(c, content, version, userAgent, "live-fortnite-game");
   });
 
   app.get("/content/api/pages/*", async (c) => {
+    const version = getVersion(c);
+    const userAgent = c.req.header("user-agent") ?? "";
+    const season = getResolvedSeason(version, userAgent);
+    logger.debug(
+      `ContentPages request UA="${userAgent}" season=${version.season} build=${version.build} CL=${version.CL ?? "unknown"}`
+    );
+
+    if (season > 0 && season <= 6) {
+      return sendCmsResponse(c, cloneCmsContent(legacyCms), version, userAgent, "wildcard-legacy-s6");
+    }
+    if (season === 7) {
+      const content = cloneCmsContent(s7ContentPages);
+      applySeasonSpecificBackground(content, version, userAgent);
+      return sendCmsResponse(c, content, version, userAgent, "wildcard-contentpages-s7");
+    }
+    if (season === 10) {
+      const content = cloneCmsContent(s10ContentPages);
+      applySeasonSpecificBackground(content, version, userAgent);
+      return sendCmsResponse(c, content, version, userAgent, "wildcard-contentpages-s10");
+    }
+    if (season === 15) {
+      const content = cloneCmsContent(s15ContentPages);
+      applySeasonSpecificBackground(content, version, userAgent);
+      return sendCmsResponse(c, content, version, userAgent, "wildcard-contentpages-s15");
+    }
+
     const game: any = await axios.get(
       "https://fortnitecontent-website-prod07.ol.epicgames.com/content/api/pages/fortnite-game"
     );
-    return c.json(game.data);
+    const content: any = game.data;
+    applySeasonSpecificBackground(content, version, userAgent);
+    return sendCmsResponse(c, content, version, userAgent, "wildcard-live");
   });
   // credits to neonite / hybridfnbr
   app.post("/api/v1/fortnite-br/surfaces/*/target", async (c) => {
+    const version = getVersion(c);
+    const userAgent = c.req.header("user-agent") ?? "";
+    const season = getResolvedSeason(version, userAgent);
+
+    if (season === 15) {
+      const motd = JSON.parse(JSON.stringify(s15Motd));
+      const body = await c.req.json().catch(() => ({} as any));
+      const tags = body?.tags ?? body?.parameters?.tags ?? [];
+
+      if (Array.isArray(tags) && tags.length > 0) {
+        motd.contentItems.forEach((item: any) => {
+          item.placements = [];
+          tags.forEach((tag: string) => {
+            item.placements.push({
+              trackingId: "atlas-tracking",
+              tag,
+              position: 0,
+            });
+          });
+        });
+      }
+
+      return c.json(motd);
+    }
+
     return c.json({
       contentType: "collection",
       contentId: "fortnite-br-br-motd-collection",

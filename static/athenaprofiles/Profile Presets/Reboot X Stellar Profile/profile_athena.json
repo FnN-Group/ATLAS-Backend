@@ -8,7 +8,7 @@
   "profileId": "athena",
   "version": "no_version",
   "items": {
-    "lawin-loadout": {
+    "atlas-loadout": {
       "templateId": "CosmeticLocker:cosmeticlocker_athena",
       "attributes": {
         "locker_slots_data": {
@@ -116,7 +116,7 @@
       },
       "quantity": 1
     },
-    "lawin-characterloadout": {
+    "atlas-characterloadout": {
       "templateId": "CosmeticLoadout:LoadoutSchema_Character",
       "attributes": {
         "slots": [],
@@ -124,7 +124,7 @@
       },
       "quantity": 1
     },
-    "lawin-emotesloadout": {
+    "atlas-emotesloadout": {
       "templateId": "CosmeticLoadout:LoadoutSchema_Emotes",
       "attributes": {
         "slots": [],
@@ -132,7 +132,7 @@
       },
       "quantity": 1
     },
-    "lawin-platformloadout": {
+    "atlas-platformloadout": {
       "templateId": "CosmeticLoadout:LoadoutSchema_Platform",
       "attributes": {
         "slots": [
@@ -153,7 +153,7 @@
       },
       "quantity": 1
     },
-    "lawin-wrapsloadout": {
+    "atlas-wrapsloadout": {
       "templateId": "CosmeticLoadout:LoadoutSchema_Wraps",
       "attributes": {
         "slots": [],
@@ -161,7 +161,7 @@
       },
       "quantity": 1
     },
-    "lawin-vehicleloadout": {
+    "atlas-vehicleloadout": {
       "templateId": "CosmeticLoadout:LoadoutSchema_Vehicle",
       "attributes": {
         "slots": [],
@@ -232817,23 +232817,23 @@
       "past_seasons": [],
       "season_match_boost": 0,
       "loadouts": [
-        "lawin-loadout"
+        "atlas-loadout"
       ],
       "loadout_presets": {
         "CosmeticLoadout:LoadoutSchema_Character": {
-          "0": "lawin-characterloadout"
+          "0": "atlas-characterloadout"
         },
         "CosmeticLoadout:LoadoutSchema_Emotes": {
-          "0": "lawin-emotesloadout"
+          "0": "atlas-emotesloadout"
         },
         "CosmeticLoadout:LoadoutSchema_Platform": {
-          "0": "lawin-platformloadout"
+          "0": "atlas-platformloadout"
         },
         "CosmeticLoadout:LoadoutSchema_Wraps": {
-          "0": "lawin-wrapsloadout"
+          "0": "atlas-wrapsloadout"
         },
         "CosmeticLoadout:LoadoutSchema_Vehicle": {
-          "0": "lawin-vehicleloadout"
+          "0": "atlas-vehicleloadout"
         }
       },
       "favorite_victorypose": "",
@@ -232876,7 +232876,7 @@
         ""
       ],
       "inventory_limit_bonus": 0,
-      "last_applied_loadout": "lawin-loadout",
+      "last_applied_loadout": "atlas-loadout",
       "favorite_skydivecontrail": "",
       "favorite_pickaxe": "AthenaPickaxe:DefaultPickaxe",
       "favorite_glider": "AthenaGlider:DefaultGlider",

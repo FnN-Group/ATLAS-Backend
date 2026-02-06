@@ -1,11 +1,81 @@
 import app from "..";
-import axios from "axios";
-import getVersion from "../utils/handlers/getVersion";
-import path from "path";
-import fs from "fs";
 import { Atlas } from "../utils/handlers/errors";
+import logger from "../utils/logger/logger";
 
 const keychain = await Bun.file("static/shop/keychain.json").json();
+const sourceCatalog = await Bun.file("static/shop/v1.json").json();
+
+function deepClone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function dedupeCatalogEntries(entries: any[]) {
+  const seen = new Set<string>();
+  const deduped: any[] = [];
+
+  for (const entry of entries) {
+    const offerId =
+      typeof entry?.offerId === "string" && entry.offerId.length > 0
+        ? entry.offerId
+        : JSON.stringify(entry?.itemGrants ?? entry ?? {});
+    if (seen.has(offerId)) {
+      continue;
+    }
+    seen.add(offerId);
+    deduped.push(entry);
+  }
+
+  return deduped;
+}
+
+function normalizeSharedCatalog(catalog: any) {
+  const normalized = deepClone(catalog ?? {});
+  const storefronts = Array.isArray(normalized.storefronts)
+    ? normalized.storefronts
+    : [];
+
+  const findEntries = (names: string[]) => {
+    for (const name of names) {
+      const storefront = storefronts.find((entry: any) => entry?.name === name);
+      if (storefront && Array.isArray(storefront.catalogEntries) && storefront.catalogEntries.length > 0) {
+        return deepClone(storefront.catalogEntries);
+      }
+    }
+    return [];
+  };
+
+  const dailyEntries = dedupeCatalogEntries(
+    findEntries(["BRDailyStorefront", "BRSpecialDaily"])
+  );
+  const featuredEntries = dedupeCatalogEntries(
+    findEntries(["BRWeeklyStorefront", "BRSpecialFeatured"])
+  );
+
+  const upsertStorefront = (name: string, entries: any[]) => {
+    const existing = storefronts.find((entry: any) => entry?.name === name);
+    if (existing) {
+      existing.catalogEntries = deepClone(entries);
+      return;
+    }
+    storefronts.push({
+      name,
+      catalogEntries: deepClone(entries),
+    });
+  };
+
+  upsertStorefront("BRDailyStorefront", dailyEntries);
+  upsertStorefront("BRWeeklyStorefront", featuredEntries);
+  upsertStorefront("BRSeasonalStorefront", []);
+  upsertStorefront("BRSpecialDaily", []);
+  upsertStorefront("BRSpecialFeatured", []);
+
+  normalized.storefronts = storefronts;
+  normalized.expiration = "9999-12-31T23:59:59.999Z";
+
+  return normalized;
+}
+
+const sharedCatalog = normalizeSharedCatalog(sourceCatalog);
 
 export default function () {
   app.get("/fortnite/api/storefront/v2/keychain", async (c) => {
@@ -35,25 +105,20 @@ export default function () {
     const useragent: any = c.req.header("user-agent");
     if (!useragent) return c.json(Atlas.internal.invalidUserAgent);
 
-    const v1 = JSON.parse(
-      fs.readFileSync(path.join(__dirname, "../../static/shop/v1.json"), "utf8"),
-    ); // to build 26.2
-    const v2 = JSON.parse(
-      fs.readFileSync(path.join(__dirname, "../../static/shop/v2.json"), "utf8"),
-    ); // to build 30.00
-    const v3 = JSON.parse(
-      fs.readFileSync(path.join(__dirname, "../../static/shop/v3.json"), "utf8"),
-    ); // latest
+    const totalEntries = Array.isArray(sharedCatalog.storefronts)
+      ? sharedCatalog.storefronts.reduce(
+          (count: number, storefront: any) =>
+            count +
+            (Array.isArray(storefront?.catalogEntries)
+              ? storefront.catalogEntries.length
+              : 0),
+          0
+        )
+      : 0;
+    logger.debug(
+      `[SHOP] shared catalog served storefronts=${sharedCatalog.storefronts?.length ?? 0} entries=${totalEntries}`
+    );
 
-    const ver = getVersion(c);
-
-    switch (true) {
-      case ver.build >= 30.1:
-        return c.json(v3);
-      case ver.build >= 26.3:
-        return c.json(v2);
-      default:
-        return c.json(v1);
-    }
+    return c.json(sharedCatalog);
   });
 }
