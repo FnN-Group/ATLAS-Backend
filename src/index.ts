@@ -1540,7 +1540,8 @@ async function customCosmeticProfilesMenu() {
         { id: '1', name: 'Latest Profile', folder: 'Latest Profile', version: '(v39+)' },
         { id: '2', name: 'Reboot X Retrac Profile', folder: 'Reboot X Retrac Profile', version: '(v14.40)' },
         { id: '3', name: 'Reboot X Stellar Profile', folder: 'Reboot X Stellar Profile', version: '(v12.41)' },
-        { id: '4', name: 'Reboot X Tozo Profile', folder: 'Reboot X Tozo Profile', version: '(v12.41)' }
+        { id: '4', name: 'Reboot X Tozo Profile', folder: 'Reboot X Tozo Profile', version: '(v12.41)' },
+        { id: '5', name: 'Reboot X Pulse Profile', folder: 'Reboot X Pulse Profile', version: '(v9.10)' }
       ];
       
       // Display preset options
@@ -1554,11 +1555,11 @@ async function customCosmeticProfilesMenu() {
       const response = await prompts({
         type: 'text',
         name: 'choice',
-        message: '\x1b[32mSelect a preset to apply (1/2/3/4/BACK):\x1b[0m',
+        message: '\x1b[32mSelect a preset to apply (1/2/3/4/5/BACK):\x1b[0m',
         validate: (value: string) => {
           if (value.toLowerCase() === 'back') return true;
           const num = parseInt(value);
-          return (num >= 1 && num <= 4) ? true : 'Please enter 1, 2, 3, 4, or BACK';
+          return (num >= 1 && num <= 5) ? true : 'Please enter 1, 2, 3, 4, 5, or BACK';
         }
       });
       

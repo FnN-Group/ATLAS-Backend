@@ -8009,12 +8009,23 @@ class ProfileService {
         ),
       );
     }
-    presets.sort((a, b) => a.name.compareTo(b.name));
+    presets.sort((a, b) {
+      final aBottomPinned = _isBottomPinnedPresetFolder(a.folder);
+      final bBottomPinned = _isBottomPinnedPresetFolder(b.folder);
+      if (aBottomPinned != bBottomPinned) {
+        return aBottomPinned ? 1 : -1;
+      }
+      return a.name.compareTo(b.name);
+    });
     return presets;
   }
 
   static (String, String?) _presetLabelParts(String folderName) {
     switch (folderName.trim().toLowerCase()) {
+      case 'reboot x pulse profile':
+      case 'reboot x pulse one profile':
+      case 'reboot x pulse one':
+        return ('Reboot X Pulse', 'v9.10');
       case 'reboot x stellar profile':
         return ('Reboot X Stellar', 'v12.41');
       case 'reboot x tozo profile':
@@ -8025,6 +8036,17 @@ class ProfileService {
         return ('Latest', 'v39+');
       default:
         return (folderName, null);
+    }
+  }
+
+  static bool _isBottomPinnedPresetFolder(String folderName) {
+    switch (folderName.trim().toLowerCase()) {
+      case 'reboot x pulse profile':
+      case 'reboot x pulse one profile':
+      case 'reboot x pulse one':
+        return true;
+      default:
+        return false;
     }
   }
 
@@ -10566,6 +10588,7 @@ Future<String> _readBackendVersionFromCandidates() async {
       // Continue to the next candidate.
     }
   }
+
   return '';
 }
 
