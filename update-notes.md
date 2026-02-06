@@ -17,6 +17,7 @@ Markdown Quick Key
 - DataTable section in Modifcations is now fully available with completed features
 - Profile Creation was added with a button top right of the Profiles menu
 - Added Level and Currency Editor for Users (Level Partially Working)
+- Added Reboot X Pulse Preset (v9.10)
 
 # Fixes
 - FIXED CRASHES on certain versions (All seasons should be functional now)

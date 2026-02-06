@@ -11,21 +11,21 @@
         "_type": "CommonUI Simple Message Base",
         "title": "ATLAS",
         "body": {
-          "ar": "Ø§Ù†Ø¶Ù… Ø¥Ù„Ù‰ Ø®Ø§Ø¯Ù… Ø§Ù„Ø¯ÙŠØ³ÙƒÙˆØ±Ø¯ Ø§Ù„Ø®Ø§Øµ Ø¨Ù†Ø§: https://discord.gg/G9MAF77V7R\nÙŠÙˆØªÙŠÙˆØ¨: ATLAS\nØªÙˆÙŠØªØ±: @cipherfps",
-          "de": "Tritt unserem Discord bei: https://discord.gg/G9MAF77V7R\nYouTube: ATLAS\nTwitter: @cipherfps",
-          "en": "Join our Discord: https://discord.gg/G9MAF77V7R\nYouTube: ATLAS\nTwitter: @cipherfps",
-          "es": "Ãšnete a nuestro Discord: https://discord.gg/G9MAF77V7R\nYouTube: ATLAS\nTwitter: @cipherfps",
-          "es-419": "Ãšnete a nuestro Discord: https://discord.gg/G9MAF77V7R\nYouTube: ATLAS\nTwitter: @cipherfps",
-          "fr": "Rejoignez notre Discord : https://discord.gg/G9MAF77V7R\nYouTube : ATLAS\nTwitter : @cipherfps",
-          "it": "Unisciti al nostro Discord: https://discord.gg/G9MAF77V7R\nYouTube: ATLAS\nTwitter: @cipherfps",
-          "ja": "ç§ãŸã¡ã®Discordã«å‚åŠ ã—ã¦ãã ã•ã„: https://discord.gg/G9MAF77V7R\nYouTube: ATLAS\nTwitter: @cipherfps",
-          "ko": "ìš°ë¦¬ì˜ Discordì— ì°¸ì—¬í•˜ì„¸ìš”: https://discord.gg/G9MAF77V7R\nYouTube: ATLAS\nTwitter: @cipherfps",
-          "pl": "DoÅ‚Ä…cz do naszego Discorda: https://discord.gg/G9MAF77V7R\nYouTube: ATLAS\nTwitter: @cipherfps",
-          "pt-BR": "Junte-se ao nosso Discord: https://discord.gg/G9MAF77V7R\nYouTube: ATLAS\nTwitter: @cipherfps",
-          "ru": "ÐŸÑ€Ð¸ÑÐ¾ÐµÐ´Ð¸Ð½ÑÐ¹Ñ‚ÐµÑÑŒ Ðº Ð½Ð°ÑˆÐµÐ¼Ñƒ Discord: https://discord.gg/G9MAF77V7R\nYouTube: ATLAS\nTwitter: @cipherfps",
-          "tr": "Discord sunucumuza katÄ±l: https://discord.gg/G9MAF77V7R\nYouTube: ATLAS\nTwitter: @cipherfps",
-          "zh-CN": "åŠ å…¥æˆ‘ä»¬çš„Discord: https://discord.gg/G9MAF77V7R\nYouTube: ATLAS\nTwitter: @cipherfps",
-          "zh-Hant": "åŠ å…¥æˆ‘å€‘çš„Discord: https://discord.gg/G9MAF77V7R\nYouTube: ATLAS\nTwitter: @cipherfps"
+          "ar": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R",
+          "de": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R",
+          "en": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R",
+          "es": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R",
+          "es-419": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R",
+          "fr": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R",
+          "it": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R",
+          "ja": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R",
+          "ko": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R",
+          "pl": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R",
+          "pt-BR": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R",
+          "ru": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R",
+          "tr": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R",
+          "zh-CN": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R",
+          "zh-Hant": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R"
         }
       }
     },
@@ -222,7 +222,7 @@
   },
   "savetheworldnews": {
     "news": {
-      "_type": "Battle Royale News",
+      "_type": "Save the World News",
       "messages": [
         {
           "image": "https://fortnite-public-service-prod11.ol.epicgames.com/images/discord.png",
@@ -1545,74 +1545,43 @@
   "emergencynotice": {
     "news": {
       "_type": "Battle Royale News",
+      "platform_messages": [],
       "messages": [
         {
-          "hidden": false,
           "_type": "CommonUI Simple Message Base",
           "title": "ATLAS",
-          "body": {
-            "ar": "Ø§Ù„Ø®Ø§Ø¯Ù… ØªÙ… Ø¥Ù†Ø´Ø§Ø¤Ù‡ Ø¨ÙˆØ§Ø³Ø·Ø© ATLAS (ØªÙˆÙŠØªØ±: @cipherfps)\nØ¯ÙŠØ³ÙƒÙˆØ±Ø¯: https://discord.gg/G9MAF77V7R",
-            "de": "Server erstellt von ATLAS (Twitter: @cipherfps)\nDiscord: https://discord.gg/G9MAF77V7R",
-            "en": "Server created by ATLAS (Twitter: @cipherfps)\nDiscord: https://discord.gg/G9MAF77V7R",
-            "es": "Servidor creado por ATLAS (Twitter: @cipherfps)\nDiscord: https://discord.gg/G9MAF77V7R",
-            "es-419": "Servidor creado por ATLAS (Twitter: @cipherfps)\nDiscord: https://discord.gg/G9MAF77V7R",
-            "fr": "Serveur crÃ©Ã© par ATLAS (Twitter : @cipherfps)\nDiscord : https://discord.gg/G9MAF77V7R",
-            "it": "Server creato da ATLAS (Twitter: @cipherfps)\nDiscord: https://discord.gg/G9MAF77V7R",
-            "ja": "ATLAS ã«ã‚ˆã£ã¦ä½œæˆã•ã‚ŒãŸã‚µãƒ¼ãƒãƒ¼ (Twitter: @cipherfps)\nDiscord: https://discord.gg/G9MAF77V7R",
-            "ko": "ATLASì´ ë§Œë“  ì„œë²„ (Twitter: @cipherfps)\nDiscord: https://discord.gg/G9MAF77V7R",
-            "pl": "Serwer stworzony przez ATLASa (Twitter: @cipherfps)\nDiscord: https://discord.gg/G9MAF77V7R",
-            "pt-BR": "Servidor criado por ATLAS (Twitter: @cipherfps)\nDiscord: https://discord.gg/G9MAF77V7R",
-            "ru": "Ð¡ÐµÑ€Ð²ÐµÑ€ ÑÐ¾Ð·Ð´Ð°Ð½ ATLAS'Ð¾Ð¼ (Ð¢Ð²Ð¸Ñ‚Ñ‚ÐµÑ€: @cipherfps)\nDiscord: https://discord.gg/G9MAF77V7R",
-            "tr": "ATLAS tarafÄ±ndan oluÅŸturulan sunucu (Twitter: @cipherfps)\nDiscord: https://discord.gg/G9MAF77V7R",
-            "zh-CN": "ç”± ATLAS åˆ›å»ºçš„æœåŠ¡å™¨ (Twitter: @cipherfps)\nDiscord: https://discord.gg/G9MAF77V7R",
-            "zh-Hant": "ç”± ATLAS å‰µå»ºçš„ä¼ºæœå™¨ (Twitter: @cipherfps)\nDiscord: https://discord.gg/G9MAF77V7R"
-          },
-          "spotlight": true
+          "body": "@cipherfps\nDiscord: https://discord.gg/G9MAF77V7R",
+          "hidden": false,
+          "spotlight": false,
+          "subgame": "br"
         }
       ]
     },
     "_title": "emergencynotice",
     "_noIndex": false,
-    "alwaysShow": false,
-    "_activeDate": "2018-08-06T19:00:26.217Z",
-    "lastModified": "2019-10-29T22:32:52.686Z",
+    "alwaysShow": true,
+    "_activeDate": "1970-01-01T00:00:00.000Z",
+    "lastModified": "9999-12-31T23:59:59.999Z",
     "_locale": "en-US"
   },
   "emergencynoticev2": {
     "jcr:isCheckedOut": true,
     "_title": "emergencynoticev2",
     "_noIndex": false,
-    "jcr:baseVersion": "a7ca237317f1e771e921e2-7f15-4485-b2e2-553b809fa363",
     "emergencynotices": {
       "_type": "Emergency Notices",
       "emergencynotices": [
         {
-          "gamemodes": [],
-          "hidden": false,
           "_type": "CommonUI Emergency Notice Base",
           "title": "ATLAS",
-          "body": {
-            "ar": "Ø§Ù„Ø®Ø§Ø¯Ù… ØªÙ… Ø¥Ù†Ø´Ø§Ø¤Ù‡ Ø¨ÙˆØ§Ø³Ø·Ø© ATLAS (ØªÙˆÙŠØªØ±: @cipherfps)\nØ¯ÙŠØ³ÙƒÙˆØ±Ø¯: https://discord.gg/G9MAF77V7R",
-            "de": "Server erstellt von ATLAS (Twitter: @cipherfps)\nDiscord: https://discord.gg/G9MAF77V7R",
-            "en": "Server created by ATLAS (Twitter: @cipherfps)\nDiscord: https://discord.gg/G9MAF77V7R",
-            "es": "Servidor creado por ATLAS (Twitter: @cipherfps)\nDiscord: https://discord.gg/G9MAF77V7R",
-            "es-419": "Servidor creado por ATLAS (Twitter: @cipherfps)\nDiscord: https://discord.gg/G9MAF77V7R",
-            "fr": "Serveur crÃ©Ã© par ATLAS (Twitter : @cipherfps)\nDiscord : https://discord.gg/G9MAF77V7R",
-            "it": "Server creato da ATLAS (Twitter: @cipherfps)\nDiscord: https://discord.gg/G9MAF77V7R",
-            "ja": "ATLAS ã«ã‚ˆã£ã¦ä½œæˆã•ã‚ŒãŸã‚µãƒ¼ãƒãƒ¼ (Twitter: @cipherfps)\nDiscord: https://discord.gg/G9MAF77V7R",
-            "ko": "ATLASì´ ë§Œë“  ì„œë²„ (Twitter: @cipherfps)\nDiscord: https://discord.gg/G9MAF77V7R",
-            "pl": "Serwer stworzony przez ATLASa (Twitter: @cipherfps)\nDiscord: https://discord.gg/G9MAF77V7R",
-            "pt-BR": "Servidor criado por ATLAS (Twitter: @cipherfps)\nDiscord: https://discord.gg/G9MAF77V7R",
-            "ru": "Ð¡ÐµÑ€Ð²ÐµÑ€ ÑÐ¾Ð·Ð´Ð°Ð½ ATLAS'Ð¾Ð¼ (Ð¢Ð²Ð¸Ñ‚Ñ‚ÐµÑ€: @cipherfps)\nDiscord: https://discord.gg/G9MAF77V7R",
-            "tr": "ATLAS tarafÄ±ndan oluÅŸturulan sunucu (Twitter: @cipherfps)\nDiscord: https://discord.gg/G9MAF77V7R",
-            "zh-CN": "ç”± ATLAS åˆ›å»ºçš„æœåŠ¡å™¨ (Twitter: @cipherfps)\nDiscord: https://discord.gg/G9MAF77V7R",
-            "zh-Hant": "ç”± ATLAS å‰µå»ºçš„ä¼ºæœå™¨ (Twitter: @cipherfps)\nDiscord: https://discord.gg/G9MAF77V7R"
-          }
+          "body": "@cipherfps\nDiscord: https://discord.gg/G9MAF77V7R",
+          "hidden": false,
+          "gamemodes": []
         }
       ]
     },
-    "_activeDate": "2018-08-06T19:00:26.217Z",
-    "lastModified": "2021-12-01T15:55:56.012Z",
+    "_activeDate": "1970-01-01T00:00:00.000Z",
+    "lastModified": "9999-12-31T23:59:59.999Z",
     "_locale": "en-US"
   },
   "koreancafe": {
@@ -2064,105 +2033,46 @@
   "battleroyalenews": {
     "news": {
       "_type": "Battle Royale News",
-      "motds": [
-        {
-          "entryType": "Website",
-          "image": "https://fortnite-public-service-prod11.ol.epicgames.com/images/motd.png",
-          "tileImage": "https://fortnite-public-service-prod11.ol.epicgames.com/images/motd-s.png",
-          "videoMute": false,
-          "hidden": false,
-          "tabTitleOverride": "ATLAS",
-          "_type": "CommonUI Simple Message MOTD",
-          "title": {
-            "ar": "Ù…Ø±Ø­Ø¨Ù‹Ø§ Ø¨Ùƒ ÙÙŠ ATLAS!",
-            "en": "Welcome to ATLAS!",
-            "de": "Willkommen bei ATLAS!",
-            "es": "Â¡Bienvenidos a ATLAS!",
-            "es-419": "Â¡Bienvenidos a ATLAS!",
-            "fr": "Bienvenue sur ATLAS !",
-            "it": "Benvenuto in ATLAS!",
-            "ja": "ATLASã¸ã‚ˆã†ã“ãï¼",
-            "ko": "ATLASì— ì˜¤ì‹  ê²ƒì„ í™˜ì˜í•©ë‹ˆë‹¤!",
-            "pl": "Witaj w ATLASze!",
-            "pt-BR": "Bem-vindo ao ATLAS!",
-            "ru": "Ð”Ð¾Ð±Ñ€Ð¾ Ð¿Ð¾Ð¶Ð°Ð»Ð¾Ð²Ð°Ñ‚ÑŒ Ð² ATLAS!",
-            "tr": "LavinServer'a HoÅŸ Geldiniz!"
-          },
-          "body": {
-            "ar": "Ø§Ø³ØªÙ…ØªØ¹ Ø¨ØªØ¬Ø±Ø¨Ø© Ù„Ø¹Ø¨ Ø±Ø§Ø¦Ø¹Ø©!",
-            "de": "GenieÃŸt ein phÃ¤nomenales Spielerlebnis!",
-            "en": "Have a phenomenal gaming experience!",
-            "es": "Â¡Disfruta de una experiencia de juego fenomenal!",
-            "es-419": "Â¡Ten una experiencia de juego espectacular!",
-            "fr": "Profitez d'une expÃ©rience de jeu incroyable !",
-            "it": "Goditi un'esperienza di gioco fenomenale!",
-            "ja": "é©šãã®ä½“é¨“ã‚’ã—ã‚ˆã†!",
-            "ko": "í™˜ìƒì ì¸ ê²Œìž„ ê²½í—˜ì„ ì¦ê¸°ì„¸ìš”!",
-            "pl": "Å»yczymy fenomenalnych wraÅ¼eÅ„ z gry!",
-            "pt-BR": "Tenha uma experiÃªncia de jogo fenomenal!",
-            "ru": "ÐÐ°ÑÐ»Ð°Ð¶Ð´Ð°Ð¹Ñ‚ÐµÑÑŒ Ð½ÐµÐ²ÐµÑ€Ð¾ÑÑ‚Ð½Ñ‹Ð¼Ð¸ Ð¸Ð³Ñ€Ð¾Ð²Ñ‹Ð¼Ð¸ Ð²Ð¿ÐµÑ‡Ð°Ñ‚Ð»ÐµÐ½Ð¸ÑÐ¼Ð¸!",
-            "tr": "MuhteÅŸem bir oyun deneyimi yaÅŸamanÄ± dileriz!"
-          },
-          "offerAction": "ShowOfferDetails",
-          "videoLoop": false,
-          "videoStreamingEnabled": false,
-          "sortingPriority": 90,
-          "websiteButtonText": "Discord",
-          "websiteURL": "https://discord.gg/G9MAF77V7R",
-          "id": "61fb3dd8-f23d-45cc-9058-058ab223ba5c",
-          "videoAutoplay": false,
-          "videoFullscreen": false,
-          "spotlight": false
-        }
-      ],
+      "platform_messages": [],
       "messages": [
         {
-          "image": "https://fortnite-public-service-prod11.ol.epicgames.com/images/discord.png",
-          "hidden": false,
           "_type": "CommonUI Simple Message Base",
-          "adspace": "DISCORD!",
-          "title": {
-            "ar": "Ø§Ù†Ø¶Ù… Ø¥Ù„Ù‰ Ø®Ø§Ø¯Ù… Discord Ø§Ù„Ø®Ø§Øµ Ø¨Ù†Ø§!",
-            "de": "Tritt unserem Discord-Server bei!",
-            "en": "Join our Discord server!",
-            "es": "Ãšnete a nuestro servidor de Discord!",
-            "es-419": "Â¡Ãšnete a nuestro servidor de Discord!",
-            "fr": "Rejoins notre serveur Discord!",
-            "it": "Unisciti al nostro server Discord!",
-            "ja": "ç§ãŸã¡ã®Discordã‚µãƒ¼ãƒãƒ¼ã«å‚åŠ ã—ã¦ãã ã•ã„!",
-            "ko": "ìš°ë¦¬ì˜ Discord ì„œë²„ì— ê°€ìž…í•˜ì„¸ìš”!",
-            "pl": "DoÅ‚Ä…cz do naszego serwera Discord!",
-            "pt-BR": "Junte-se ao nosso servidor Discord!",
-            "ru": "ÐŸÑ€Ð¸ÑÐ¾ÐµÐ´Ð¸Ð½ÑÐ¹Ñ‚ÐµÑÑŒ Ðº Ð½Ð°ÑˆÐµÐ¼Ñƒ ÑÐµÑ€Ð²ÐµÑ€Ñƒ Discord!",
-            "tr": "Discord sunucumuza katÄ±l!",
-            "zh-CN": "åŠ å…¥æˆ‘ä»¬çš„DiscordæœåŠ¡å™¨!",
-            "zh-Hant": "åŠ å…¥æˆ‘å€‘çš„Discordä¼ºæœå™¨!"
-          },
-          "body": "https://discord.gg/G9MAF77V7R",
+          "title": "ATLAS",
+          "body": "@cipherfps\nDiscord: https://discord.gg/G9MAF77V7R",
+          "image": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/images/ATLAS-Backend-Banner.png",
+          "hidden": false,
           "spotlight": false
         },
         {
-          "image": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/images/ATLAS-Backend-Banner.png",
-          "hidden": false,
           "_type": "CommonUI Simple Message Base",
-          "adspace": "ENJOY!",
+          "title": "Join our Discord server!",
+          "body": "https://discord.gg/G9MAF77V7R",
+          "image": "https://fortnite-public-service-prod11.ol.epicgames.com/images/discord.png",
+          "hidden": false,
+          "spotlight": false,
+          "adspace": "DISCORD!"
+        }
+      ],
+      "motds": [
+        {
+          "_type": "CommonUI Simple Message MOTD",
+          "id": "AtlasNewsBRS10",
+          "entryType": "Website",
           "title": "ATLAS",
-          "body": {
-            "ar": "Ø§Ø³ØªÙ…ØªØ¹ Ø¨ØªØ¬Ø±Ø¨Ø© Ù„Ø¹Ø¨ Ø±Ø§Ø¦Ø¹Ø©!",
-            "de": "GenieÃŸt ein phÃ¤nomenales Spielerlebnis!",
-            "en": "Have a phenomenal gaming experience!",
-            "es": "Â¡Disfruta de una experiencia de juego fenomenal!",
-            "es-419": "Â¡Ten una experiencia de juego espectacular!",
-            "fr": "Profitez d'une expÃ©rience de jeu incroyable !",
-            "it": "Goditi un'esperienza di gioco fenomenale!",
-            "ja": "é©šãã®ä½“é¨“ã‚’ã—ã‚ˆã†!",
-            "ko": "í™˜ìƒì ì¸ ê²Œìž„ ê²½í—˜ì„ ì¦ê¸°ì„¸ìš”!",
-            "pl": "Å»yczymy fenomenalnych wraÅ¼eÅ„ z gry!",
-            "pt-BR": "Tenha uma experiÃªncia de jogo fenomenal!",
-            "ru": "ÐÐ°ÑÐ»Ð°Ð¶Ð´Ð°Ð¹Ñ‚ÐµÑÑŒ Ð½ÐµÐ²ÐµÑ€Ð¾ÑÑ‚Ð½Ñ‹Ð¼Ð¸ Ð¸Ð³Ñ€Ð¾Ð²Ñ‹Ð¼Ð¸ Ð²Ð¿ÐµÑ‡Ð°Ñ‚Ð»ÐµÐ½Ð¸ÑÐ¼Ð¸!",
-            "tr": "MuhteÅŸem bir oyun deneyimi yaÅŸamanÄ± dileriz!"
-          },
-          "spotlight": false
+          "body": "@cipherfps\nDiscord: https://discord.gg/G9MAF77V7R",
+          "tabTitleOverride": "ATLAS",
+          "sortingPriority": 90,
+          "image": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/images/ATLAS-Backend-Banner.png",
+          "tileImage": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/images/ATLAS-Backend-Banner-Slim.png",
+          "hidden": false,
+          "spotlight": false,
+          "videoMute": false,
+          "videoLoop": false,
+          "videoStreamingEnabled": false,
+          "videoAutoplay": false,
+          "videoFullscreen": false,
+          "websiteButtonText": "Discord",
+          "websiteURL": "https://discord.gg/G9MAF77V7R"
         }
       ]
     },
@@ -2170,73 +2080,45 @@
     "header": "",
     "style": "SpecialEvent",
     "_noIndex": false,
-    "alwaysShow": false,
-    "_activeDate": "2018-08-17T16:00:00.000Z",
-    "lastModified": "2019-10-31T20:29:39.334Z",
+    "alwaysShow": true,
+    "_activeDate": "1970-01-01T00:00:00.000Z",
+    "lastModified": "9999-12-31T23:59:59.999Z",
     "_locale": "en-US"
   },
   "battleroyalenewsv2": {
     "news": {
+      "_type": "Battle Royale News v2",
+      "platform_messages": [],
       "motds": [
         {
+          "_type": "CommonUI Simple Message MOTD",
+          "id": "AtlasNewsBRv2S10",
           "entryType": "Website",
+          "title": "ATLAS",
+          "body": "@cipherfps\nDiscord: https://discord.gg/G9MAF77V7R",
+          "tabTitleOverride": "ATLAS",
+          "sortingPriority": 90,
           "image": "https://fortnite-public-service-prod11.ol.epicgames.com/images/motd.png",
           "tileImage": "https://fortnite-public-service-prod11.ol.epicgames.com/images/motd-s.png",
-          "videoMute": false,
           "hidden": false,
-          "tabTitleOverride": "ATLAS",
-          "_type": "CommonUI Simple Message MOTD",
-          "title": {
-            "ar": "Ù…Ø±Ø­Ø¨Ù‹Ø§ Ø¨Ùƒ ÙÙŠ ATLAS!",
-            "en": "Welcome to ATLAS!",
-            "de": "Willkommen bei ATLAS!",
-            "es": "Â¡Bienvenidos a ATLAS!",
-            "es-419": "Â¡Bienvenidos a ATLAS!",
-            "fr": "Bienvenue sur ATLAS !",
-            "it": "Benvenuto in ATLAS!",
-            "ja": "ATLASã¸ã‚ˆã†ã“ã!",
-            "ko": "ATLASì— ì˜¤ì‹  ê²ƒì„ í™˜ì˜í•©ë‹ˆë‹¤!",
-            "pl": "Witaj w ATLASze!",
-            "pt-BR": "Bem-vindo ao ATLAS!",
-            "ru": "Ð”Ð¾Ð±Ñ€Ð¾ Ð¿Ð¾Ð¶Ð°Ð»Ð¾Ð²Ð°Ñ‚ÑŒ Ð² ATLAS!",
-            "tr": "LavinServer'a HoÅŸ Geldiniz!"
-          },
-          "body": {
-            "ar": "Ø§Ø³ØªÙ…ØªØ¹ Ø¨ØªØ¬Ø±Ø¨Ø© Ù„Ø¹Ø¨ Ø±Ø§Ø¦Ø¹Ø©!",
-            "de": "GenieÃŸt ein phÃ¤nomenales Spielerlebnis!",
-            "en": "Have a phenomenal gaming experience!",
-            "es": "Â¡Disfruta de una experiencia de juego fenomenal!",
-            "es-419": "Â¡Ten una experiencia de juego espectacular!",
-            "fr": "Profitez d'une expÃ©rience de jeu incroyable !",
-            "it": "Goditi un'esperienza di gioco fenomenale!",
-            "ja": "é©šãã®ä½“é¨“ã‚’ã—ã‚ˆã†!",
-            "ko": "í™˜ìƒì ì¸ ê²Œìž„ ê²½í—˜ì„ ì¦ê¸°ì„¸ìš”!",
-            "pl": "Å»yczymy fenomenalnych wraÅ¼eÅ„ z gry!",
-            "pt-BR": "Tenha uma experiÃªncia de jogo fenomenal!",
-            "ru": "ÐÐ°ÑÐ»Ð°Ð¶Ð´Ð°Ð¹Ñ‚ÐµÑÑŒ Ð½ÐµÐ²ÐµÑ€Ð¾ÑÑ‚Ð½Ñ‹Ð¼Ð¸ Ð¸Ð³Ñ€Ð¾Ð²Ñ‹Ð¼Ð¸ Ð²Ð¿ÐµÑ‡Ð°Ñ‚Ð»ÐµÐ½Ð¸ÑÐ¼Ð¸!",
-            "tr": "MuhteÅŸem bir oyun deneyimi yaÅŸamanÄ± dileriz!"
-          },
-          "offerAction": "ShowOfferDetails",
+          "spotlight": false,
+          "videoMute": false,
           "videoLoop": false,
           "videoStreamingEnabled": false,
-          "sortingPriority": 90,
-          "websiteButtonText": "Discord",
-          "websiteURL": "https://discord.gg/G9MAF77V7R",
-          "id": "61fb3dd8-f23d-45cc-9058-058ab223ba5c",
           "videoAutoplay": false,
           "videoFullscreen": false,
-          "spotlight": false
+          "websiteButtonText": "Discord",
+          "websiteURL": "https://discord.gg/G9MAF77V7R"
         }
-      ],
-      "_type": "Battle Royale News v2"
+      ]
     },
     "jcr:isCheckedOut": true,
     "_title": "battleroyalenewsv2",
     "_noIndex": false,
-    "alwaysShow": false,
+    "alwaysShow": true,
     "jcr:baseVersion": "a7ca237317f1e7721def6e-9f96-4c43-b429-30c794953b04",
-    "_activeDate": "2020-01-21T14:00:00.000Z",
-    "lastModified": "2021-09-14T16:31:00.888Z",
+    "_activeDate": "1970-01-01T00:00:00.000Z",
+    "lastModified": "9999-12-31T23:59:59.999Z",
     "_locale": "en-US"
   },
   "dynamicbackgrounds": {
@@ -2409,4 +2291,3 @@
   },
   "_suggestedPrefetch": []
 }
-
