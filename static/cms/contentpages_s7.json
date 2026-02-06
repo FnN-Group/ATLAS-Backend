@@ -356,7 +356,7 @@
           "hidden": false,
           "_type": "CommonUI Simple Message Base",
           "title": "ATLAS",
-          "body": "Made by cipherfps\nDiscord: https://discord.gg/G9MAF77V7R",
+          "body": "@cipherfps\nDiscord: https://discord.gg/G9MAF77V7R",
           "spotlight": true
         }
       ]
@@ -640,7 +640,7 @@
           "tabTitleOverride": "ATLAS",
           "_type": "CommonUI Simple Message MOTD",
           "title": "Welcome to ATLAS!",
-          "body": "Made by cipherfps\nDiscord: https://discord.gg/G9MAF77V7R",
+          "body": "@cipherfps\nDiscord: https://discord.gg/G9MAF77V7R",
           "offerAction": "ShowOfferDetails",
           "videoLoop": false,
           "videoStreamingEnabled": false,
@@ -669,7 +669,7 @@
           "_type": "CommonUI Simple Message Base",
           "adspace": "ENJOY!",
           "title": "ATLAS",
-          "body": "Made by cipherfps\nDiscord: https://discord.gg/G9MAF77V7R",
+          "body": "@cipherfps\nDiscord: https://discord.gg/G9MAF77V7R",
           "spotlight": false
         }
       ]
@@ -695,7 +695,7 @@
           "tabTitleOverride": "ATLAS",
           "_type": "CommonUI Simple Message MOTD",
           "title": "Welcome to ATLAS!",
-          "body": "Made by cipherfps\nDiscord: https://discord.gg/G9MAF77V7R",
+          "body": "@cipherfps\nDiscord: https://discord.gg/G9MAF77V7R",
           "offerAction": "ShowOfferDetails",
           "videoLoop": false,
           "videoStreamingEnabled": false,

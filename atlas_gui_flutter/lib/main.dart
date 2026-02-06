@@ -762,17 +762,27 @@ class _AtlasHomePageState extends State<AtlasHomePage>
 
   Future<void> _showVersionHistoryMenu(BuildContext anchorContext) async {
     if (_loadingReleaseHistory) return;
-    if (_releaseHistory.isEmpty) {
-      setState(() => _loadingReleaseHistory = true);
-      final history = await UpdateService.fetchReleaseHistory();
-      if (!mounted) return;
-      setState(() {
+    setState(() => _loadingReleaseHistory = true);
+    final history = await UpdateService.fetchReleaseHistory();
+    if (!mounted) return;
+    setState(() {
+      if (history.isNotEmpty) {
         _releaseHistory = history;
-        _loadingReleaseHistory = false;
-      });
-    }
+      }
+      _loadingReleaseHistory = false;
+    });
 
     final currentVersion = _normalizeVersion(_backendVersionLabel);
+    final newerReleases = _releaseHistory
+        .where(
+          (release) =>
+              _compareVersions(
+                _normalizeVersion(release.version),
+                currentVersion,
+              ) >
+              0,
+        )
+        .toList();
     final olderReleases = _releaseHistory
         .where(
           (release) =>
@@ -784,11 +794,9 @@ class _AtlasHomePageState extends State<AtlasHomePage>
         )
         .toList();
 
-    if (olderReleases.isEmpty) {
+    if (newerReleases.isEmpty && olderReleases.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No older versions available to downgrade.'),
-        ),
+        const SnackBar(content: Text('No other versions available.')),
       );
       return;
     }
@@ -818,6 +826,8 @@ class _AtlasHomePageState extends State<AtlasHomePage>
       clipBehavior: Clip.antiAlias,
       items: [
         PopupMenuItem<ReleaseInfo>(
+          height: 34,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           onTap: () {
             unawaited(_showCurrentVersionNotes(anchorContext));
           },
@@ -826,37 +836,115 @@ class _AtlasHomePageState extends State<AtlasHomePage>
             style: TextStyle(color: _onSurface(context, 0.7)),
           ),
         ),
-        const PopupMenuDivider(),
-        ...olderReleases.map((release) {
-          final dateLabel = release.publishedAt == null
-              ? null
-              : _formatReleaseDate(release.publishedAt!);
-          return PopupMenuItem<ReleaseInfo>(
-            value: release,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(_formatVersion(release.version)),
-                if (dateLabel != null)
+        if (newerReleases.isNotEmpty) ...[
+          const PopupMenuDivider(height: 8),
+          PopupMenuItem<ReleaseInfo>(
+            enabled: false,
+            height: 24,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+            child: Text(
+              'Newer versions',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: _onSurface(context, 0.6),
+              ),
+            ),
+          ),
+          ...newerReleases.map((release) {
+            final dateLabel = release.publishedAt == null
+                ? null
+                : _formatReleaseDate(release.publishedAt!);
+            return PopupMenuItem<ReleaseInfo>(
+              height: 42,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+              value: release,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    dateLabel,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: _onSurface(context, 0.6),
+                    _formatVersion(release.version),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      height: 1.1,
                     ),
                   ),
-              ],
+                  if (dateLabel != null)
+                    Text(
+                      dateLabel,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        height: 1.0,
+                        color: _onSurface(context, 0.6),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          }),
+        ],
+        if (olderReleases.isNotEmpty) ...[
+          const PopupMenuDivider(height: 8),
+          PopupMenuItem<ReleaseInfo>(
+            enabled: false,
+            height: 24,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+            child: Text(
+              'Older versions',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: _onSurface(context, 0.6),
+              ),
             ),
-          );
-        }),
+          ),
+          ...olderReleases.map((release) {
+            final dateLabel = release.publishedAt == null
+                ? null
+                : _formatReleaseDate(release.publishedAt!);
+            return PopupMenuItem<ReleaseInfo>(
+              height: 42,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+              value: release,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _formatVersion(release.version),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      height: 1.1,
+                    ),
+                  ),
+                  if (dateLabel != null)
+                    Text(
+                      dateLabel,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        height: 1.0,
+                        color: _onSurface(context, 0.6),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          }),
+        ],
       ],
     );
 
     if (selected == null) return;
+    final selectedVersion = _normalizeVersion(selected.version);
+    final isUpgrade =
+        _compareVersions(selectedVersion, currentVersion) > 0;
 
     final info = UpdateInfo(
       currentVersion: currentVersion,
-      latestVersion: _normalizeVersion(selected.version),
+      latestVersion: selectedVersion,
       downloadUrl: selected.downloadUrl,
       isInstaller: true,
       notes: selected.notes,
@@ -865,8 +953,8 @@ class _AtlasHomePageState extends State<AtlasHomePage>
     );
     await _showUpdateDialog(
       info,
-      title: 'Downgrade available',
-      actionLabel: 'Downgrade',
+      title: isUpgrade ? 'Update available' : 'Downgrade available',
+      actionLabel: isUpgrade ? 'Update' : 'Downgrade',
     );
   }
 
@@ -942,9 +1030,27 @@ class _AtlasHomePageState extends State<AtlasHomePage>
                   tagRow,
                   const SizedBox(height: 12),
                   if (info.notes != null && info.notes!.isNotEmpty)
-                    Text(
-                      info.notes!,
-                      style: Theme.of(context).textTheme.bodySmall,
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 220),
+                      child: SingleChildScrollView(
+                        child: MarkdownBody(
+                          data: info.notes!,
+                          styleSheet: MarkdownStyleSheet.fromTheme(
+                            Theme.of(context),
+                          ).copyWith(
+                            p: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          blockSyntaxes: _roundedHrBlockSyntaxes,
+                          inlineSyntaxes: _roundedHrInlineSyntaxes,
+                          builders: {
+                            'rounded-hr': _MarkdownHrBuilder(
+                              color: _onSurface(context, 0.18),
+                              thickness: 0.6,
+                              verticalPadding: 8,
+                            ),
+                          },
+                        ),
+                      ),
                     ),
                   if (updating) ...[
                     const SizedBox(height: 16),
