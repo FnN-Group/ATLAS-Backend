@@ -16,10 +16,9 @@ Markdown Quick Key
 # Improvements
 - DataTable section in Modifcations is now fully available with completed features
 - Profile Creation was added with a button top right of the Profiles menu
+- Added Level and Currency Editor for Users (Level Partially Working)
 
 # Fixes
-- Crashes on certain versions due to a faulty CMS
-- Fixed profile presets not applying
-- Light mode appearance for some menus
+- FIXED CRASHES on certain versions (All seasons should be functional now)
 
 [Full release notes](https://github.com/cipherfps/ATLAS-Backend/releases)

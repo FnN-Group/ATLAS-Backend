@@ -400,17 +400,7 @@ class _AtlasHomePageState extends State<AtlasHomePage>
   }
 
   Future<String> _readBackendVersion() async {
-    final packageFile = File(joinPath([getBackendRoot(), 'package.json']));
-    if (!await packageFile.exists()) return '';
-    try {
-      final json =
-          jsonDecode(await packageFile.readAsString()) as Map<String, dynamic>;
-      final version = json['version']?.toString().trim();
-      if (version == null || version.isEmpty) return '';
-      return version;
-    } catch (_) {
-      return '';
-    }
+    return _readBackendVersionFromCandidates();
   }
 
   Future<void> _checkForUpdates({required bool silent}) async {
@@ -9795,29 +9785,36 @@ class UpdateService {
       'https://api.github.com/repos/cipherfps/ATLAS-Backend/releases?per_page=30';
 
   static Future<UpdateInfo?> checkForUpdate() async {
-    final backendRoot = getBackendRoot();
-    final packageFile = File(joinPath([backendRoot, 'package.json']));
-    if (!await packageFile.exists()) return null;
+    final detectedVersion = await _readBackendVersionFromCandidates();
+    final currentVersion = detectedVersion.isEmpty ? '0.0.0' : detectedVersion;
+    final release = await _fetchLatestReleaseInfo();
+    if (release != null &&
+        _isNewerVersion(release.version, currentVersion)) {
+      final downloadUrl = release.msiUrl ?? _mainZipUrl;
+      final isInstaller = release.msiUrl != null;
+      return UpdateInfo(
+        currentVersion: currentVersion,
+        latestVersion: release.version,
+        downloadUrl: downloadUrl,
+        isInstaller: isInstaller,
+        notes: release.notes,
+        currentCommit: null,
+        latestCommit: null,
+      );
+    }
 
-    final localPackage =
-        jsonDecode(await packageFile.readAsString()) as Map<String, dynamic>;
-    final currentVersion = (localPackage['version'] ?? '0.0.0').toString();
+    // Fallback for unreleased GUI branch updates.
     final remotePackage = await _fetchRemotePackage();
     if (remotePackage == null) return null;
     final latestVersion = (remotePackage['version'] ?? currentVersion)
         .toString();
-    final hasVersionUpdate = _isNewerVersion(latestVersion, currentVersion);
-    if (!hasVersionUpdate) return null;
-
-    final releaseMsi = await _fetchLatestReleaseMsi();
-    final downloadUrl = releaseMsi ?? _mainZipUrl;
-    final isInstaller = releaseMsi != null;
+    if (!_isNewerVersion(latestVersion, currentVersion)) return null;
 
     return UpdateInfo(
       currentVersion: currentVersion,
       latestVersion: latestVersion,
-      downloadUrl: downloadUrl,
-      isInstaller: isInstaller,
+      downloadUrl: _mainZipUrl,
+      isInstaller: false,
       notes: null,
       currentCommit: null,
       latestCommit: null,
@@ -9904,7 +9901,8 @@ class UpdateService {
     }
   }
 
-  static Future<String?> _fetchLatestReleaseMsi() async {
+  static Future<({String version, String? msiUrl, String? notes})?>
+  _fetchLatestReleaseInfo() async {
     final client = HttpClient();
     try {
       final request = await client.getUrl(Uri.parse(_latestReleaseUrl));
@@ -9913,18 +9911,27 @@ class UpdateService {
       if (response.statusCode != 200) return null;
       final body = await response.transform(utf8.decoder).join();
       final json = jsonDecode(body) as Map<String, dynamic>;
+      final tag = json['tag_name']?.toString().trim();
+      if (tag == null || tag.isEmpty) return null;
       final assets = json['assets'];
-      if (assets is! List) return null;
-      for (final asset in assets) {
-        if (asset is! Map<String, dynamic>) continue;
-        final name = asset['name']?.toString().toLowerCase() ?? '';
-        final url = asset['browser_download_url']?.toString();
-        if (url == null) continue;
-        if (name.endsWith('.msi') && name.contains('atlas')) {
-          return url;
+      String? msiUrl;
+      if (assets is List) {
+        for (final asset in assets) {
+          if (asset is! Map<String, dynamic>) continue;
+          final name = asset['name']?.toString().toLowerCase() ?? '';
+          final url = asset['browser_download_url']?.toString();
+          if (url == null) continue;
+          if (name.endsWith('.msi') && name.contains('atlas')) {
+            msiUrl = url;
+            break;
+          }
         }
       }
-      return null;
+      return (
+        version: tag,
+        msiUrl: msiUrl,
+        notes: json['body']?.toString(),
+      );
     } catch (_) {
       return null;
     } finally {
@@ -10350,15 +10357,7 @@ class UpdateBackupService {
   }
 
   static Future<String> _readBackendVersion() async {
-    final packageFile = File(joinPath([getBackendRoot(), 'package.json']));
-    if (!packageFile.existsSync()) return '';
-    try {
-      final json =
-          jsonDecode(await packageFile.readAsString()) as Map<String, dynamic>;
-      return json['version']?.toString() ?? '';
-    } catch (_) {
-      return '';
-    }
+    return _readBackendVersionFromCandidates();
   }
 
   static Future<void> _copyDirectory(
@@ -10437,6 +10436,31 @@ class _BackupEntry {
 String _formatVersion(String version) {
   final trimmed = version.trim();
   return trimmed.startsWith('v') ? trimmed : 'v$trimmed';
+}
+
+Future<String> _readBackendVersionFromCandidates() async {
+  final packagePaths = <String>[
+    joinPath([getBackendRoot(), 'package.json']),
+    joinPath([getInstallationRoot(), 'package.json']),
+    joinPath([Directory.current.path, 'package.json']),
+  ];
+  final seen = <String>{};
+  for (final path in packagePaths) {
+    if (!seen.add(path)) continue;
+    final packageFile = File(path);
+    if (!await packageFile.exists()) continue;
+    try {
+      final json =
+          jsonDecode(await packageFile.readAsString()) as Map<String, dynamic>;
+      final version = json['version']?.toString().trim();
+      if (version != null && version.isNotEmpty) {
+        return version;
+      }
+    } catch (_) {
+      // Continue to the next candidate.
+    }
+  }
+  return '';
 }
 
 String _normalizeVersion(String version) {

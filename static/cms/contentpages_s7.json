@@ -250,7 +250,7 @@
           "spotlight": false
         },
         {
-          "image": "https://i.imgur.com/3xoXe4R.png",
+          "image": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/images/ATLAS-Backend-Banner.png",
           "hidden": false,
           "_type": "CommonUI Simple Message Base",
           "adspace": "ENJOY!",
@@ -449,7 +449,7 @@
       "stations": [
         {
           "resourceID": "DGeVaWdcXtfpbAaP",
-          "stationImage": "https://i.imgur.com/3xoXe4R.png",
+          "stationImage": "https://github.com/cipherfps/ATLAS-Backend/blob/gui/public/images/ATLAS-Backend-Banner.png",
           "_type": "RadioStationItem",
           "title": {
             "ar": "Ø§Ù„Ø­ÙÙ„ Ø§Ù„Ù…Ù„ÙƒÙŠ",
@@ -633,8 +633,8 @@
       "motds": [
         {
           "entryType": "Website",
-          "image": "https://i.imgur.com/3xoXe4R.png",
-          "tileImage": "https://i.imgur.com/3xoXe4R.png",
+          "image": "https://github.com/cipherfps/ATLAS-Backend/blob/gui/public/images/ATLAS-Backend-Banner.png",
+          "tileImage": "https://github.com/cipherfps/ATLAS-Backend/blob/gui/public/images/ATLAS-Backend-Banner.png",
           "videoMute": false,
           "hidden": false,
           "tabTitleOverride": "ATLAS",
@@ -664,7 +664,7 @@
           "spotlight": false
         },
         {
-          "image": "https://i.imgur.com/3xoXe4R.png",
+          "image": "https://github.com/cipherfps/ATLAS-Backend/blob/gui/public/images/ATLAS-Backend-Banner.png",
           "hidden": false,
           "_type": "CommonUI Simple Message Base",
           "adspace": "ENJOY!",
@@ -688,8 +688,8 @@
       "motds": [
         {
           "entryType": "Website",
-          "image": "https://i.imgur.com/3xoXe4R.png",
-          "tileImage": "https://i.imgur.com/3xoXe4R.png",
+          "image": "https://github.com/cipherfps/ATLAS-Backend/blob/gui/public/images/ATLAS-Backend-Banner.png",
+          "tileImage": "https://github.com/cipherfps/ATLAS-Backend/blob/gui/public/images/ATLAS-Backend-Banner.png",
           "videoMute": false,
           "hidden": false,
           "tabTitleOverride": "ATLAS",

@@ -3,9 +3,11 @@ import crypto from "crypto";
 import fs from "node:fs";
 import path from "node:path";
 import getVersion from "../utils/handlers/getVersion";
-
 // Cache for hotfix files to avoid repeated disk reads
-const hotfixCache = new Map<string, string>();
+const hotfixCache = new Map<
+  string,
+  { content: string; mtimeMs: number; size: number }
+>();
 
 export default function () {
   app.get("/fortnite/api/cloudstorage/system", async (c) => {
@@ -86,27 +88,25 @@ export default function () {
         fileName
       );
       
-      // Check cache first
-      let fileContent: string;
-      if (hotfixCache.has(fileName)) {
-        fileContent = hotfixCache.get(fileName)!;
-      } else {
-        // Load from disk and cache
-        fileContent = await fs.promises.readFile(filePath, { encoding: "utf8" });
-        hotfixCache.set(fileName, fileContent);
-      }
+      // Revalidate cache using file metadata so runtime edits are picked up.
+      const fileStat = await fs.promises.stat(filePath);
 
-      // For Season 5-6, strip all DataTable modifications to prevent crashes
-      if (fileName === "DefaultGame.ini" && version.season <= 6) {
-        // Remove all +DataTable and +CurveTable lines
-        const lines = fileContent.split('\n');
-        const filteredLines = lines.filter(line => {
-          const trimmed = line.trim();
-          // Keep everything except DataTable/CurveTable hotfixes
-          return !trimmed.startsWith('+DataTable=') && 
-                 !trimmed.startsWith('+CurveTable=');
+      let fileContent: string;
+      const cached = hotfixCache.get(fileName);
+      if (
+        cached &&
+        cached.mtimeMs === fileStat.mtimeMs &&
+        cached.size === fileStat.size
+      ) {
+        fileContent = cached.content;
+      } else {
+        // Load from disk and refresh cache.
+        fileContent = await fs.promises.readFile(filePath, { encoding: "utf8" });
+        hotfixCache.set(fileName, {
+          content: fileContent,
+          mtimeMs: fileStat.mtimeMs,
+          size: fileStat.size,
         });
-        fileContent = filteredLines.join('\n');
       }
 
       if (fileName === "DefaultGame.ini") {
@@ -169,6 +169,9 @@ export default function () {
         }
       }
 
+      c.header("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+      c.header("Pragma", "no-cache");
+      c.header("Expires", "0");
       return c.text(fileContent);
     } catch (err) {
       console.error("Error fetching system file:", err);
