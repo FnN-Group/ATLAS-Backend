@@ -200,21 +200,21 @@ export default function () {
       );
 
       try {
-        const ParsedFile = await fs.promises.readFile(file, "latin1");
-        const ParsedStats = await fs.promises.stat(file);
+        const parsedFile = await fs.promises.readFile(file);
+        const parsedStats = await fs.promises.stat(file);
 
         return c.json([
           {
             uniqueFilename: "ClientSettings.Sav",
             filename: "ClientSettings.Sav",
-            hash: crypto.createHash("sha1").update(ParsedFile).digest("hex"),
+            hash: crypto.createHash("sha1").update(parsedFile).digest("hex"),
             hash256: crypto
               .createHash("sha256")
-              .update(ParsedFile)
+              .update(parsedFile)
               .digest("hex"),
-            length: Buffer.byteLength(ParsedFile),
+            length: parsedStats.size,
             contentType: "application/octet-stream",
-            uploaded: ParsedStats.mtime,
+            uploaded: parsedStats.mtime,
             storageType: "S3",
             storageIds: {},
             accountId: accountId,
@@ -260,17 +260,21 @@ export default function () {
       const body = await c.req.arrayBuffer();
       const buffer = Buffer.from(body);
 
-      // Respond immediately, save in background
-      const response = c.json([]);
-      
-      // Save file asynchronously without blocking
-      fs.promises.mkdir(clientSettingsPath, { recursive: true })
-        .then(() => fs.promises.writeFile(file, buffer as any, "latin1"))
-        .catch(error => console.error("Error writing ClientSettings:", error));
+      await fs.promises.mkdir(clientSettingsPath, { recursive: true });
 
-      return response;
+      // Write atomically to avoid partial/corrupt saves if the process exits mid-write.
+      const tmpFile = `${file}.${process.pid}.${Date.now()}.tmp`;
+      try {
+        await fs.promises.writeFile(tmpFile, buffer);
+        await fs.promises.rename(tmpFile, file);
+      } finally {
+        // Best-effort cleanup (rename may fail and leave tmp behind).
+        fs.promises.unlink(tmpFile).catch(() => {});
+      }
+
+      return c.json([]);
     } catch (error) {
-      console.error("Error writing the file:", error);
+      console.error("Error writing ClientSettings:", error);
 
       return c.json({ error: "Failed to save the settings" }, 500);
     }

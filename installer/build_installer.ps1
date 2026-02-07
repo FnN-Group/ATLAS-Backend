@@ -80,6 +80,39 @@ foreach ($item in $backendItems) {
   }
 }
 
+# Remove any user-generated data that may exist in the repo from the staged build output.
+# These folders are runtime state and should never ship in the MSI (fresh installs must be clean).
+$stagedStaticDir = Join-Path $buildRoot "static"
+$stagedProfilesDir = Join-Path $stagedStaticDir "profiles"
+$stagedClientSettingsDir = Join-Path $stagedStaticDir "ClientSettings"
+
+if (Test-Path $stagedProfilesDir) {
+  Get-ChildItem -LiteralPath $stagedProfilesDir -Force | ForEach-Object {
+    if ($_.PSIsContainer) {
+      Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
+      return
+    }
+
+    # Keep only template files (profile_*.json) at the root; delete anything else (stray files from dev runs).
+    if ($_.Name -match '^profile_.*\.json$') {
+      return
+    }
+
+    Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
+  }
+}
+
+# ClientSettings is per-account runtime state. Keep a "config" folder if present; remove everything else.
+if (Test-Path $stagedClientSettingsDir) {
+  Get-ChildItem -LiteralPath $stagedClientSettingsDir -Force | ForEach-Object {
+    if ($_.PSIsContainer -and $_.Name.ToLowerInvariant() -eq "config") {
+      return
+    }
+
+    Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
+  }
+}
+
 $bunDir = Join-Path $buildRoot "tools\\bun"
 $bunExe = Join-Path $bunDir "bun.exe"
 if (-not (Test-Path $bunExe)) {
