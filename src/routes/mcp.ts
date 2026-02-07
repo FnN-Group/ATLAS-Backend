@@ -309,7 +309,7 @@ export default function () {
           profile.commandRevision += 1;
           break;
         case "SetCosmeticLockerSlot": // br locker 2
-          if (body.category && body.lockerItem && body.itemToSlot) {
+          if (body.category && body.lockerItem && body.itemToSlot !== undefined) {
             let itemToSlot = body.itemToSlot;
             let itemToSlotID = "";
 
