@@ -25,16 +25,16 @@ const _fallbackAcrylicColor = Color(0x260A0E14);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Initialize app data directory structure if running from installed location
   await _initializeAppDataDirectory();
-  
+
   // Check if another instance is already running
   if (!await _acquireInstanceLock()) {
     print('Another instance of ATLAS GUI is already running.');
     exit(1);
   }
-  
+
   if (Platform.isWindows) {
     await Window.initialize();
     await Window.setEffect(
@@ -475,9 +475,7 @@ class _AtlasHomePageState extends State<AtlasHomePage>
                 data: notes,
                 styleSheet: MarkdownStyleSheet.fromTheme(
                   Theme.of(dialogContext),
-                ).copyWith(
-                  p: Theme.of(dialogContext).textTheme.bodyMedium,
-                ),
+                ).copyWith(p: Theme.of(dialogContext).textTheme.bodyMedium),
                 blockSyntaxes: _roundedHrBlockSyntaxes,
                 inlineSyntaxes: _roundedHrInlineSyntaxes,
                 builders: {
@@ -570,10 +568,7 @@ class _AtlasHomePageState extends State<AtlasHomePage>
                   Expanded(
                     child: RichText(
                       text: TextSpan(
-                        style: TextStyle(
-                          fontSize: 12.8,
-                          color: onSurfaceMuted,
-                        ),
+                        style: TextStyle(fontSize: 12.8, color: onSurfaceMuted),
                         children: spans,
                       ),
                     ),
@@ -939,8 +934,7 @@ class _AtlasHomePageState extends State<AtlasHomePage>
 
     if (selected == null) return;
     final selectedVersion = _normalizeVersion(selected.version);
-    final isUpgrade =
-        _compareVersions(selectedVersion, currentVersion) > 0;
+    final isUpgrade = _compareVersions(selectedVersion, currentVersion) > 0;
 
     final info = UpdateInfo(
       currentVersion: currentVersion,
@@ -970,9 +964,9 @@ class _AtlasHomePageState extends State<AtlasHomePage>
     final notesPayload = await UpdateNotesService.loadNotes();
     if (!mounted) return;
     if (notesPayload == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No update notes found.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('No update notes found.')));
       return;
     }
 
@@ -1037,9 +1031,7 @@ class _AtlasHomePageState extends State<AtlasHomePage>
                           data: info.notes!,
                           styleSheet: MarkdownStyleSheet.fromTheme(
                             Theme.of(context),
-                          ).copyWith(
-                            p: Theme.of(context).textTheme.bodySmall,
-                          ),
+                          ).copyWith(p: Theme.of(context).textTheme.bodySmall),
                           blockSyntaxes: _roundedHrBlockSyntaxes,
                           inlineSyntaxes: _roundedHrInlineSyntaxes,
                           builders: {
@@ -1223,10 +1215,7 @@ class _AtlasHomePageState extends State<AtlasHomePage>
       icon: Icons.people_alt_rounded,
       accent: Color(0xFF7EE081),
       actions: [
-        MenuAction(
-          title: 'View Users',
-          description: 'See all local users.',
-        ),
+        MenuAction(title: 'View Users', description: 'See all local users.'),
         MenuAction(
           title: 'Apply Preset',
           description: 'Replace a user with a preset.',
@@ -1749,14 +1738,19 @@ class _SidePanel extends StatelessWidget {
             const SizedBox(height: 16),
             Row(
               children: [
-                Text('Live Logs', style: Theme.of(context).textTheme.titleLarge),
+                Text(
+                  'Live Logs',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
                 const Spacer(),
                 TextButton.icon(
                   onPressed: controller.recentLogs.isEmpty
                       ? null
                       : () {
                           Clipboard.setData(
-                            ClipboardData(text: controller.recentLogs.join('\n')),
+                            ClipboardData(
+                              text: controller.recentLogs.join('\n'),
+                            ),
                           );
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
@@ -2534,7 +2528,7 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
   List<CurveEntry> _curves = [];
   String _selectedGroupId = 'shockwave';
   final Map<String, TextEditingController> _valueControllers = {};
-  
+
   // DataTable state
   bool _dataTablesEnabled = false;
   bool _dataTablesLoading = true;
@@ -2543,7 +2537,8 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
   String? _selectedVariantWeaponId;
   DataTableSettings? _selectedWeaponSettings;
   final Map<String, TextEditingController> _dataTableControllers = {};
-  final Map<String, String> _weaponVariantSelections = {}; // weaponId -> variantWeaponId
+  final Map<String, String> _weaponVariantSelections =
+      {}; // weaponId -> variantWeaponId
 
   @override
   void initState() {
@@ -2709,8 +2704,9 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     if (!_curveTablesEnabled) return;
     final enabled = await CurveTableService.isCurveEnabled(entry);
     if (!enabled) return;
-    final isValid =
-        RegExp(r'^[+-]?(?:\d+\.?\d*|\.\d+)$').hasMatch(newValue.trim());
+    final isValid = RegExp(
+      r'^[+-]?(?:\d+\.?\d*|\.\d+)$',
+    ).hasMatch(newValue.trim());
     if (!isValid) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2806,12 +2802,9 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     final source = File(path);
     if (!await source.exists()) return;
     final importContent = await source.readAsString();
-    
+
     // Match +DataTable= lines
-    final regex = RegExp(
-      r'^\+DataTable=(.+)$',
-      multiLine: true,
-    );
+    final regex = RegExp(r'^\+DataTable=(.+)$', multiLine: true);
     final matches = regex.allMatches(importContent).toList();
     if (matches.isEmpty) {
       if (!mounted) return;
@@ -2824,7 +2817,7 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     final lines = matches.map((m) => m.group(0)!).toList();
     await DataTableService.importDataTableLines(lines);
     await _load();
-    
+
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Imported ${lines.length} DataTable entries')),
@@ -2846,7 +2839,11 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
       trailing: _HoverScale(
         child: OutlinedButton.icon(
           onPressed: () async {
-            final hotfixesPath = joinPath([getBackendRoot(), 'static', 'hotfixes']);
+            final hotfixesPath = joinPath([
+              getBackendRoot(),
+              'static',
+              'hotfixes',
+            ]);
             if (Platform.isWindows) {
               try {
                 await Process.start('explorer', [hotfixesPath]);
@@ -2878,9 +2875,7 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                         ? 'Straight Bloom Enabled'
                         : 'Straight Bloom Disabled',
                   ),
-                  subtitle: const Text(
-                    'Toggles no-spread for all snipers.',
-                  ),
+                  subtitle: const Text('Toggles no-spread for all snipers.'),
                 ),
                 const SizedBox(height: 20),
                 const _SectionTitle(title: 'CurveTables'),
@@ -3181,16 +3176,23 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                     final newValue = !_dataTablesEnabled;
                     await DataTableService.setUIEnabledState(newValue);
                     setState(() => _dataTablesEnabled = newValue);
-                    
+
                     // Auto-select first weapon when enabling
-                    if (newValue && _weapons.isNotEmpty && _selectedWeaponId == null) {
+                    if (newValue &&
+                        _weapons.isNotEmpty &&
+                        _selectedWeaponId == null) {
                       final firstWeapon = _weapons.first;
-                      final hasVariants = firstWeapon.variants != null && firstWeapon.variants!.isNotEmpty;
+                      final hasVariants =
+                          firstWeapon.variants != null &&
+                          firstWeapon.variants!.isNotEmpty;
                       String? variantWeaponId;
                       if (hasVariants) {
                         variantWeaponId = firstWeapon.variants!.first.weaponId;
                       }
-                      final settings = await DataTableService.getWeaponSettings(firstWeapon, variantWeaponId: variantWeaponId);
+                      final settings = await DataTableService.getWeaponSettings(
+                        firstWeapon,
+                        variantWeaponId: variantWeaponId,
+                      );
                       setState(() {
                         _selectedWeaponId = firstWeapon.id;
                         _selectedVariantWeaponId = variantWeaponId;
@@ -3222,15 +3224,17 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                               spacing: 12,
                               runSpacing: 12,
                               children: _weapons.map((weapon) {
-                                final isSelected = _selectedWeaponId == weapon.id;
+                                final isSelected =
+                                    _selectedWeaponId == weapon.id;
                                 // Check if selected variant has its own image
                                 String? effectiveImagePath = weapon.imagePath;
-                                if (weapon.variants != null && weapon.variants!.isNotEmpty) {
+                                if (weapon.variants != null &&
+                                    weapon.variants!.isNotEmpty) {
                                   // Use currently selected variant if this weapon is selected, otherwise use remembered variant
-                                  final variantWeaponId = isSelected 
-                                    ? _selectedVariantWeaponId 
-                                    : _weaponVariantSelections[weapon.id];
-                                  
+                                  final variantWeaponId = isSelected
+                                      ? _selectedVariantWeaponId
+                                      : _weaponVariantSelections[weapon.id];
+
                                   if (variantWeaponId != null) {
                                     final variant = weapon.variants!.firstWhere(
                                       (v) => v.weaponId == variantWeaponId,
@@ -3242,87 +3246,136 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                                   }
                                 }
                                 final imagePath = effectiveImagePath != null
-                                    ? joinPath([getBackendRoot(), 'public', 'items', effectiveImagePath])
+                                    ? joinPath([
+                                        getBackendRoot(),
+                                        'public',
+                                        'items',
+                                        effectiveImagePath,
+                                      ])
                                     : null;
-                                final imageFile = imagePath != null ? File(imagePath) : null;
+                                final imageFile = imagePath != null
+                                    ? File(imagePath)
+                                    : null;
                                 return GestureDetector(
                                   onTap: () async {
-                                    final hasVariants = weapon.variants != null && weapon.variants!.isNotEmpty;
+                                    final hasVariants =
+                                        weapon.variants != null &&
+                                        weapon.variants!.isNotEmpty;
                                     // Check if we've previously selected a variant for this weapon
                                     String? variantWeaponId;
                                     if (hasVariants) {
-                                      variantWeaponId = _weaponVariantSelections[weapon.id] ?? weapon.variants!.first.weaponId;
+                                      variantWeaponId =
+                                          _weaponVariantSelections[weapon.id] ??
+                                          weapon.variants!.first.weaponId;
                                     }
-                                    final settings = await DataTableService.getWeaponSettings(weapon, variantWeaponId: variantWeaponId);
+                                    final settings =
+                                        await DataTableService.getWeaponSettings(
+                                          weapon,
+                                          variantWeaponId: variantWeaponId,
+                                        );
                                     setState(() {
                                       _selectedWeaponId = weapon.id;
-                                      _selectedVariantWeaponId = variantWeaponId;
+                                      _selectedVariantWeaponId =
+                                          variantWeaponId;
                                       _selectedWeaponSettings = settings;
                                     });
                                   },
                                   child: _HoverRegion(
-                                    builder: (context, hovered) => AnimatedScale(
-                                      duration: const Duration(milliseconds: 140),
-                                      curve: Curves.easeOutCubic,
-                                      scale: hovered ? 1.03 : 1,
-                                      child: AnimatedContainer(
-                                        duration: const Duration(milliseconds: 180),
-                                        width: 140,
-                                        height: 130,
-                                        padding: const EdgeInsets.all(10),
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(16),
-                                          color: isSelected
-                                              ? Theme.of(context).colorScheme.secondary.withOpacity(0.18)
-                                              : Colors.black.withOpacity(0.08),
-                                          border: Border.all(
-                                            color: isSelected
-                                                ? Theme.of(context).colorScheme.secondary.withOpacity(0.6)
-                                                : _onSurface(context, 0.12),
+                                    builder: (context, hovered) =>
+                                        AnimatedScale(
+                                          duration: const Duration(
+                                            milliseconds: 140,
+                                          ),
+                                          curve: Curves.easeOutCubic,
+                                          scale: hovered ? 1.03 : 1,
+                                          child: AnimatedContainer(
+                                            duration: const Duration(
+                                              milliseconds: 180,
+                                            ),
+                                            width: 140,
+                                            height: 130,
+                                            padding: const EdgeInsets.all(10),
+                                            decoration: BoxDecoration(
+                                              borderRadius:
+                                                  BorderRadius.circular(16),
+                                              color: isSelected
+                                                  ? Theme.of(context)
+                                                        .colorScheme
+                                                        .secondary
+                                                        .withOpacity(0.18)
+                                                  : Colors.black.withOpacity(
+                                                      0.08,
+                                                    ),
+                                              border: Border.all(
+                                                color: isSelected
+                                                    ? Theme.of(context)
+                                                          .colorScheme
+                                                          .secondary
+                                                          .withOpacity(0.6)
+                                                    : _onSurface(context, 0.12),
+                                              ),
+                                            ),
+                                            child: Column(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: [
+                                                if (imageFile != null &&
+                                                    imageFile.existsSync())
+                                                  _HoverShadow(
+                                                    opacity: 0.75,
+                                                    blurSigma: 2,
+                                                    baseOffset: const Offset(
+                                                      0,
+                                                      2,
+                                                    ),
+                                                    hoverOffset: const Offset(
+                                                      4,
+                                                      2,
+                                                    ),
+                                                    hovered: hovered,
+                                                    child: Image.file(
+                                                      imageFile,
+                                                      width: 48,
+                                                      height: 48,
+                                                      fit: BoxFit.contain,
+                                                    ),
+                                                  )
+                                                else
+                                                  _HoverShadow(
+                                                    opacity: 0.75,
+                                                    blurSigma: 2,
+                                                    baseOffset: const Offset(
+                                                      0,
+                                                      2,
+                                                    ),
+                                                    hoverOffset: const Offset(
+                                                      4,
+                                                      2,
+                                                    ),
+                                                    hovered: hovered,
+                                                    child: Icon(
+                                                      Icons.sports_esports,
+                                                      size: 38,
+                                                      color: Theme.of(
+                                                        context,
+                                                      ).colorScheme.secondary,
+                                                    ),
+                                                  ),
+                                                const SizedBox(height: 6),
+                                                Text(
+                                                  weapon.name,
+                                                  textAlign: TextAlign.center,
+                                                  style: Theme.of(
+                                                    context,
+                                                  ).textTheme.bodySmall,
+                                                  maxLines: 2,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ],
+                                            ),
                                           ),
                                         ),
-                                        child: Column(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            if (imageFile != null && imageFile.existsSync())
-                                              _HoverShadow(
-                                                opacity: 0.75,
-                                                blurSigma: 2,
-                                                baseOffset: const Offset(0, 2),
-                                                hoverOffset: const Offset(4, 2),
-                                                hovered: hovered,
-                                                child: Image.file(
-                                                  imageFile,
-                                                  width: 48,
-                                                  height: 48,
-                                                  fit: BoxFit.contain,
-                                                ),
-                                              )
-                                            else
-                                              _HoverShadow(
-                                                opacity: 0.75,
-                                                blurSigma: 2,
-                                                baseOffset: const Offset(0, 2),
-                                                hoverOffset: const Offset(4, 2),
-                                                hovered: hovered,
-                                                child: Icon(
-                                                  Icons.sports_esports,
-                                                  size: 38,
-                                                  color: Theme.of(context).colorScheme.secondary,
-                                                ),
-                                              ),
-                                            const SizedBox(height: 6),
-                                            Text(
-                                              weapon.name,
-                                              textAlign: TextAlign.center,
-                                              style: Theme.of(context).textTheme.bodySmall,
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
                                   ),
                                 );
                               }).toList(),
@@ -3338,10 +3391,14 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                                     enabled: _dataTablesEnabled,
                                     child: OutlinedButton.icon(
                                       onPressed: _addCustomDataTable,
-                                      icon: const Icon(Icons.add_circle_outline),
+                                      icon: const Icon(
+                                        Icons.add_circle_outline,
+                                      ),
                                       label: const Text('Add Custom DataTable'),
                                       style: OutlinedButton.styleFrom(
-                                        foregroundColor: const Color(0xFF1E88E5),
+                                        foregroundColor: const Color(
+                                          0xFF1E88E5,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -3349,10 +3406,14 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                                     enabled: _dataTablesEnabled,
                                     child: OutlinedButton.icon(
                                       onPressed: _importDataTablesINI,
-                                      icon: const Icon(Icons.file_upload_outlined),
+                                      icon: const Icon(
+                                        Icons.file_upload_outlined,
+                                      ),
                                       label: const Text('Import INI'),
                                       style: OutlinedButton.styleFrom(
-                                        foregroundColor: const Color(0xFF1E88E5),
+                                        foregroundColor: const Color(
+                                          0xFF1E88E5,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -3360,25 +3421,31 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                                     enabled: _dataTablesEnabled,
                                     child: OutlinedButton.icon(
                                       onPressed: () async {
-                                        final confirm = await DataService._confirmDialog(
-                                          context,
-                                          'Clear all DataTables from DefaultGame.ini?',
-                                        );
+                                        final confirm =
+                                            await DataService._confirmDialog(
+                                              context,
+                                              'Clear all DataTables from DefaultGame.ini?',
+                                            );
                                         if (!confirm) return;
                                         await DataTableService.clearAllDataTables();
                                         await _load();
                                       },
-                                      icon: const Icon(Icons.delete_sweep_outlined),
+                                      icon: const Icon(
+                                        Icons.delete_sweep_outlined,
+                                      ),
                                       label: const Text('Clear All DataTables'),
                                       style: OutlinedButton.styleFrom(
-                                        foregroundColor: const Color(0xFF1E88E5),
+                                        foregroundColor: const Color(
+                                          0xFF1E88E5,
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ],
                               ),
                             ),
-                            if (_selectedWeaponId != null && _selectedWeaponSettings != null) ...[
+                            if (_selectedWeaponId != null &&
+                                _selectedWeaponSettings != null) ...[
                               const SizedBox(height: 20),
                               _buildWeaponSettings(),
                             ],
@@ -3394,7 +3461,7 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     final weapon = _weapons.firstWhere((w) => w.id == _selectedWeaponId);
     final settings = _selectedWeaponSettings!;
     final hasVariants = weapon.variants != null && weapon.variants!.isNotEmpty;
-    
+
     WeaponVariant? currentVariant;
     if (hasVariants && _selectedVariantWeaponId != null) {
       currentVariant = weapon.variants!.firstWhere(
@@ -3402,17 +3469,15 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
         orElse: () => weapon.variants!.first,
       );
     }
-    
+
     final displayDefaultDamage = currentVariant?.damagePB ?? weapon.damagePB;
-    final displayDefaultEnvDamage = currentVariant?.defaultEnvDamage ?? weapon.defaultEnvDamage;
-    
+    final displayDefaultEnvDamage =
+        currentVariant?.defaultEnvDamage ?? weapon.defaultEnvDamage;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          weapon.name,
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
+        Text(weapon.name, style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 12),
         if (hasVariants) ...[
           Padding(
@@ -3433,11 +3498,15 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
               }).toList(),
               onChanged: (value) async {
                 if (value != null) {
-                  final newSettings = await DataTableService.getWeaponSettings(weapon, variantWeaponId: value);
+                  final newSettings = await DataTableService.getWeaponSettings(
+                    weapon,
+                    variantWeaponId: value,
+                  );
                   setState(() {
                     _selectedVariantWeaponId = value;
                     _selectedWeaponSettings = newSettings;
-                    _weaponVariantSelections[weapon.id] = value; // Remember this selection
+                    _weaponVariantSelections[weapon.id] =
+                        value; // Remember this selection
                   });
                 }
               },
@@ -3452,14 +3521,31 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
               // Prompt for damage value
               final promptedValue = await _promptValue(context, 'Damage');
               if (promptedValue == null) return;
-              final newSettings = settings.copyWith(damageEnabled: value, damageValue: promptedValue);
-              await DataTableService.applyWeaponSettings(weapon, newSettings, variantWeaponId: _selectedVariantWeaponId);
-              final updated = await DataTableService.getWeaponSettings(weapon, variantWeaponId: _selectedVariantWeaponId);
+              final newSettings = settings.copyWith(
+                damageEnabled: value,
+                damageValue: promptedValue,
+              );
+              await DataTableService.applyWeaponSettings(
+                weapon,
+                newSettings,
+                variantWeaponId: _selectedVariantWeaponId,
+              );
+              final updated = await DataTableService.getWeaponSettings(
+                weapon,
+                variantWeaponId: _selectedVariantWeaponId,
+              );
               setState(() => _selectedWeaponSettings = updated);
             } else {
               final newSettings = settings.copyWith(damageEnabled: value);
-              await DataTableService.applyWeaponSettings(weapon, newSettings, variantWeaponId: _selectedVariantWeaponId);
-              final updated = await DataTableService.getWeaponSettings(weapon, variantWeaponId: _selectedVariantWeaponId);
+              await DataTableService.applyWeaponSettings(
+                weapon,
+                newSettings,
+                variantWeaponId: _selectedVariantWeaponId,
+              );
+              final updated = await DataTableService.getWeaponSettings(
+                weapon,
+                variantWeaponId: _selectedVariantWeaponId,
+              );
               setState(() => _selectedWeaponSettings = updated);
             }
           },
@@ -3475,9 +3561,18 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
               onPressed: () async {
                 final promptedValue = await _promptValue(context, 'Damage');
                 if (promptedValue == null) return;
-                final newSettings = settings.copyWith(damageValue: promptedValue);
-                await DataTableService.applyWeaponSettings(weapon, newSettings, variantWeaponId: _selectedVariantWeaponId);
-                final updated = await DataTableService.getWeaponSettings(weapon, variantWeaponId: _selectedVariantWeaponId);
+                final newSettings = settings.copyWith(
+                  damageValue: promptedValue,
+                );
+                await DataTableService.applyWeaponSettings(
+                  weapon,
+                  newSettings,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
+                final updated = await DataTableService.getWeaponSettings(
+                  weapon,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
                 setState(() => _selectedWeaponSettings = updated);
               },
               icon: const Icon(Icons.edit),
@@ -3491,16 +3586,36 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
           onChanged: (value) async {
             if (value) {
               // Prompt for environmental damage value
-              final promptedValue = await _promptValue(context, 'Environmental Damage');
+              final promptedValue = await _promptValue(
+                context,
+                'Environmental Damage',
+              );
               if (promptedValue == null) return;
-              final newSettings = settings.copyWith(envDamageEnabled: value, envDamageValue: promptedValue);
-              await DataTableService.applyWeaponSettings(weapon, newSettings, variantWeaponId: _selectedVariantWeaponId);
-              final updated = await DataTableService.getWeaponSettings(weapon, variantWeaponId: _selectedVariantWeaponId);
+              final newSettings = settings.copyWith(
+                envDamageEnabled: value,
+                envDamageValue: promptedValue,
+              );
+              await DataTableService.applyWeaponSettings(
+                weapon,
+                newSettings,
+                variantWeaponId: _selectedVariantWeaponId,
+              );
+              final updated = await DataTableService.getWeaponSettings(
+                weapon,
+                variantWeaponId: _selectedVariantWeaponId,
+              );
               setState(() => _selectedWeaponSettings = updated);
             } else {
               final newSettings = settings.copyWith(envDamageEnabled: value);
-              await DataTableService.applyWeaponSettings(weapon, newSettings, variantWeaponId: _selectedVariantWeaponId);
-              final updated = await DataTableService.getWeaponSettings(weapon, variantWeaponId: _selectedVariantWeaponId);
+              await DataTableService.applyWeaponSettings(
+                weapon,
+                newSettings,
+                variantWeaponId: _selectedVariantWeaponId,
+              );
+              final updated = await DataTableService.getWeaponSettings(
+                weapon,
+                variantWeaponId: _selectedVariantWeaponId,
+              );
               setState(() => _selectedWeaponSettings = updated);
             }
           },
@@ -3514,11 +3629,23 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: OutlinedButton.icon(
               onPressed: () async {
-                final promptedValue = await _promptValue(context, 'Environmental Damage');
+                final promptedValue = await _promptValue(
+                  context,
+                  'Environmental Damage',
+                );
                 if (promptedValue == null) return;
-                final newSettings = settings.copyWith(envDamageValue: promptedValue);
-                await DataTableService.applyWeaponSettings(weapon, newSettings, variantWeaponId: _selectedVariantWeaponId);
-                final updated = await DataTableService.getWeaponSettings(weapon, variantWeaponId: _selectedVariantWeaponId);
+                final newSettings = settings.copyWith(
+                  envDamageValue: promptedValue,
+                );
+                await DataTableService.applyWeaponSettings(
+                  weapon,
+                  newSettings,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
+                final updated = await DataTableService.getWeaponSettings(
+                  weapon,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
                 setState(() => _selectedWeaponSettings = updated);
               },
               icon: const Icon(Icons.edit),
@@ -3539,17 +3666,19 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
               if (settings.envDamageEnabled) {
                 allFields.addAll(weapon.environmentalDamageFields);
               }
-              
+
               if (allFields.isEmpty) {
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Enable Damage or Environmental Damage first.'),
+                    content: Text(
+                      'Enable Damage or Environmental Damage first.',
+                    ),
                   ),
                 );
                 return;
               }
-              
+
               // Determine default values based on what's enabled
               String defaultValue = displayDefaultDamage;
               if (settings.damageEnabled && !settings.envDamageEnabled) {
@@ -3557,7 +3686,7 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
               } else if (!settings.damageEnabled && settings.envDamageEnabled) {
                 defaultValue = displayDefaultEnvDamage;
               }
-              
+
               final values = await _promptAdvancedSettings(
                 context,
                 allFields,
@@ -3565,19 +3694,33 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                 defaultValue,
               );
               if (values == null) return;
-              
+
               final newSettings = settings.copyWith(
                 advancedMode: value,
                 customValues: values,
               );
-              await DataTableService.applyWeaponSettings(weapon, newSettings, variantWeaponId: _selectedVariantWeaponId);
-              final updated = await DataTableService.getWeaponSettings(weapon, variantWeaponId: _selectedVariantWeaponId);
+              await DataTableService.applyWeaponSettings(
+                weapon,
+                newSettings,
+                variantWeaponId: _selectedVariantWeaponId,
+              );
+              final updated = await DataTableService.getWeaponSettings(
+                weapon,
+                variantWeaponId: _selectedVariantWeaponId,
+              );
               setState(() => _selectedWeaponSettings = updated);
             } else {
               final newSettings = settings.copyWith(advancedMode: value);
               // Re-apply settings to use simple mode values
-              await DataTableService.applyWeaponSettings(weapon, newSettings, variantWeaponId: _selectedVariantWeaponId);
-              final updated = await DataTableService.getWeaponSettings(weapon, variantWeaponId: _selectedVariantWeaponId);
+              await DataTableService.applyWeaponSettings(
+                weapon,
+                newSettings,
+                variantWeaponId: _selectedVariantWeaponId,
+              );
+              final updated = await DataTableService.getWeaponSettings(
+                weapon,
+                variantWeaponId: _selectedVariantWeaponId,
+              );
               setState(() => _selectedWeaponSettings = updated);
             }
           },
@@ -3597,15 +3740,16 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                 if (settings.envDamageEnabled) {
                   allFields.addAll(weapon.environmentalDamageFields);
                 }
-                
+
                 // Determine default values based on what's enabled
                 String defaultValue = displayDefaultDamage;
                 if (settings.damageEnabled && !settings.envDamageEnabled) {
                   defaultValue = displayDefaultDamage;
-                } else if (!settings.damageEnabled && settings.envDamageEnabled) {
+                } else if (!settings.damageEnabled &&
+                    settings.envDamageEnabled) {
                   defaultValue = displayDefaultEnvDamage;
                 }
-                
+
                 final values = await _promptAdvancedSettings(
                   context,
                   allFields,
@@ -3613,10 +3757,17 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                   defaultValue,
                 );
                 if (values == null) return;
-                
+
                 final newSettings = settings.copyWith(customValues: values);
-                await DataTableService.applyWeaponSettings(weapon, newSettings, variantWeaponId: _selectedVariantWeaponId);
-                final updated = await DataTableService.getWeaponSettings(weapon, variantWeaponId: _selectedVariantWeaponId);
+                await DataTableService.applyWeaponSettings(
+                  weapon,
+                  newSettings,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
+                final updated = await DataTableService.getWeaponSettings(
+                  weapon,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
                 setState(() => _selectedWeaponSettings = updated);
               },
               icon: const Icon(Icons.tune),
@@ -3709,8 +3860,9 @@ class _CurveTablesScreenState extends State<CurveTablesScreen> {
     if (!_globalEnabled) return;
     final enabled = await CurveTableService.isCurveEnabled(entry);
     if (!enabled) return;
-    final isValid =
-        RegExp(r'^[+-]?(?:\d+\.?\d*|\.\d+)$').hasMatch(newValue.trim());
+    final isValid = RegExp(
+      r'^[+-]?(?:\d+\.?\d*|\.\d+)$',
+    ).hasMatch(newValue.trim());
     if (!isValid) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -4012,7 +4164,7 @@ class _ArenaScreenState extends State<ArenaScreen> {
         _saveArenaPoints = config.saveArenaPoints;
       });
     }
-    
+
     // Load leaderboard in background (always fresh)
     final leaderboard = await ArenaService.loadLeaderboard();
     if (!mounted) return;
@@ -4046,10 +4198,14 @@ class _ArenaScreenState extends State<ArenaScreen> {
           width: 500,
           height: 600,
           decoration: BoxDecoration(
-            color: isDark ? Colors.grey.shade900.withOpacity(0.7) : Colors.white.withOpacity(0.7),
+            color: isDark
+                ? Colors.grey.shade900.withOpacity(0.7)
+                : Colors.white.withOpacity(0.7),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.1),
+              color: isDark
+                  ? Colors.white.withOpacity(0.1)
+                  : Colors.black.withOpacity(0.1),
             ),
           ),
           child: Column(
@@ -4118,11 +4274,11 @@ class _ArenaScreenState extends State<ArenaScreen> {
                   itemBuilder: (context, index) {
                     final entry = _leaderboard[index];
                     final rank = index + 1;
-                    
+
                     Color? rankColor;
                     FontWeight rankWeight = FontWeight.bold;
                     double rankSize = 14;
-                    
+
                     if (rank == 1) {
                       rankColor = const Color(0xFFD4AF37); // Gold
                       rankWeight = FontWeight.w900;
@@ -4136,17 +4292,26 @@ class _ArenaScreenState extends State<ArenaScreen> {
                       rankWeight = FontWeight.w900;
                       rankSize = 16;
                     } else {
-                      rankColor = isDark ? Colors.grey.shade300 : Colors.grey.shade700;
+                      rankColor = isDark
+                          ? Colors.grey.shade300
+                          : Colors.grey.shade700;
                     }
-                    
+
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       child: Container(
                         decoration: BoxDecoration(
-                          color: (isDark ? Colors.grey.shade800 : Colors.grey.shade100).withOpacity(0.5),
+                          color:
+                              (isDark
+                                      ? Colors.grey.shade800
+                                      : Colors.grey.shade100)
+                                  .withOpacity(0.5),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
                         child: Row(
                           children: [
                             SizedBox(
@@ -4164,7 +4329,9 @@ class _ArenaScreenState extends State<ArenaScreen> {
                               child: Text(
                                 entry.accountId,
                                 style: TextStyle(
-                                  color: isDark ? Colors.white70 : Colors.black87,
+                                  color: isDark
+                                      ? Colors.white70
+                                      : Colors.black87,
                                 ),
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -4173,7 +4340,9 @@ class _ArenaScreenState extends State<ArenaScreen> {
                               '${entry.hype}',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
-                                color: isDark ? Colors.orangeAccent : Colors.orange.shade700,
+                                color: isDark
+                                    ? Colors.orangeAccent
+                                    : Colors.orange.shade700,
                               ),
                             ),
                           ],
@@ -4203,8 +4372,11 @@ class _ArenaScreenState extends State<ArenaScreen> {
     final rest = _leaderboard.skip(3).toList();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final leaderboardTitleColor = isDark ? Colors.white70 : Colors.black87;
-    final podiumBaselineColor = isDark ? Colors.grey.shade700 : Colors.grey.shade300;
-    final listRowColor = (isDark ? Colors.grey.shade800 : Colors.grey.shade100).withOpacity(0.5);
+    final podiumBaselineColor = isDark
+        ? Colors.grey.shade700
+        : Colors.grey.shade300;
+    final listRowColor = (isDark ? Colors.grey.shade800 : Colors.grey.shade100)
+        .withOpacity(0.5);
     final listRankColor = isDark ? Colors.grey.shade300 : Colors.grey.shade600;
     final listNameColor = isDark ? Colors.white70 : Colors.black87;
     final listHypeColor = isDark ? Colors.orangeAccent : Colors.orange.shade700;
@@ -4213,57 +4385,58 @@ class _ArenaScreenState extends State<ArenaScreen> {
     return _BaseScreen(
       title: 'Arena',
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.orange.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.info_outline, color: Colors.orangeAccent),
+                SizedBox(width: 8),
+                Text('Arena leaderboard and point saving is in development.'),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.info_outline, color: Colors.orangeAccent),
-                      SizedBox(width: 8),
-                      Text(
-                        'Arena leaderboard and point saving is in development.',
-                      ),
-                    ],
+                // Left side: Save Arena Points
+                Expanded(
+                  flex: 1,
+                  child: SwitchListTile(
+                    value: _saveArenaPoints,
+                    onChanged: null,
+                    title: const Text('Save Arena Points'),
+                    subtitle: const Text(
+                      'Persist player hype between sessions',
+                    ),
+                    secondary: const Tooltip(
+                      message: 'Disabled',
+                      child: Icon(Icons.info_outline, size: 20),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(width: 16),
+                // Right side: Leaderboard Box
                 Expanded(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  flex: 1,
+                  child: Stack(
                     children: [
-                      // Left side: Save Arena Points
-                      Expanded(
-                        flex: 1,
-                        child: SwitchListTile(
-                          value: _saveArenaPoints,
-                          onChanged: null,
-                          title: const Text('Save Arena Points'),
-                          subtitle: const Text('Persist player hype between sessions'),
-                          secondary: const Tooltip(
-                            message: 'Disabled',
-                            child: Icon(Icons.info_outline, size: 20),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      // Right side: Leaderboard Box
-                      Expanded(
-                        flex: 1,
-                        child: Stack(
-                          children: [
-                            GlassPanel(
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
+                      GlassPanel(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   Padding(
                                     padding: const EdgeInsets.only(bottom: 12),
@@ -4277,11 +4450,18 @@ class _ArenaScreenState extends State<ArenaScreen> {
                                     ),
                                   ),
                                   TextButton.icon(
-                                    onPressed: () => _showFullLeaderboard(context),
+                                    onPressed: () =>
+                                        _showFullLeaderboard(context),
                                     icon: const Icon(Icons.list_alt, size: 16),
-                                    label: const Text('View Full List', style: TextStyle(fontSize: 12)),
+                                    label: const Text(
+                                      'View Full List',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
                                     style: TextButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 8,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -4292,155 +4472,210 @@ class _ArenaScreenState extends State<ArenaScreen> {
                                   SizedBox(
                                     height: 230,
                                     child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceEvenly,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.end,
                                       children: [
                                         // 2nd Place
                                         Flexible(
-                                           child: Column(
-                                             mainAxisAlignment: MainAxisAlignment.end,
-                                             children: [
-                                               top3.length >= 2
-                                                   ? _buildPodiumPillarContent(
-                                                    entry: top3[1],
-                                                    rank: 2,
-                                                    medalColor: const Color(0xFFC0C0C0),
-                                                    nameColor: podiumNameColor,
-                                                   )
-                                                   : _buildEmptyPodiumPillarContent(rank: 2),
-                                               const SizedBox(height: 8),
-                                               Container(
-                                                 width: 60,
-                                                 height: 100,
-                                                 decoration: BoxDecoration(
-                                                  color: const Color(0xFFC0C0C0),
-                                                   borderRadius: const BorderRadius.only(
-                                                     topLeft: Radius.circular(8),
-                                                     topRight: Radius.circular(8),
-                                                   ),
-                                                    border: Border.all(
-                                                      color: const Color(0xFFB0B0B0),
-                                                     width: 2,
-                                                   ),
-                                                 ),
+                                          child: Column(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.end,
+                                            children: [
+                                              top3.length >= 2
+                                                  ? _buildPodiumPillarContent(
+                                                      entry: top3[1],
+                                                      rank: 2,
+                                                      medalColor: const Color(
+                                                        0xFFC0C0C0,
+                                                      ),
+                                                      nameColor:
+                                                          podiumNameColor,
+                                                    )
+                                                  : _buildEmptyPodiumPillarContent(
+                                                      rank: 2,
+                                                    ),
+                                              const SizedBox(height: 8),
+                                              Container(
+                                                width: 60,
+                                                height: 100,
+                                                decoration: BoxDecoration(
+                                                  color: const Color(
+                                                    0xFFC0C0C0,
+                                                  ),
+                                                  borderRadius:
+                                                      const BorderRadius.only(
+                                                        topLeft:
+                                                            Radius.circular(8),
+                                                        topRight:
+                                                            Radius.circular(8),
+                                                      ),
+                                                  border: Border.all(
+                                                    color: const Color(
+                                                      0xFFB0B0B0,
+                                                    ),
+                                                    width: 2,
+                                                  ),
+                                                ),
                                                 child: Center(
                                                   child: Text(
                                                     '#2',
                                                     style: TextStyle(
                                                       fontSize: 22,
-                                                      fontWeight: FontWeight.w900,
-                                                      color: Colors.grey.shade200,
+                                                      fontWeight:
+                                                          FontWeight.w900,
+                                                      color:
+                                                          Colors.grey.shade200,
                                                       shadows: const [
                                                         Shadow(
                                                           blurRadius: 8,
-                                                          color: Color(0x99000000),
+                                                          color: Color(
+                                                            0x99000000,
+                                                          ),
                                                           offset: Offset(0, 2),
                                                         ),
                                                       ],
                                                     ),
                                                   ),
                                                 ),
-                                               ),
-                                             ],
-                                           ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
                                         // 1st Place
                                         Flexible(
-                                           child: Column(
-                                             mainAxisAlignment: MainAxisAlignment.end,
-                                             children: [
-                                               top3.isNotEmpty
-                                                   ? _buildPodiumPillarContent(
-                                                     entry: top3[0],
-                                                     rank: 1,
-                                                     medalColor: const Color(0xFFD4AF37),
-                                                     nameColor: podiumNameColor,
-                                                   )
-                                                   : _buildEmptyPodiumPillarContent(rank: 1),
-                                               const SizedBox(height: 8),
-                                               Container(
-                                                 width: 60,
-                                                 height: 140,
-                                                 decoration: BoxDecoration(
-                                                  color: const Color(0xFFD4AF37),
-                                                   borderRadius: const BorderRadius.only(
-                                                     topLeft: Radius.circular(8),
-                                                     topRight: Radius.circular(8),
-                                                   ),
-                                                    border: Border.all(
-                                                      color: const Color(0xFFC89B2C),
-                                                     width: 2,
-                                                   ),
-                                                 ),
-                                                 child: Center(
-                                                   child: Text(
-                                                     '#1',
-                                                     style: TextStyle(
-                                                       fontSize: 22,
-                                                       fontWeight: FontWeight.w900,
-                                                       color: Colors.yellow.shade100,
-                                                       shadows: const [
-                                                         Shadow(
-                                                           blurRadius: 10,
-                                                           color: Color(0xCC000000),
-                                                           offset: Offset(0, 2),
-                                                         ),
-                                                       ],
-                                                     ),
-                                                   ),
-                                                 ),
-                                               ),
-                                             ],
-                                           ),
+                                          child: Column(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.end,
+                                            children: [
+                                              top3.isNotEmpty
+                                                  ? _buildPodiumPillarContent(
+                                                      entry: top3[0],
+                                                      rank: 1,
+                                                      medalColor: const Color(
+                                                        0xFFD4AF37,
+                                                      ),
+                                                      nameColor:
+                                                          podiumNameColor,
+                                                    )
+                                                  : _buildEmptyPodiumPillarContent(
+                                                      rank: 1,
+                                                    ),
+                                              const SizedBox(height: 8),
+                                              Container(
+                                                width: 60,
+                                                height: 140,
+                                                decoration: BoxDecoration(
+                                                  color: const Color(
+                                                    0xFFD4AF37,
+                                                  ),
+                                                  borderRadius:
+                                                      const BorderRadius.only(
+                                                        topLeft:
+                                                            Radius.circular(8),
+                                                        topRight:
+                                                            Radius.circular(8),
+                                                      ),
+                                                  border: Border.all(
+                                                    color: const Color(
+                                                      0xFFC89B2C,
+                                                    ),
+                                                    width: 2,
+                                                  ),
+                                                ),
+                                                child: Center(
+                                                  child: Text(
+                                                    '#1',
+                                                    style: TextStyle(
+                                                      fontSize: 22,
+                                                      fontWeight:
+                                                          FontWeight.w900,
+                                                      color: Colors
+                                                          .yellow
+                                                          .shade100,
+                                                      shadows: const [
+                                                        Shadow(
+                                                          blurRadius: 10,
+                                                          color: Color(
+                                                            0xCC000000,
+                                                          ),
+                                                          offset: Offset(0, 2),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
                                         // 3rd Place
                                         Flexible(
-                                           child: Column(
-                                             mainAxisAlignment: MainAxisAlignment.end,
-                                             children: [
-                                               top3.length >= 3
-                                                   ? _buildPodiumPillarContent(
-                                                     entry: top3[2],
-                                                     rank: 3,
-                                                     medalColor: const Color(0xFFCD7F32),
-                                                     nameColor: podiumNameColor,
-                                                   )
-                                                   : _buildEmptyPodiumPillarContent(rank: 3),
-                                               const SizedBox(height: 8),
-                                               Container(
-                                                 width: 60,
-                                                 height: 80,
-                                                 decoration: BoxDecoration(
-                                                  color: const Color(0xFFCD7F32),
-                                                   borderRadius: const BorderRadius.only(
-                                                     topLeft: Radius.circular(8),
-                                                     topRight: Radius.circular(8),
-                                                   ),
-                                                    border: Border.all(
-                                                      color: const Color(0xFFB56A2A),
-                                                     width: 2,
-                                                   ),
-                                                 ),
+                                          child: Column(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.end,
+                                            children: [
+                                              top3.length >= 3
+                                                  ? _buildPodiumPillarContent(
+                                                      entry: top3[2],
+                                                      rank: 3,
+                                                      medalColor: const Color(
+                                                        0xFFCD7F32,
+                                                      ),
+                                                      nameColor:
+                                                          podiumNameColor,
+                                                    )
+                                                  : _buildEmptyPodiumPillarContent(
+                                                      rank: 3,
+                                                    ),
+                                              const SizedBox(height: 8),
+                                              Container(
+                                                width: 60,
+                                                height: 80,
+                                                decoration: BoxDecoration(
+                                                  color: const Color(
+                                                    0xFFCD7F32,
+                                                  ),
+                                                  borderRadius:
+                                                      const BorderRadius.only(
+                                                        topLeft:
+                                                            Radius.circular(8),
+                                                        topRight:
+                                                            Radius.circular(8),
+                                                      ),
+                                                  border: Border.all(
+                                                    color: const Color(
+                                                      0xFFB56A2A,
+                                                    ),
+                                                    width: 2,
+                                                  ),
+                                                ),
                                                 child: Center(
                                                   child: Text(
                                                     '#3',
                                                     style: TextStyle(
                                                       fontSize: 22,
-                                                      fontWeight: FontWeight.w900,
-                                                      color: Colors.orange.shade100,
+                                                      fontWeight:
+                                                          FontWeight.w900,
+                                                      color: Colors
+                                                          .orange
+                                                          .shade100,
                                                       shadows: const [
                                                         Shadow(
                                                           blurRadius: 8,
-                                                          color: Color(0x99000000),
+                                                          color: Color(
+                                                            0x99000000,
+                                                          ),
                                                           offset: Offset(0, 2),
                                                         ),
                                                       ],
                                                     ),
                                                   ),
                                                 ),
-                                               ),
-                                             ],
-                                           ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -4454,7 +4689,10 @@ class _ArenaScreenState extends State<ArenaScreen> {
                               const SizedBox(height: 4),
                               // Column headers for the list
                               Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 4,
+                                ),
                                 child: Row(
                                   children: [
                                     SizedBox(
@@ -4470,7 +4708,9 @@ class _ArenaScreenState extends State<ArenaScreen> {
                                     ),
                                     Expanded(
                                       child: Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                        ),
                                         child: Text(
                                           'Name',
                                           style: TextStyle(
@@ -4507,16 +4747,20 @@ class _ArenaScreenState extends State<ArenaScreen> {
                                           final entry = rest[index];
                                           final rank = index + 4;
                                           return Padding(
-                                            padding: const EdgeInsets.symmetric(vertical: 6),
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 6,
+                                            ),
                                             child: Container(
                                               decoration: BoxDecoration(
                                                 color: listRowColor,
-                                                borderRadius: BorderRadius.circular(6),
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
                                               ),
-                                              padding: const EdgeInsets.symmetric(
-                                                horizontal: 12,
-                                                vertical: 8,
-                                              ),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 12,
+                                                    vertical: 8,
+                                                  ),
                                               child: Row(
                                                 children: [
                                                   SizedBox(
@@ -4524,20 +4768,25 @@ class _ArenaScreenState extends State<ArenaScreen> {
                                                     child: Text(
                                                       '#$rank',
                                                       style: TextStyle(
-                                                        fontWeight: FontWeight.bold,
+                                                        fontWeight:
+                                                            FontWeight.bold,
                                                         color: listRankColor,
                                                       ),
                                                     ),
                                                   ),
                                                   Expanded(
                                                     child: Padding(
-                                                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            horizontal: 12,
+                                                          ),
                                                       child: Text(
                                                         entry.accountId,
                                                         style: TextStyle(
                                                           color: listNameColor,
                                                         ),
-                                                        overflow: TextOverflow.ellipsis,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
                                                       ),
                                                     ),
                                                   ),
@@ -4546,7 +4795,8 @@ class _ArenaScreenState extends State<ArenaScreen> {
                                                     style: TextStyle(
                                                       fontSize: 12,
                                                       color: listHypeColor,
-                                                      fontWeight: FontWeight.bold,
+                                                      fontWeight:
+                                                          FontWeight.bold,
                                                     ),
                                                   ),
                                                 ],
@@ -4556,38 +4806,38 @@ class _ArenaScreenState extends State<ArenaScreen> {
                                         },
                                       ),
                               ),
-                              ],
-                            ),
+                            ],
                           ),
                         ),
-                        // Loading overlay with blur
-                        if (_leaderboardLoading)
-                          Positioned.fill(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: AnimatedOpacity(
-                                opacity: _leaderboardLoading ? 1 : 0,
-                                duration: const Duration(milliseconds: 400),
-                                child: BackdropFilter(
-                                  filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-                                  child: Container(
-                                    color: Colors.black.withOpacity(0.3),
-                                    child: const Center(
-                                      child: CircularProgressIndicator(),
-                                    ),
+                      ),
+                      // Loading overlay with blur
+                      if (_leaderboardLoading)
+                        Positioned.fill(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: AnimatedOpacity(
+                              opacity: _leaderboardLoading ? 1 : 0,
+                              duration: const Duration(milliseconds: 400),
+                              child: BackdropFilter(
+                                filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+                                child: Container(
+                                  color: Colors.black.withOpacity(0.3),
+                                  child: const Center(
+                                    child: CircularProgressIndicator(),
                                   ),
                                 ),
                               ),
                             ),
                           ),
-                      ],
-                    ),
-                  ),
+                        ),
                     ],
                   ),
                 ),
               ],
             ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -4604,20 +4854,18 @@ class _ArenaScreenState extends State<ArenaScreen> {
       3: Icons.grade,
     };
 
-    final displayName = entry.accountId.trim().isEmpty ? 'You' : entry.accountId.trim();
+    final displayName = entry.accountId.trim().isEmpty
+        ? 'You'
+        : entry.accountId.trim();
     final shortName = displayName.length > 14
-      ? '${displayName.substring(0, 14)}…'
-      : displayName;
+        ? '${displayName.substring(0, 14)}…'
+        : displayName;
 
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(
-          medalIcons[rank] ?? Icons.circle,
-          color: medalColor,
-          size: 20,
-        ),
+        Icon(medalIcons[rank] ?? Icons.circle, color: medalColor, size: 20),
         const SizedBox(height: 6),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -4651,10 +4899,7 @@ class _ArenaScreenState extends State<ArenaScreen> {
               topLeft: Radius.circular(8),
               topRight: Radius.circular(8),
             ),
-            border: Border.all(
-              color: color,
-              width: 2,
-            ),
+            border: Border.all(color: color, width: 2),
           ),
           child: Center(
             child: Column(
@@ -4694,11 +4939,7 @@ class _ArenaScreenState extends State<ArenaScreen> {
       mainAxisAlignment: MainAxisAlignment.end,
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Icon(
-          Icons.lock_outline,
-          color: Colors.grey,
-          size: 20,
-        ),
+        const Icon(Icons.lock_outline, color: Colors.grey, size: 20),
         const SizedBox(height: 4),
         const SizedBox(
           width: 60,
@@ -4706,7 +4947,11 @@ class _ArenaScreenState extends State<ArenaScreen> {
             'Empty',
             textAlign: TextAlign.center,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey),
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey,
+            ),
           ),
         ),
         const SizedBox(height: 4),
@@ -4719,10 +4964,7 @@ class _ArenaScreenState extends State<ArenaScreen> {
               topLeft: Radius.circular(8),
               topRight: Radius.circular(8),
             ),
-            border: Border.all(
-              color: color,
-              width: 2,
-            ),
+            border: Border.all(color: color, width: 2),
           ),
           child: Center(
             child: Text(
@@ -4753,11 +4995,7 @@ class _ArenaScreenState extends State<ArenaScreen> {
 
     return Column(
       children: [
-        Icon(
-          medalIcons[rank] ?? Icons.circle,
-          color: medalColor,
-          size: 20,
-        ),
+        Icon(medalIcons[rank] ?? Icons.circle, color: medalColor, size: 20),
         const SizedBox(height: 4),
         SizedBox(
           width: 70,
@@ -4788,16 +5026,12 @@ class _ArenaScreenState extends State<ArenaScreen> {
 
   Widget _buildEmptyPodiumPillarContent({required int rank}) {
     final medalColor = rank == 2
-      ? const Color(0xFFC0C0C0)
-      : const Color(0xFFCD7F32);
+        ? const Color(0xFFC0C0C0)
+        : const Color(0xFFCD7F32);
 
     return Column(
       children: [
-        Icon(
-          Icons.military_tech,
-          color: medalColor,
-          size: 20,
-        ),
+        Icon(Icons.military_tech, color: medalColor, size: 20),
         const SizedBox(height: 4),
         const SizedBox(
           width: 70,
@@ -5236,9 +5470,7 @@ class _CurveEntryTile extends StatelessWidget {
                         fontWeight: FontWeight.w500,
                       ),
                       inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                          RegExp(r'[0-9+\-.]'),
-                        ),
+                        FilteringTextInputFormatter.allow(RegExp(r'[0-9+\-.]')),
                       ],
                       decoration: const InputDecoration(
                         contentPadding: EdgeInsets.symmetric(
@@ -5532,14 +5764,15 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   Future<_CreateUserResult?> _showCreateUserDialog() async {
     if (_presets.isEmpty) {
       if (!mounted) return null;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No presets found.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('No presets found.')));
       return null;
     }
 
     final controller = TextEditingController();
-    String? selectedPreset = _presets.any((preset) => preset.folder == _selectedPreset)
+    String? selectedPreset =
+        _presets.any((preset) => preset.folder == _selectedPreset)
         ? _selectedPreset
         : _presets.first.folder;
     String? errorText;
@@ -5652,9 +5885,9 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to create user: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to create user: $error')));
     }
   }
 
@@ -5748,7 +5981,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   Future<void> _deleteProfile() async {
     final profileId = _selectedProfile;
     if (profileId == null) return;
-    
+
     // Check which folders exist
     final profilesDir = Directory(
       joinPath([getBackendRoot(), 'static', 'profiles', profileId]),
@@ -5758,12 +5991,12 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     );
     final profileFolderExists = await profilesDir.exists();
     final clientSettingsFolderExists = await clientSettingsDir.exists();
-    
+
     bool deleteProfile = profileFolderExists;
     bool deleteClientSettings = clientSettingsFolderExists;
-    
+
     final blurEnabled = appDialogBlurEnabled.value;
-    
+
     final result = await showDialog<Map<String, bool>>(
       context: context,
       barrierColor: Colors.black.withOpacity(0.3),
@@ -5781,17 +6014,22 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                       const SizedBox(height: 12),
                       CheckboxListTile(
                         value: deleteProfile,
-                        onChanged: profileFolderExists 
-                            ? (value) => setState(() => deleteProfile = value ?? true)
+                        onChanged: profileFolderExists
+                            ? (value) =>
+                                  setState(() => deleteProfile = value ?? true)
                             : null,
                         title: const Text('User Profile'),
-                        subtitle: const Text('profile_athena.json and related profile data'),
+                        subtitle: const Text(
+                          'profile_athena.json and related profile data',
+                        ),
                         controlAffinity: ListTileControlAffinity.leading,
                       ),
                       CheckboxListTile(
                         value: deleteClientSettings,
                         onChanged: clientSettingsFolderExists
-                            ? (value) => setState(() => deleteClientSettings = value ?? true)
+                            ? (value) => setState(
+                                () => deleteClientSettings = value ?? true,
+                              )
                             : null,
                         title: const Text('ClientSettings'),
                         subtitle: const Text('Game settings and preferences'),
@@ -5805,11 +6043,19 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                       child: const Text('Cancel'),
                     ),
                     ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.redAccent,
+                      ),
                       onPressed: (deleteProfile || deleteClientSettings)
-                          ? () => Navigator.pop(context, {'profile': deleteProfile, 'settings': deleteClientSettings})
+                          ? () => Navigator.pop(context, {
+                              'profile': deleteProfile,
+                              'settings': deleteClientSettings,
+                            })
                           : null,
-                      child: const Text('Delete', style: TextStyle(color: Colors.white)),
+                      child: const Text(
+                        'Delete',
+                        style: TextStyle(color: Colors.white),
+                      ),
                     ),
                   ],
                 ),
@@ -5826,17 +6072,22 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                     const SizedBox(height: 12),
                     CheckboxListTile(
                       value: deleteProfile,
-                      onChanged: profileFolderExists 
-                          ? (value) => setState(() => deleteProfile = value ?? true)
+                      onChanged: profileFolderExists
+                          ? (value) =>
+                                setState(() => deleteProfile = value ?? true)
                           : null,
                       title: const Text('User Profile'),
-                      subtitle: const Text('profile_athena.json and related profile data'),
+                      subtitle: const Text(
+                        'profile_athena.json and related profile data',
+                      ),
                       controlAffinity: ListTileControlAffinity.leading,
                     ),
                     CheckboxListTile(
                       value: deleteClientSettings,
                       onChanged: clientSettingsFolderExists
-                          ? (value) => setState(() => deleteClientSettings = value ?? true)
+                          ? (value) => setState(
+                              () => deleteClientSettings = value ?? true,
+                            )
                           : null,
                       title: const Text('ClientSettings'),
                       subtitle: const Text('Game settings and preferences'),
@@ -5850,24 +6101,38 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                     child: const Text('Cancel'),
                   ),
                   ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.redAccent,
+                    ),
                     onPressed: (deleteProfile || deleteClientSettings)
-                        ? () => Navigator.pop(context, {'profile': deleteProfile, 'settings': deleteClientSettings})
+                        ? () => Navigator.pop(context, {
+                            'profile': deleteProfile,
+                            'settings': deleteClientSettings,
+                          })
                         : null,
-                    child: const Text('Delete', style: TextStyle(color: Colors.white)),
+                    child: const Text(
+                      'Delete',
+                      style: TextStyle(color: Colors.white),
+                    ),
                   ),
                 ],
               ),
             ),
     );
-    
+
     if (result == null) return;
-    
+
     try {
-      await ProfileService.deleteProfile(profileId, deleteProfile: result['profile']!, deleteClientSettings: result['settings']!);
+      await ProfileService.deleteProfile(
+        profileId,
+        deleteProfile: result['profile']!,
+        deleteClientSettings: result['settings']!,
+      );
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Deleted profile "$profileId".')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Deleted profile "$profileId".')));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -5879,9 +6144,9 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   Future<void> _deleteAllProfiles() async {
     bool deleteProfiles = true;
     bool deleteClientSettings = true;
-    
+
     final blurEnabled = appDialogBlurEnabled.value;
-    
+
     final result = await showDialog<Map<String, bool>>(
       context: context,
       barrierColor: Colors.black.withOpacity(0.3),
@@ -5899,16 +6164,23 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                       const SizedBox(height: 12),
                       CheckboxListTile(
                         value: deleteProfiles,
-                        onChanged: (value) => setState(() => deleteProfiles = value ?? true),
+                        onChanged: (value) =>
+                            setState(() => deleteProfiles = value ?? true),
                         title: const Text('User Profiles'),
-                        subtitle: const Text('All profile_athena.json files and related data'),
+                        subtitle: const Text(
+                          'All profile_athena.json files and related data',
+                        ),
                         controlAffinity: ListTileControlAffinity.leading,
                       ),
                       CheckboxListTile(
                         value: deleteClientSettings,
-                        onChanged: (value) => setState(() => deleteClientSettings = value ?? true),
+                        onChanged: (value) => setState(
+                          () => deleteClientSettings = value ?? true,
+                        ),
                         title: const Text('ClientSettings'),
-                        subtitle: const Text('All game settings and preferences'),
+                        subtitle: const Text(
+                          'All game settings and preferences',
+                        ),
                         controlAffinity: ListTileControlAffinity.leading,
                       ),
                     ],
@@ -5919,11 +6191,19 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                       child: const Text('Cancel'),
                     ),
                     ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.redAccent,
+                      ),
                       onPressed: (deleteProfiles || deleteClientSettings)
-                          ? () => Navigator.pop(context, {'profiles': deleteProfiles, 'settings': deleteClientSettings})
+                          ? () => Navigator.pop(context, {
+                              'profiles': deleteProfiles,
+                              'settings': deleteClientSettings,
+                            })
                           : null,
-                      child: const Text('Delete All', style: TextStyle(color: Colors.white)),
+                      child: const Text(
+                        'Delete All',
+                        style: TextStyle(color: Colors.white),
+                      ),
                     ),
                   ],
                 ),
@@ -5940,14 +6220,18 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                     const SizedBox(height: 12),
                     CheckboxListTile(
                       value: deleteProfiles,
-                      onChanged: (value) => setState(() => deleteProfiles = value ?? true),
+                      onChanged: (value) =>
+                          setState(() => deleteProfiles = value ?? true),
                       title: const Text('User Profiles'),
-                      subtitle: const Text('All profile_athena.json files and related data'),
+                      subtitle: const Text(
+                        'All profile_athena.json files and related data',
+                      ),
                       controlAffinity: ListTileControlAffinity.leading,
                     ),
                     CheckboxListTile(
                       value: deleteClientSettings,
-                      onChanged: (value) => setState(() => deleteClientSettings = value ?? true),
+                      onChanged: (value) =>
+                          setState(() => deleteClientSettings = value ?? true),
                       title: const Text('ClientSettings'),
                       subtitle: const Text('All game settings and preferences'),
                       controlAffinity: ListTileControlAffinity.leading,
@@ -5960,24 +6244,37 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                     child: const Text('Cancel'),
                   ),
                   ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.redAccent,
+                    ),
                     onPressed: (deleteProfiles || deleteClientSettings)
-                        ? () => Navigator.pop(context, {'profiles': deleteProfiles, 'settings': deleteClientSettings})
+                        ? () => Navigator.pop(context, {
+                            'profiles': deleteProfiles,
+                            'settings': deleteClientSettings,
+                          })
                         : null,
-                    child: const Text('Delete All', style: TextStyle(color: Colors.white)),
+                    child: const Text(
+                      'Delete All',
+                      style: TextStyle(color: Colors.white),
+                    ),
                   ),
                 ],
               ),
             ),
     );
-    
+
     if (result == null) return;
-    
+
     try {
-      await ProfileService.deleteAllProfiles(deleteProfiles: result['profiles']!, deleteClientSettings: result['settings']!);
+      await ProfileService.deleteAllProfiles(
+        deleteProfiles: result['profiles']!,
+        deleteClientSettings: result['settings']!,
+      );
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Deleted all profiles.')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Deleted all profiles.')));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -5987,7 +6284,12 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   }
 
   Future<void> _openClientSettingsFolder(String accountId) async {
-    final clientSettingsPath = joinPath([getBackendRoot(), 'static', 'ClientSettings', accountId]);
+    final clientSettingsPath = joinPath([
+      getBackendRoot(),
+      'static',
+      'ClientSettings',
+      accountId,
+    ]);
     if (!Directory(clientSettingsPath).existsSync()) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -6006,7 +6308,12 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   }
 
   Future<void> _openProfileFolder(String accountId) async {
-    final profilePath = joinPath([getBackendRoot(), 'static', 'profiles', accountId]);
+    final profilePath = joinPath([
+      getBackendRoot(),
+      'static',
+      'profiles',
+      accountId,
+    ]);
     if (!Directory(profilePath).existsSync()) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -6027,11 +6334,21 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   Future<void> _copyDirectory(Directory source, Directory destination) async {
     await for (final entity in source.list(recursive: false)) {
       if (entity is Directory) {
-        final newDir = Directory(joinPath([destination.path, entity.path.split(Platform.pathSeparator).last]));
+        final newDir = Directory(
+          joinPath([
+            destination.path,
+            entity.path.split(Platform.pathSeparator).last,
+          ]),
+        );
         await newDir.create(recursive: true);
         await _copyDirectory(entity, newDir);
       } else if (entity is File) {
-        final newFile = File(joinPath([destination.path, entity.path.split(Platform.pathSeparator).last]));
+        final newFile = File(
+          joinPath([
+            destination.path,
+            entity.path.split(Platform.pathSeparator).last,
+          ]),
+        );
         await entity.copy(newFile.path);
       }
     }
@@ -6053,7 +6370,9 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     if (!profileFolderExists && !clientSettingsFolderExists) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No profile or client settings found to export.')),
+        const SnackBar(
+          content: Text('No profile or client settings found to export.'),
+        ),
       );
       return;
     }
@@ -6078,16 +6397,21 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                       CheckboxListTile(
                         value: exportProfile,
                         onChanged: profileFolderExists
-                            ? (value) => setState(() => exportProfile = value ?? true)
+                            ? (value) =>
+                                  setState(() => exportProfile = value ?? true)
                             : null,
                         title: const Text('User Profile'),
-                        subtitle: const Text('profile_athena.json and related profile data'),
+                        subtitle: const Text(
+                          'profile_athena.json and related profile data',
+                        ),
                         controlAffinity: ListTileControlAffinity.leading,
                       ),
                       CheckboxListTile(
                         value: exportClientSettings,
                         onChanged: clientSettingsFolderExists
-                            ? (value) => setState(() => exportClientSettings = value ?? true)
+                            ? (value) => setState(
+                                () => exportClientSettings = value ?? true,
+                              )
                             : null,
                         title: const Text('ClientSettings'),
                         subtitle: const Text('Game settings and preferences'),
@@ -6102,7 +6426,10 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                     ),
                     ElevatedButton.icon(
                       onPressed: (exportProfile || exportClientSettings)
-                          ? () => Navigator.pop(context, {'profile': exportProfile, 'settings': exportClientSettings})
+                          ? () => Navigator.pop(context, {
+                              'profile': exportProfile,
+                              'settings': exportClientSettings,
+                            })
                           : null,
                       icon: const Icon(Icons.download_rounded),
                       label: const Text('Export'),
@@ -6123,16 +6450,21 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                     CheckboxListTile(
                       value: exportProfile,
                       onChanged: profileFolderExists
-                          ? (value) => setState(() => exportProfile = value ?? true)
+                          ? (value) =>
+                                setState(() => exportProfile = value ?? true)
                           : null,
                       title: const Text('User Profile'),
-                      subtitle: const Text('profile_athena.json and related profile data'),
+                      subtitle: const Text(
+                        'profile_athena.json and related profile data',
+                      ),
                       controlAffinity: ListTileControlAffinity.leading,
                     ),
                     CheckboxListTile(
                       value: exportClientSettings,
                       onChanged: clientSettingsFolderExists
-                          ? (value) => setState(() => exportClientSettings = value ?? true)
+                          ? (value) => setState(
+                              () => exportClientSettings = value ?? true,
+                            )
                           : null,
                       title: const Text('ClientSettings'),
                       subtitle: const Text('Game settings and preferences'),
@@ -6147,7 +6479,10 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                   ),
                   ElevatedButton.icon(
                     onPressed: (exportProfile || exportClientSettings)
-                        ? () => Navigator.pop(context, {'profile': exportProfile, 'settings': exportClientSettings})
+                        ? () => Navigator.pop(context, {
+                            'profile': exportProfile,
+                            'settings': exportClientSettings,
+                          })
                         : null,
                     icon: const Icon(Icons.download_rounded),
                     label: const Text('Export'),
@@ -6176,15 +6511,23 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       await exportDir.create();
 
       if (result['profile']!) {
-        final profileSource = Directory(joinPath([backendRoot, 'static', 'profiles', accountId]));
-        final profileDest = Directory(joinPath([exportDir.path, 'profiles', accountId]));
+        final profileSource = Directory(
+          joinPath([backendRoot, 'static', 'profiles', accountId]),
+        );
+        final profileDest = Directory(
+          joinPath([exportDir.path, 'profiles', accountId]),
+        );
         await profileDest.create(recursive: true);
         await _copyDirectory(profileSource, profileDest);
       }
 
       if (result['settings']!) {
-        final settingsSource = Directory(joinPath([backendRoot, 'static', 'ClientSettings', accountId]));
-        final settingsDest = Directory(joinPath([exportDir.path, 'ClientSettings', accountId]));
+        final settingsSource = Directory(
+          joinPath([backendRoot, 'static', 'ClientSettings', accountId]),
+        );
+        final settingsDest = Directory(
+          joinPath([exportDir.path, 'ClientSettings', accountId]),
+        );
         await settingsDest.create(recursive: true);
         await _copyDirectory(settingsSource, settingsDest);
       }
@@ -6201,9 +6544,9 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       await tempDir.delete(recursive: true);
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Exported: $zipPath')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Exported: $zipPath')));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -6212,83 +6555,88 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     }
   }
 
-    Future<void> _importUserSettingsZip() async {
-      final picked = await FilePicker.platform.pickFiles(
-        dialogTitle: 'Import User Settings (zip)',
-        type: FileType.custom,
-        allowedExtensions: ['zip'],
-      );
-      if (picked == null || picked.files.single.path == null) return;
-      final zipPath = picked.files.single.path!;
+  Future<void> _importUserSettingsZip() async {
+    final picked = await FilePicker.platform.pickFiles(
+      dialogTitle: 'Import User Settings (zip)',
+      type: FileType.custom,
+      allowedExtensions: ['zip'],
+    );
+    if (picked == null || picked.files.single.path == null) return;
+    final zipPath = picked.files.single.path!;
 
-      try {
-        final backendRoot = getBackendRoot();
-        final input = InputFileStream(zipPath);
-        final archive = ZipDecoder().decodeBuffer(input);
+    try {
+      final backendRoot = getBackendRoot();
+      final input = InputFileStream(zipPath);
+      final archive = ZipDecoder().decodeBuffer(input);
 
-        final matched = <String>{};
-        for (final file in archive) {
-          if (!file.isFile) continue;
-          final name = file.name.replaceAll('\\', '/');
-          final segments = name.split('/').where((s) => s.isNotEmpty).toList();
-          if (segments.length < 3) continue;
+      final matched = <String>{};
+      for (final file in archive) {
+        if (!file.isFile) continue;
+        final name = file.name.replaceAll('\\', '/');
+        final segments = name.split('/').where((s) => s.isNotEmpty).toList();
+        if (segments.length < 3) continue;
 
-          String? accountId;
-          String? category;
-          int relativeStart = 0;
+        String? accountId;
+        String? category;
+        int relativeStart = 0;
 
-          if (segments[0] == 'profiles' || segments[0] == 'ClientSettings') {
-            category = segments[0];
-            accountId = segments[1];
-            relativeStart = 2;
-          } else if (segments.length >= 4 &&
-              (segments[1] == 'profiles' || segments[1] == 'ClientSettings')) {
-            accountId = segments[0];
-            category = segments[1];
-            if (segments[2] != accountId) continue;
-            relativeStart = 3;
-          }
-
-          if (accountId == null || category == null) continue;
-
-          String? baseDir;
-          if (category == 'profiles') {
-            baseDir = joinPath([backendRoot, 'static', 'profiles', accountId]);
-          } else if (category == 'ClientSettings') {
-            baseDir = joinPath([backendRoot, 'static', 'ClientSettings', accountId]);
-          } else {
-            continue;
-          }
-
-          final relative = segments.sublist(relativeStart).join('/');
-          if (relative.isEmpty) continue;
-          final outPath = joinPath([baseDir, relative]);
-          final outFile = File(outPath);
-          await outFile.parent.create(recursive: true);
-          final data = file.content as List<int>;
-          await outFile.writeAsBytes(data, flush: true);
-          matched.add(accountId);
+        if (segments[0] == 'profiles' || segments[0] == 'ClientSettings') {
+          category = segments[0];
+          accountId = segments[1];
+          relativeStart = 2;
+        } else if (segments.length >= 4 &&
+            (segments[1] == 'profiles' || segments[1] == 'ClientSettings')) {
+          accountId = segments[0];
+          category = segments[1];
+          if (segments[2] != accountId) continue;
+          relativeStart = 3;
         }
 
-        if (!mounted) return;
-        if (matched.isEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No valid profiles found in zip.')),
-          );
-          return;
+        if (accountId == null || category == null) continue;
+
+        String? baseDir;
+        if (category == 'profiles') {
+          baseDir = joinPath([backendRoot, 'static', 'profiles', accountId]);
+        } else if (category == 'ClientSettings') {
+          baseDir = joinPath([
+            backendRoot,
+            'static',
+            'ClientSettings',
+            accountId,
+          ]);
+        } else {
+          continue;
         }
 
-        await _load();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Imported ${matched.length} profile(s).')),
-        );
-      } catch (error) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to import zip: $error')),
-        );
+        final relative = segments.sublist(relativeStart).join('/');
+        if (relative.isEmpty) continue;
+        final outPath = joinPath([baseDir, relative]);
+        final outFile = File(outPath);
+        await outFile.parent.create(recursive: true);
+        final data = file.content as List<int>;
+        await outFile.writeAsBytes(data, flush: true);
+        matched.add(accountId);
       }
+
+      if (!mounted) return;
+      if (matched.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No valid profiles found in zip.')),
+        );
+        return;
+      }
+
+      await _load();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Imported ${matched.length} profile(s).')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to import zip: $error')));
     }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -6348,7 +6696,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(color: Colors.white10),
                           ),
-                            child: _profiles.isEmpty
+                          child: _profiles.isEmpty
                               ? const Center(child: Text('No users found.'))
                               : ListView.separated(
                                   itemCount: _profiles.length,
@@ -6371,20 +6719,35 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                                             details.globalPosition.dy,
                                           ),
                                           shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(12),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
                                           ),
                                           items: [
                                             PopupMenuItem(
-                                              child: const Text('Open Client Settings Folder'),
-                                              onTap: () => _openClientSettingsFolder(profile.accountId),
+                                              child: const Text(
+                                                'Open Client Settings Folder',
+                                              ),
+                                              onTap: () =>
+                                                  _openClientSettingsFolder(
+                                                    profile.accountId,
+                                                  ),
                                             ),
                                             PopupMenuItem(
-                                              child: const Text('Open Profile Folder'),
-                                              onTap: () => _openProfileFolder(profile.accountId),
+                                              child: const Text(
+                                                'Open Profile Folder',
+                                              ),
+                                              onTap: () => _openProfileFolder(
+                                                profile.accountId,
+                                              ),
                                             ),
                                             PopupMenuItem(
-                                              child: const Text('Export User Settings'),
-                                              onTap: () => _exportUserSettings(profile.accountId),
+                                              child: const Text(
+                                                'Export User Settings',
+                                              ),
+                                              onTap: () => _exportUserSettings(
+                                                profile.accountId,
+                                              ),
                                             ),
                                           ],
                                         );
@@ -6437,19 +6800,16 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                             const SizedBox(width: 12),
                             Text(
                               'Level and Currency',
-                              style: Theme.of(
-                                context,
-                              ).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w600),
                             ),
                             const Spacer(),
                             _HoverScale(
                               child: ElevatedButton.icon(
                                 onPressed: () {
-                                  Navigator.of(context).push(
-                                    _buildRoute(const UserValuesScreen()),
-                                  );
+                                  Navigator.of(
+                                    context,
+                                  ).push(_buildRoute(const UserValuesScreen()));
                                 },
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(
@@ -6473,218 +6833,208 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                 ),
                 const SizedBox(width: 20),
                 Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const _SectionTitle(
-                              title: 'Custom Cosmetic Presets',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const _SectionTitle(title: 'Custom Cosmetic Presets'),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: presetValue,
+                        decoration: InputDecoration(
+                          labelText: 'Preset',
+                          border: const OutlineInputBorder(),
+                          focusedBorder: OutlineInputBorder(
+                            borderSide: BorderSide(
+                              color: Theme.of(context).colorScheme.secondary,
+                              width: 1.6,
                             ),
-                            const SizedBox(height: 12),
-                            DropdownButtonFormField<String>(
-                              initialValue: presetValue,
-                              decoration: InputDecoration(
-                                labelText: 'Preset',
-                                border: const OutlineInputBorder(),
-                                focusedBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.secondary,
-                                    width: 1.6,
-                                  ),
+                          ),
+                        ),
+                        items: presetItems
+                            .map(
+                              (preset) => DropdownMenuItem(
+                                value: preset.folder,
+                                child: _PresetLabel(
+                                  name: preset.name,
+                                  tag: preset.versionTag,
                                 ),
                               ),
-                              items: presetItems
-                                  .map(
-                                    (preset) => DropdownMenuItem(
-                                      value: preset.folder,
-                                      child: _PresetLabel(
-                                        name: preset.name,
-                                        tag: preset.versionTag,
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
-                              selectedItemBuilder: (context) => presetItems
-                                  .map(
-                                    (preset) => _PresetLabel(
-                                      name: preset.name,
-                                      tag: preset.versionTag,
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (value) =>
-                                  setState(() => _selectedPreset = value),
-                            ),
-                            const SizedBox(height: 16),
-                            DropdownButtonFormField<String>(
-                              initialValue: profileValue,
-                              decoration: InputDecoration(
-                                labelText: 'User',
-                                border: const OutlineInputBorder(),
-                                focusedBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.secondary,
-                                    width: 1.6,
-                                  ),
-                                ),
+                            )
+                            .toList(),
+                        selectedItemBuilder: (context) => presetItems
+                            .map(
+                              (preset) => _PresetLabel(
+                                name: preset.name,
+                                tag: preset.versionTag,
                               ),
-                              items: profileItems
-                                  .map(
-                                    (profile) => DropdownMenuItem(
-                                      value: profile.accountId,
-                                      child: Text(profile.accountId),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (value) =>
-                                  setState(() => _selectedProfile = value),
+                            )
+                            .toList(),
+                        onChanged: (value) =>
+                            setState(() => _selectedPreset = value),
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        initialValue: profileValue,
+                        decoration: InputDecoration(
+                          labelText: 'User',
+                          border: const OutlineInputBorder(),
+                          focusedBorder: OutlineInputBorder(
+                            borderSide: BorderSide(
+                              color: Theme.of(context).colorScheme.secondary,
+                              width: 1.6,
                             ),
-                            const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _HoverScale(
-                                    enabled:
-                                        _selectedProfile != null &&
-                                        _selectedPreset != null,
-                                    child: ElevatedButton.icon(
-                                      onPressed:
-                                          (_selectedProfile != null &&
-                                              _selectedPreset != null)
-                                          ? _applyPreset
-                                          : null,
-                                      icon: const Icon(Icons.auto_fix_high),
-                                      label: const Text(
-                                        'Apply preset to user',
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: _HoverScale(
-                                    enabled:
-                                        _selectedPreset != null &&
-                                        _profiles.isNotEmpty,
-                                    child: ElevatedButton.icon(
-                                      onPressed:
-                                          (_selectedPreset != null &&
-                                              _profiles.isNotEmpty)
-                                          ? _applyPresetToAll
-                                          : null,
-                                      icon: const Icon(Icons.group_rounded),
-                                      label: const Text(
-                                        'Apply preset to all users',
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
+                          ),
+                        ),
+                        items: profileItems
+                            .map(
+                              (profile) => DropdownMenuItem(
+                                value: profile.accountId,
+                                child: Text(profile.accountId),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) =>
+                            setState(() => _selectedProfile = value),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _HoverScale(
+                              enabled:
+                                  _selectedProfile != null &&
+                                  _selectedPreset != null,
+                              child: ElevatedButton.icon(
+                                onPressed:
+                                    (_selectedProfile != null &&
+                                        _selectedPreset != null)
+                                    ? _applyPreset
+                                    : null,
+                                icon: const Icon(Icons.auto_fix_high),
+                                label: const Text('Apply preset to user'),
+                              ),
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'This replaces profile_athena.json for the selected user.',
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(color: _onSurface(context, 0.6)),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _HoverScale(
+                              enabled:
+                                  _selectedPreset != null &&
+                                  _profiles.isNotEmpty,
+                              child: ElevatedButton.icon(
+                                onPressed:
+                                    (_selectedPreset != null &&
+                                        _profiles.isNotEmpty)
+                                    ? _applyPresetToAll
+                                    : null,
+                                icon: const Icon(Icons.group_rounded),
+                                label: const Text('Apply preset to all users'),
+                              ),
                             ),
-                            const SizedBox(height: 20),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _HoverScale(
-                                    enabled: _selectedProfile != null,
-                                    child: OutlinedButton.icon(
-                                      onPressed: _selectedProfile != null
-                                          ? _deleteProfile
-                                          : null,
-                                      icon: const Icon(
-                                        Icons.delete_outline,
-                                        color: Colors.redAccent,
-                                      ),
-                                      label: const Text('Delete user'),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: Colors.redAccent,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: _HoverScale(
-                                    enabled: _hasAnyUsers,
-                                    child: OutlinedButton.icon(
-                                      onPressed: _hasAnyUsers
-                                          ? _deleteAllProfiles
-                                          : null,
-                                      icon: const Icon(
-                                        Icons.delete_sweep,
-                                        color: Colors.redAccent,
-                                      ),
-                                      label: const Text('Delete all users'),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: Colors.redAccent,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Permanently removes user data and game settings.',
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(color: _onSurface(context, 0.6)),
-                            ),
-                            const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _HoverScale(
-                                    enabled: !_loading && _selectedProfile != null,
-                                    child: OutlinedButton.icon(
-                                      onPressed: (_loading || _selectedProfile == null)
-                                          ? null
-                                          : () => _exportUserSettings(
-                                                _selectedProfile!,
-                                              ),
-                                      icon: const Icon(
-                                        Icons.download_rounded,
-                                      ),
-                                      label: const Text('Export User'),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: _HoverScale(
-                                    enabled: !_loading,
-                                    child: OutlinedButton.icon(
-                                      onPressed:
-                                          _loading ? null : _importUserSettingsZip,
-                                      icon: const Icon(
-                                        Icons.file_upload_outlined,
-                                      ),
-                                      label:
-                                          const Text('Import User (Select ZIP)'),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Export or import a user into the backend.',
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(color: _onSurface(context, 0.6)),
-                            ),
-                          ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'This replaces profile_athena.json for the selected user.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: _onSurface(context, 0.6),
                         ),
                       ),
-                ],
-              ),
+                      const SizedBox(height: 20),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _HoverScale(
+                              enabled: _selectedProfile != null,
+                              child: OutlinedButton.icon(
+                                onPressed: _selectedProfile != null
+                                    ? _deleteProfile
+                                    : null,
+                                icon: const Icon(
+                                  Icons.delete_outline,
+                                  color: Colors.redAccent,
+                                ),
+                                label: const Text('Delete user'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.redAccent,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _HoverScale(
+                              enabled: _hasAnyUsers,
+                              child: OutlinedButton.icon(
+                                onPressed: _hasAnyUsers
+                                    ? _deleteAllProfiles
+                                    : null,
+                                icon: const Icon(
+                                  Icons.delete_sweep,
+                                  color: Colors.redAccent,
+                                ),
+                                label: const Text('Delete all users'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.redAccent,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Permanently removes user data and game settings.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: _onSurface(context, 0.6),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _HoverScale(
+                              enabled: !_loading && _selectedProfile != null,
+                              child: OutlinedButton.icon(
+                                onPressed:
+                                    (_loading || _selectedProfile == null)
+                                    ? null
+                                    : () => _exportUserSettings(
+                                        _selectedProfile!,
+                                      ),
+                                icon: const Icon(Icons.download_rounded),
+                                label: const Text('Export User'),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _HoverScale(
+                              enabled: !_loading,
+                              child: OutlinedButton.icon(
+                                onPressed: _loading
+                                    ? null
+                                    : _importUserSettingsZip,
+                                icon: const Icon(Icons.file_upload_outlined),
+                                label: const Text('Import User (Select ZIP)'),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Export or import a user into the backend.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: _onSurface(context, 0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
     );
   }
 }
@@ -6700,10 +7050,10 @@ class _UserValuesScreenState extends State<UserValuesScreen> {
   bool _loading = true;
   List<ProfileSummary> _profiles = [];
   String? _selectedProfile;
-  
+
   final TextEditingController _levelController = TextEditingController();
   final TextEditingController _vbucksController = TextEditingController();
-  
+
   bool _saving = false;
 
   @override
@@ -6734,13 +7084,15 @@ class _UserValuesScreenState extends State<UserValuesScreen> {
 
   Future<void> _loadUserValues() async {
     if (_selectedProfile == null) return;
-    
+
     final values = await UserValuesService.loadUserValues(_selectedProfile!);
     if (!mounted) return;
-    
+
     setState(() {
       // Use level as the single source, but fall back to accountLevel if level is 1
-      final displayLevel = values.level > 1 ? values.level : values.accountLevel;
+      final displayLevel = values.level > 1
+          ? values.level
+          : values.accountLevel;
       _levelController.text = displayLevel.toString();
       _vbucksController.text = values.vbucks.toString();
     });
@@ -6748,12 +7100,12 @@ class _UserValuesScreenState extends State<UserValuesScreen> {
 
   Future<void> _saveUserValues() async {
     if (_selectedProfile == null || _saving) return;
-    
+
     setState(() => _saving = true);
-    
+
     final level = int.tryParse(_levelController.text) ?? 1;
     final vbucks = int.tryParse(_vbucksController.text) ?? 0;
-    
+
     // Use the same level value for all three level fields
     await UserValuesService.saveUserValues(
       _selectedProfile!,
@@ -6764,10 +7116,10 @@ class _UserValuesScreenState extends State<UserValuesScreen> {
         vbucks: vbucks,
       ),
     );
-    
+
     if (!mounted) return;
     setState(() => _saving = false);
-    
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('User values saved successfully!')),
     );
@@ -6786,128 +7138,129 @@ class _UserValuesScreenState extends State<UserValuesScreen> {
       child: _loading
           ? const Center(child: CircularProgressIndicator())
           : _profiles.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.person_off,
-                        size: 64,
-                        color: _onSurface(context, 0.3),
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.person_off,
+                    size: 64,
+                    color: _onSurface(context, 0.3),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No users found',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Create a user first from the Users menu',
+                    style: TextStyle(color: _onSurface(context, 0.6)),
+                  ),
+                ],
+              ),
+            )
+          : SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const _SectionTitle(title: 'Select User'),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: cardColor,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: borderColor),
+                    ),
+                    child: DropdownButtonFormField<String>(
+                      value: _selectedProfile,
+                      decoration: const InputDecoration(
+                        labelText: 'User',
+                        border: OutlineInputBorder(),
                       ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No users found',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Create a user first from the Users menu',
-                        style: TextStyle(color: _onSurface(context, 0.6)),
+                      items: _profiles.map((profile) {
+                        return DropdownMenuItem(
+                          value: profile.accountId,
+                          child: Text(profile.accountId),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _selectedProfile = value);
+                          unawaited(_loadUserValues());
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  const _SectionTitle(title: 'Level Settings'),
+                  const SizedBox(height: 12),
+                  _buildValueCard(
+                    context,
+                    cardColor,
+                    borderColor,
+                    icon: Icons.trending_up,
+                    title: 'Level',
+                    description:
+                        'Sets level, book_level, and accountLevel to the same value',
+                    imagePath: 'public/items/levels.webp',
+                    fields: [
+                      _ValueField(
+                        label: 'Level',
+                        controller: _levelController,
+                        hint: 'e.g., 100 or 999',
                       ),
                     ],
                   ),
-                )
-              : SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const _SectionTitle(title: 'Select User'),
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: cardColor,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: borderColor),
-                        ),
-                        child: DropdownButtonFormField<String>(
-                          value: _selectedProfile,
-                          decoration: const InputDecoration(
-                            labelText: 'User',
-                            border: OutlineInputBorder(),
-                          ),
-                          items: _profiles.map((profile) {
-                            return DropdownMenuItem(
-                              value: profile.accountId,
-                              child: Text(profile.accountId),
-                            );
-                          }).toList(),
-                          onChanged: (value) {
-                            if (value != null) {
-                              setState(() => _selectedProfile = value);
-                              unawaited(_loadUserValues());
-                            }
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      
-                      const _SectionTitle(title: 'Level Settings'),
-                      const SizedBox(height: 12),
-                      _buildValueCard(
-                        context,
-                        cardColor,
-                        borderColor,
-                        icon: Icons.trending_up,
-                        title: 'Level',
-                        description: 'Sets level, book_level, and accountLevel to the same value',
-                        imagePath: 'public/items/levels.webp',
-                        fields: [
-                          _ValueField(
-                            label: 'Level',
-                            controller: _levelController,
-                            hint: 'e.g., 100 or 999',
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-                      
-                      const _SectionTitle(title: 'Currency Settings'),
-                      const SizedBox(height: 12),
-                      _buildValueCard(
-                        context,
-                        cardColor,
-                        borderColor,
-                        icon: Icons.monetization_on,
-                        title: 'V-Bucks',
-                        imagePath: 'public/items/VBucks.webp',
-                        fields: [
-                          _ValueField(
-                            label: 'V-Bucks Amount',
-                            controller: _vbucksController,
-                            hint: 'Total V-Bucks (e.g., 13500)',
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 32),
-                      
-                      Center(
-                        child: _HoverScale(
-                          child: ElevatedButton.icon(
-                            onPressed: _saving ? null : _saveUserValues,
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 32,
-                                vertical: 16,
-                              ),
-                            ),
-                            icon: _saving
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.save),
-                            label: Text(_saving ? 'Saving...' : 'Save Changes'),
-                          ),
-                        ),
+                  const SizedBox(height: 24),
+
+                  const _SectionTitle(title: 'Currency Settings'),
+                  const SizedBox(height: 12),
+                  _buildValueCard(
+                    context,
+                    cardColor,
+                    borderColor,
+                    icon: Icons.monetization_on,
+                    title: 'V-Bucks',
+                    imagePath: 'public/items/VBucks.webp',
+                    fields: [
+                      _ValueField(
+                        label: 'V-Bucks Amount',
+                        controller: _vbucksController,
+                        hint: 'Total V-Bucks (e.g., 13500)',
                       ),
                     ],
                   ),
-                ),
+                  const SizedBox(height: 32),
+
+                  Center(
+                    child: _HoverScale(
+                      child: ElevatedButton.icon(
+                        onPressed: _saving ? null : _saveUserValues,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 32,
+                            vertical: 16,
+                          ),
+                        ),
+                        icon: _saving
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.save),
+                        label: Text(_saving ? 'Saving...' : 'Save Changes'),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
     );
   }
 
@@ -6923,7 +7276,7 @@ class _UserValuesScreenState extends State<UserValuesScreen> {
   }) {
     final fullImagePath = joinPath([getBackendRoot(), imagePath]);
     final imageFile = File(fullImagePath);
-    
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -6952,11 +7305,7 @@ class _UserValuesScreenState extends State<UserValuesScreen> {
                 color: _onSurface(context, 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(
-                icon,
-                size: 40,
-                color: _onSurface(context, 0.3),
-              ),
+              child: Icon(icon, size: 40, color: _onSurface(context, 0.3)),
             ),
           const SizedBox(width: 20),
           Expanded(
@@ -6980,18 +7329,20 @@ class _UserValuesScreenState extends State<UserValuesScreen> {
                   ),
                 ],
                 const SizedBox(height: 16),
-                ...fields.map((field) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: TextField(
-                    controller: field.controller,
-                    decoration: InputDecoration(
-                      labelText: field.label,
-                      hintText: field.hint,
-                      border: const OutlineInputBorder(),
+                ...fields.map(
+                  (field) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: TextField(
+                      controller: field.controller,
+                      decoration: InputDecoration(
+                        labelText: field.label,
+                        hintText: field.hint,
+                        border: const OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
                     ),
-                    keyboardType: TextInputType.number,
                   ),
-                )),
+                ),
               ],
             ),
           ),
@@ -7033,7 +7384,9 @@ class LogsScreen extends StatelessWidget {
                   : () {
                       Clipboard.setData(ClipboardData(text: allLogsText));
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Logs copied to clipboard')),
+                        const SnackBar(
+                          content: Text('Logs copied to clipboard'),
+                        ),
                       );
                     },
               icon: const Icon(Icons.copy_all_rounded),
@@ -7662,7 +8015,7 @@ class UserValuesService {
       try {
         final content = await athenaFile.readAsString();
         final json = jsonDecode(content) as Map<String, dynamic>;
-        
+
         // Navigate to stats.attributes where the level data is stored
         final stats = json['stats'] as Map<String, dynamic>?;
         if (stats != null) {
@@ -7670,13 +8023,19 @@ class UserValuesService {
           if (attributes != null) {
             // Read actual values, with fallbacks
             if (attributes.containsKey('level')) {
-              level = (attributes['level'] is int) ? attributes['level'] as int : int.tryParse(attributes['level'].toString()) ?? 1;
+              level = (attributes['level'] is int)
+                  ? attributes['level'] as int
+                  : int.tryParse(attributes['level'].toString()) ?? 1;
             }
             if (attributes.containsKey('book_level')) {
-              bookLevel = (attributes['book_level'] is int) ? attributes['book_level'] as int : int.tryParse(attributes['book_level'].toString()) ?? 1;
+              bookLevel = (attributes['book_level'] is int)
+                  ? attributes['book_level'] as int
+                  : int.tryParse(attributes['book_level'].toString()) ?? 1;
             }
             if (attributes.containsKey('accountLevel')) {
-              accountLevel = (attributes['accountLevel'] is int) ? attributes['accountLevel'] as int : int.tryParse(attributes['accountLevel'].toString()) ?? 1;
+              accountLevel = (attributes['accountLevel'] is int)
+                  ? attributes['accountLevel'] as int
+                  : int.tryParse(attributes['accountLevel'].toString()) ?? 1;
             }
           }
         }
@@ -7699,10 +8058,11 @@ class UserValuesService {
         final json = jsonDecode(content) as Map<String, dynamic>;
         final items = json['items'] as Map<String, dynamic>?;
         if (items != null) {
-          final mtxPurchased = items['Currency:MtxPurchased'] as Map<String, dynamic>?;
+          final mtxPurchased =
+              items['Currency:MtxPurchased'] as Map<String, dynamic>?;
           if (mtxPurchased != null && mtxPurchased.containsKey('quantity')) {
-            vbucks = (mtxPurchased['quantity'] is int) 
-                ? mtxPurchased['quantity'] as int 
+            vbucks = (mtxPurchased['quantity'] is int)
+                ? mtxPurchased['quantity'] as int
                 : int.tryParse(mtxPurchased['quantity'].toString()) ?? 0;
           }
         }
@@ -7719,7 +8079,10 @@ class UserValuesService {
     );
   }
 
-  static Future<void> saveUserValues(String accountId, UserValues values) async {
+  static Future<void> saveUserValues(
+    String accountId,
+    UserValues values,
+  ) async {
     final athenaPath = joinPath([
       getBackendRoot(),
       'static',
@@ -7732,7 +8095,7 @@ class UserValuesService {
       try {
         final content = await athenaFile.readAsString();
         final json = jsonDecode(content) as Map<String, dynamic>;
-        
+
         // Navigate to stats.attributes to set the level values
         final stats = json['stats'] as Map<String, dynamic>?;
         if (stats != null) {
@@ -7741,7 +8104,7 @@ class UserValuesService {
             attributes['level'] = values.level;
             attributes['book_level'] = values.bookLevel;
             attributes['accountLevel'] = values.accountLevel;
-            
+
             await athenaFile.writeAsString(
               const JsonEncoder.withIndent('  ').convert(json),
             );
@@ -7773,7 +8136,8 @@ class UserValuesService {
               'quantity': values.vbucks,
             };
           } else {
-            final mtxPurchased = items['Currency:MtxPurchased'] as Map<String, dynamic>;
+            final mtxPurchased =
+                items['Currency:MtxPurchased'] as Map<String, dynamic>;
             mtxPurchased['quantity'] = values.vbucks;
           }
           await commonCoreFile.writeAsString(
@@ -7866,7 +8230,9 @@ class ProfileService {
         await templatePath.copy(joinPath([profileDir.path, templateName]));
       }
     }
-    final profilePath = File(joinPath([profileDir.path, 'profile_athena.json']));
+    final profilePath = File(
+      joinPath([profileDir.path, 'profile_athena.json']),
+    );
     await presetPath.copy(profilePath.path);
     try {
       final client = HttpClient();
@@ -7885,10 +8251,10 @@ class ProfileService {
     final clientSettingsRoot = Directory(
       joinPath([getBackendRoot(), 'static', 'ClientSettings']),
     );
-    
+
     final profiles = <ProfileSummary>[];
     final seenAccountIds = <String>{};
-    
+
     // Check profiles directory
     if (await profilesDir.exists()) {
       await for (final entity in profilesDir.list(recursive: false)) {
@@ -7902,7 +8268,9 @@ class ProfileService {
         if (_isHostAccountId(accountId)) {
           continue;
         }
-        final profilePath = File(joinPath([entity.path, 'profile_athena.json']));
+        final profilePath = File(
+          joinPath([entity.path, 'profile_athena.json']),
+        );
         profiles.add(
           ProfileSummary(
             accountId: accountId,
@@ -7912,14 +8280,14 @@ class ProfileService {
         seenAccountIds.add(accountId);
       }
     }
-    
+
     // Also check ClientSettings directory for accounts not in profiles
     if (await clientSettingsRoot.exists()) {
       await for (final entity in clientSettingsRoot.list(recursive: false)) {
         if (entity is! Directory) continue;
         final accountId = _basename(entity.path);
         if (accountId.trim().isEmpty) continue;
-        if (accountId.toLowerCase() == 'config' || 
+        if (accountId.toLowerCase() == 'config' ||
             accountId == _profileTemplateBackupDirName ||
             accountId.startsWith('.')) {
           continue;
@@ -7927,20 +8295,15 @@ class ProfileService {
         if (_isHostAccountId(accountId)) {
           continue;
         }
-        
+
         // Only add if not already added from profiles directory
         if (!seenAccountIds.contains(accountId)) {
-          profiles.add(
-            ProfileSummary(
-              accountId: accountId,
-              hasAthena: false,
-            ),
-          );
+          profiles.add(ProfileSummary(accountId: accountId, hasAthena: false));
           seenAccountIds.add(accountId);
         }
       }
     }
-    
+
     profiles.sort((a, b) => a.accountId.compareTo(b.accountId));
     return profiles;
   }
@@ -8129,7 +8492,11 @@ class ProfileService {
     return appliedCount;
   }
 
-  static Future<void> deleteProfile(String accountId, {required bool deleteProfile, required bool deleteClientSettings}) async {
+  static Future<void> deleteProfile(
+    String accountId, {
+    required bool deleteProfile,
+    required bool deleteClientSettings,
+  }) async {
     if (deleteProfile) {
       final profilesDir = Directory(
         joinPath([getBackendRoot(), 'static', 'profiles', accountId]),
@@ -8138,7 +8505,7 @@ class ProfileService {
         await profilesDir.delete(recursive: true);
       }
     }
-    
+
     if (deleteClientSettings) {
       final clientSettingsDir = Directory(
         joinPath([getBackendRoot(), 'static', 'ClientSettings', accountId]),
@@ -8147,7 +8514,7 @@ class ProfileService {
         await clientSettingsDir.delete(recursive: true);
       }
     }
-    
+
     try {
       final client = HttpClient();
       final request = await client.postUrl(
@@ -8158,7 +8525,10 @@ class ProfileService {
     } catch (_) {}
   }
 
-  static Future<void> deleteAllProfiles({required bool deleteProfiles, required bool deleteClientSettings}) async {
+  static Future<void> deleteAllProfiles({
+    required bool deleteProfiles,
+    required bool deleteClientSettings,
+  }) async {
     if (deleteProfiles) {
       final profilesRoot = Directory(
         joinPath([getBackendRoot(), 'static', 'profiles']),
@@ -8172,7 +8542,7 @@ class ProfileService {
         }
       }
     }
-    
+
     if (deleteClientSettings) {
       final clientSettingsRoot = Directory(
         joinPath([getBackendRoot(), 'static', 'ClientSettings']),
@@ -8427,6 +8797,7 @@ class CustomDataTableInput {
     this.damageMid,
     this.damageLong,
     this.damageMaxRange,
+    this.rarityConfigs,
   });
 
   final String weaponName;
@@ -8438,6 +8809,9 @@ class CustomDataTableInput {
   final String? damageMid;
   final String? damageLong;
   final String? damageMaxRange;
+  // Map of rarity name -> damage configuration
+  // Each config contains: damagePB, envDamage, damageMid, damageLong, damageMaxRange, weaponIdLine
+  final Map<String, Map<String, String>>? rarityConfigs;
 }
 
 class DataTableWeapon {
@@ -9102,7 +9476,7 @@ class CurveTableService {
     final iniFile = File(BackendPaths.defaultGameIni);
     final backupFile = File(BackendPaths.modificationsBackup);
     final curvesFile = File(BackendPaths.curvesJson);
-    
+
     if (!await iniFile.exists()) return;
     var content = await iniFile.readAsString();
     content = content.replaceAll(
@@ -9111,11 +9485,11 @@ class CurveTableService {
     );
     content = content.replaceAll(RegExp('\n\n+'), '\n');
     await iniFile.writeAsString(content);
-    
+
     if (await backupFile.exists()) {
       await backupFile.delete();
     }
-    
+
     // Remove all entries in the "Other" group
     if (await curvesFile.exists()) {
       final curvesContent = await curvesFile.readAsString();
@@ -9396,7 +9770,8 @@ class DataTableService {
     if (!await dataTablesFile.exists()) {
       return [];
     }
-    final map = jsonDecode(await dataTablesFile.readAsString()) as Map<String, dynamic>;
+    final map =
+        jsonDecode(await dataTablesFile.readAsString()) as Map<String, dynamic>;
     final weapons = <DataTableWeapon>[];
     for (final entry in map.entries) {
       final data = entry.value as Map<String, dynamic>;
@@ -9414,18 +9789,26 @@ class DataTableService {
           );
         }).toList();
       }
-      weapons.add(DataTableWeapon(
-        id: entry.key,
-        name: data['name'] ?? 'Weapon ${entry.key}',
-        weaponId: data['weaponId'] ?? '',
-        weaponPath: data['weaponPath'] ?? '/Game/Athena/Items/Weapons/AthenaRangedWeapons',
-        imagePath: data['imagePath'],
-        damageFields: (data['damageFields'] as List<dynamic>?)?.cast<String>() ?? [],
-        environmentalDamageFields: (data['environmentalDamageFields'] as List<dynamic>?)?.cast<String>() ?? [],
-        damagePB: data['damagePB'] ?? '0',
-        defaultEnvDamage: data['defaultEnvDamage'] ?? '0',
-        variants: variants,
-      ));
+      weapons.add(
+        DataTableWeapon(
+          id: entry.key,
+          name: data['name'] ?? 'Weapon ${entry.key}',
+          weaponId: data['weaponId'] ?? '',
+          weaponPath:
+              data['weaponPath'] ??
+              '/Game/Athena/Items/Weapons/AthenaRangedWeapons',
+          imagePath: data['imagePath'],
+          damageFields:
+              (data['damageFields'] as List<dynamic>?)?.cast<String>() ?? [],
+          environmentalDamageFields:
+              (data['environmentalDamageFields'] as List<dynamic>?)
+                  ?.cast<String>() ??
+              [],
+          damagePB: data['damagePB'] ?? '0',
+          defaultEnvDamage: data['defaultEnvDamage'] ?? '0',
+          variants: variants,
+        ),
+      );
     }
     return weapons;
   }
@@ -9486,7 +9869,10 @@ class DataTableService {
     await stateFile.writeAsString(jsonEncode({'enabled': enabled}));
   }
 
-  static Future<DataTableSettings> getWeaponSettings(DataTableWeapon weapon, {String? variantWeaponId}) async {
+  static Future<DataTableSettings> getWeaponSettings(
+    DataTableWeapon weapon, {
+    String? variantWeaponId,
+  }) async {
     final weaponId = variantWeaponId ?? weapon.weaponId;
     final iniFile = File(BackendPaths.defaultGameIni);
     if (!await iniFile.exists()) {
@@ -9506,8 +9892,13 @@ class DataTableService {
 
     for (final field in weapon.damageFields) {
       final regex = RegExp(
-        r'^\+DataTable=' + RegExp.escape(weapon.weaponPath) + r';RowUpdate;' +
-        RegExp.escape(weaponId) + r';' + RegExp.escape(field) + r';(.+)$',
+        r'^\+DataTable=' +
+            RegExp.escape(weapon.weaponPath) +
+            r';RowUpdate;' +
+            RegExp.escape(weaponId) +
+            r';' +
+            RegExp.escape(field) +
+            r';(.+)$',
         multiLine: true,
       );
       final match = regex.firstMatch(content);
@@ -9519,8 +9910,13 @@ class DataTableService {
 
     for (final field in weapon.environmentalDamageFields) {
       final regex = RegExp(
-        r'^\+DataTable=' + RegExp.escape(weapon.weaponPath) + r';RowUpdate;' +
-        RegExp.escape(weaponId) + r';' + RegExp.escape(field) + r';(.+)$',
+        r'^\+DataTable=' +
+            RegExp.escape(weapon.weaponPath) +
+            r';RowUpdate;' +
+            RegExp.escape(weaponId) +
+            r';' +
+            RegExp.escape(field) +
+            r';(.+)$',
         multiLine: true,
       );
       final match = regex.firstMatch(content);
@@ -9534,9 +9930,12 @@ class DataTableService {
     bool advancedMode = false;
     String? dmgValue;
     String? envDmgValue;
-    
+
     if (hasDamage) {
-      final damageValues = weapon.damageFields.map((f) => customValues[f]).whereType<String>().toSet();
+      final damageValues = weapon.damageFields
+          .map((f) => customValues[f])
+          .whereType<String>()
+          .toSet();
       if (damageValues.length == 1) {
         dmgValue = damageValues.first;
       } else {
@@ -9545,7 +9944,10 @@ class DataTableService {
     }
 
     if (hasEnvDamage) {
-      final envValues = weapon.environmentalDamageFields.map((f) => customValues[f]).whereType<String>().toSet();
+      final envValues = weapon.environmentalDamageFields
+          .map((f) => customValues[f])
+          .whereType<String>()
+          .toSet();
       if (envValues.length == 1) {
         envDmgValue = envValues.first;
       } else {
@@ -9563,17 +9965,29 @@ class DataTableService {
     );
   }
 
-  static Future<void> applyWeaponSettings(DataTableWeapon weapon, DataTableSettings settings, {String? variantWeaponId}) async {
+  static Future<void> applyWeaponSettings(
+    DataTableWeapon weapon,
+    DataTableSettings settings, {
+    String? variantWeaponId,
+  }) async {
     final weaponId = variantWeaponId ?? weapon.weaponId;
     final iniFile = File(BackendPaths.defaultGameIni);
     if (!await iniFile.exists()) return;
     var content = await iniFile.readAsString();
 
     // Remove existing DataTable lines for this weapon
-    for (final field in [...weapon.damageFields, ...weapon.environmentalDamageFields]) {
+    for (final field in [
+      ...weapon.damageFields,
+      ...weapon.environmentalDamageFields,
+    ]) {
       final regex = RegExp(
-        r'^\+DataTable=' + RegExp.escape(weapon.weaponPath) + r';RowUpdate;' +
-        RegExp.escape(weaponId) + r';' + RegExp.escape(field) + r';.*$',
+        r'^\+DataTable=' +
+            RegExp.escape(weapon.weaponPath) +
+            r';RowUpdate;' +
+            RegExp.escape(weaponId) +
+            r';' +
+            RegExp.escape(field) +
+            r';.*$',
         multiLine: true,
       );
       content = content.replaceAll(regex, '');
@@ -9582,16 +9996,20 @@ class DataTableService {
 
     // Add new lines if enabled
     final linesToAdd = <String>[];
-    
+
     if (settings.damageEnabled) {
       if (settings.advancedMode) {
         for (final field in weapon.damageFields) {
           final value = settings.customValues[field] ?? weapon.damagePB;
-          linesToAdd.add('+DataTable=${weapon.weaponPath};RowUpdate;$weaponId;$field;$value');
+          linesToAdd.add(
+            '+DataTable=${weapon.weaponPath};RowUpdate;$weaponId;$field;$value',
+          );
         }
       } else {
         for (final field in weapon.damageFields) {
-          linesToAdd.add('+DataTable=${weapon.weaponPath};RowUpdate;$weaponId;$field;${settings.damageValue}');
+          linesToAdd.add(
+            '+DataTable=${weapon.weaponPath};RowUpdate;$weaponId;$field;${settings.damageValue}',
+          );
         }
       }
     }
@@ -9600,11 +10018,15 @@ class DataTableService {
       if (settings.advancedMode) {
         for (final field in weapon.environmentalDamageFields) {
           final value = settings.customValues[field] ?? weapon.defaultEnvDamage;
-          linesToAdd.add('+DataTable=${weapon.weaponPath};RowUpdate;$weaponId;$field;$value');
+          linesToAdd.add(
+            '+DataTable=${weapon.weaponPath};RowUpdate;$weaponId;$field;$value',
+          );
         }
       } else {
         for (final field in weapon.environmentalDamageFields) {
-          linesToAdd.add('+DataTable=${weapon.weaponPath};RowUpdate;$weaponId;$field;${settings.envDamageValue}');
+          linesToAdd.add(
+            '+DataTable=${weapon.weaponPath};RowUpdate;$weaponId;$field;${settings.envDamageValue}',
+          );
         }
       }
     }
@@ -9617,7 +10039,8 @@ class DataTableService {
       );
       content = ensured.content;
       final insertPoint = ensured.insertPoint;
-      content = '${content.substring(0, insertPoint)}${linesToAdd.join('\n')}\n${content.substring(insertPoint)}';
+      content =
+          '${content.substring(0, insertPoint)}${linesToAdd.join('\n')}\n${content.substring(insertPoint)}';
     }
 
     await iniFile.writeAsString(content);
@@ -9638,19 +10061,26 @@ class DataTableService {
     final dataTablesFile = File(BackendPaths.dataTablesJson);
     Map<String, dynamic> data = {};
     if (await dataTablesFile.exists()) {
-      data = jsonDecode(await dataTablesFile.readAsString()) as Map<String, dynamic>;
+      data =
+          jsonDecode(await dataTablesFile.readAsString())
+              as Map<String, dynamic>;
     }
 
     // Generate unique ID
     final weaponId = 'custom-${DateTime.now().millisecondsSinceEpoch}';
-    
+
     // Save image if provided
     String? savedImagePath;
     if (input.imageSourcePath != null && input.imageSourcePath!.isNotEmpty) {
       final sourceFile = File(input.imageSourcePath!);
       if (await sourceFile.exists()) {
         final fileName = 'custom_${DateTime.now().millisecondsSinceEpoch}.png';
-        final targetPath = joinPath([getBackendRoot(), 'public', 'items', fileName]);
+        final targetPath = joinPath([
+          getBackendRoot(),
+          'public',
+          'items',
+          fileName,
+        ]);
         await sourceFile.copy(targetPath);
         savedImagePath = fileName;
       }
@@ -9659,10 +10089,15 @@ class DataTableService {
     // Determine damage fields based on advanced mode
     List<String> damageFields;
     List<String> envDamageFields;
-    
+
     if (input.advancedMode) {
       damageFields = ['DamagePB', 'DamageMid', 'DamageLong', 'DamageMaxRange'];
-      envDamageFields = ['EnvironmentalDamagePB', 'EnvironmentalDamageMid', 'EnvironmentalDamageLong', 'EnvironmentalDamageMaxRange'];
+      envDamageFields = [
+        'EnvironmentalDamagePB',
+        'EnvironmentalDamageMid',
+        'EnvironmentalDamageLong',
+        'EnvironmentalDamageMaxRange',
+      ];
     } else {
       damageFields = ['DamagePB'];
       envDamageFields = ['EnvironmentalDamagePB'];
@@ -9688,7 +10123,7 @@ class DataTableService {
   static Future<void> importDataTableLines(List<String> lines) async {
     final iniFile = File(BackendPaths.defaultGameIni);
     if (!await iniFile.exists()) return;
-    
+
     var content = await iniFile.readAsString();
     final ensured = IniService.ensureAssetSection(
       content,
@@ -9697,11 +10132,12 @@ class DataTableService {
     );
     content = ensured.content;
     final insertPoint = ensured.insertPoint;
-    
+
     // Insert the imported lines
     final linesToAdd = lines.join('\n');
-    content = '${content.substring(0, insertPoint)}$linesToAdd\n${content.substring(insertPoint)}';
-    
+    content =
+        '${content.substring(0, insertPoint)}$linesToAdd\n${content.substring(insertPoint)}';
+
     await iniFile.writeAsString(content);
   }
 }
@@ -9855,7 +10291,9 @@ class ConfigService {
     final map = <String, String>{};
     for (final line in content.split('\n')) {
       final trimmed = line.trim();
-      if (trimmed.isEmpty || trimmed.startsWith('#') || !trimmed.contains('=')) {
+      if (trimmed.isEmpty ||
+          trimmed.startsWith('#') ||
+          !trimmed.contains('=')) {
         continue;
       }
       final parts = trimmed.split('=');
@@ -9916,8 +10354,7 @@ class UpdateService {
     final detectedVersion = await _readBackendVersionFromCandidates();
     final currentVersion = detectedVersion.isEmpty ? '0.0.0' : detectedVersion;
     final release = await _fetchLatestReleaseInfo();
-    if (release != null &&
-        _isNewerVersion(release.version, currentVersion)) {
+    if (release != null && _isNewerVersion(release.version, currentVersion)) {
       final downloadUrl = release.msiUrl ?? _mainZipUrl;
       final isInstaller = release.msiUrl != null;
       return UpdateInfo(
@@ -10055,11 +10492,7 @@ class UpdateService {
           }
         }
       }
-      return (
-        version: tag,
-        msiUrl: msiUrl,
-        notes: json['body']?.toString(),
-      );
+      return (version: tag, msiUrl: msiUrl, notes: json['body']?.toString());
     } catch (_) {
       return null;
     } finally {
@@ -10252,10 +10685,7 @@ class UpdateNotesService {
       final thickness = double.tryParse(match.group(1) ?? '');
       final opacity = double.tryParse(match.group(2) ?? '');
       if (thickness != null || opacity != null) {
-        style = style.copyWith(
-          hrThickness: thickness,
-          hrOpacity: opacity,
-        );
+        style = style.copyWith(hrThickness: thickness, hrOpacity: opacity);
       }
       notes = content.replaceFirst(match.group(0) ?? '', '').trim();
     }
@@ -10264,28 +10694,19 @@ class UpdateNotesService {
 }
 
 class UpdateNotesPayload {
-  const UpdateNotesPayload({
-    required this.notes,
-    required this.style,
-  });
+  const UpdateNotesPayload({required this.notes, required this.style});
 
   final String notes;
   final UpdateNotesStyle style;
 }
 
 class UpdateNotesStyle {
-  const UpdateNotesStyle({
-    required this.hrThickness,
-    required this.hrOpacity,
-  });
+  const UpdateNotesStyle({required this.hrThickness, required this.hrOpacity});
 
   final double hrThickness;
   final double hrOpacity;
 
-  UpdateNotesStyle copyWith({
-    double? hrThickness,
-    double? hrOpacity,
-  }) {
+  UpdateNotesStyle copyWith({double? hrThickness, double? hrOpacity}) {
     return UpdateNotesStyle(
       hrThickness: hrThickness ?? this.hrThickness,
       hrOpacity: hrOpacity ?? this.hrOpacity,
@@ -10305,8 +10726,7 @@ class _RoundedHrSyntax extends md.BlockSyntax {
   const _RoundedHrSyntax();
 
   @override
-  RegExp get pattern =>
-      RegExp(r'^ {0,3}([-*_])[ \t]*\1[ \t]*\1(?:\1|[ \t])*$');
+  RegExp get pattern => RegExp(r'^ {0,3}([-*_])[ \t]*\1[ \t]*\1(?:\1|[ \t])*$');
 
   @override
   md.Node parse(md.BlockParser parser) {
@@ -10343,9 +10763,7 @@ class _MarkdownHrBuilder extends MarkdownElementBuilder {
         child: SizedBox(
           height: thickness,
           width: double.infinity,
-          child: DecoratedBox(
-            decoration: BoxDecoration(color: color),
-          ),
+          child: DecoratedBox(decoration: BoxDecoration(color: color)),
         ),
       ),
     );
@@ -10399,10 +10817,18 @@ class UpdateBackupService {
     }
 
     // Backup user-created profiles only (exclude template profiles)
-    final profilesSource = Directory(joinPath([backendRoot, 'static', 'profiles']));
+    final profilesSource = Directory(
+      joinPath([backendRoot, 'static', 'profiles']),
+    );
     if (profilesSource.existsSync()) {
-      final profilesTarget = Directory(joinPath([backupRoot.path, 'static', 'profiles']));
-      await _copyDirectoryExcludingProfiles(profilesSource, profilesTarget, _templateProfiles);
+      final profilesTarget = Directory(
+        joinPath([backupRoot.path, 'static', 'profiles']),
+      );
+      await _copyDirectoryExcludingProfiles(
+        profilesSource,
+        profilesTarget,
+        _templateProfiles,
+      );
     }
 
     // Don't backup Profile Presets - they are templates
@@ -10460,17 +10886,25 @@ class UpdateBackupService {
     }
 
     // Restore user-created profiles only (exclude template profiles)
-    final profilesSource = Directory(joinPath([backupRoot.path, 'static', 'profiles']));
+    final profilesSource = Directory(
+      joinPath([backupRoot.path, 'static', 'profiles']),
+    );
     if (profilesSource.existsSync()) {
-      final profilesTarget = Directory(joinPath([backendRoot, 'static', 'profiles']));
-      await _copyDirectoryExcludingProfiles(profilesSource, profilesTarget, _templateProfiles);
+      final profilesTarget = Directory(
+        joinPath([backendRoot, 'static', 'profiles']),
+      );
+      await _copyDirectoryExcludingProfiles(
+        profilesSource,
+        profilesTarget,
+        _templateProfiles,
+      );
     }
 
     // Note: Profile Presets (athenaprofiles/Profile Presets) are not backed up or restored
     // They are templates and should not be modified
 
     await backupRoot.delete(recursive: true);
-    
+
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Restored data from previous version.')),
@@ -10530,7 +10964,12 @@ class UpdateBackupService {
       if (isRootLevel && excludeFiles.contains(name)) continue;
       final newPath = joinPath([destination.path, name]);
       if (entity is Directory) {
-        await _copyDirectoryExcludingProfiles(entity, Directory(newPath), excludeFiles, isRootLevel: false);
+        await _copyDirectoryExcludingProfiles(
+          entity,
+          Directory(newPath),
+          excludeFiles,
+          isRootLevel: false,
+        );
       } else if (entity is File) {
         await entity.copy(newPath);
       }
@@ -10731,7 +11170,7 @@ class DataService {
     );
     appBackgroundPath.value = '';
     appBackgroundBlur.value = 18;
-    
+
     if (context.mounted) {
       ScaffoldMessenger.of(
         context,
@@ -11182,9 +11621,7 @@ Future<String?> _promptValue(BuildContext context, String name) async {
               final value = controller.text.trim();
               if (value.isEmpty || !isValidNumeric(value)) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Enter a valid numeric value.'),
-                  ),
+                  const SnackBar(content: Text('Enter a valid numeric value.')),
                 );
                 return;
               }
@@ -11207,14 +11644,14 @@ Future<Map<String, String>?> _promptAdvancedSettings(
 ) async {
   bool isValidNumeric(String value) =>
       RegExp(r'^[+-]?(?:\d+\.?\d*|\.\d+)$').hasMatch(value.trim());
-  
+
   final controllers = <String, TextEditingController>{};
   for (final field in fields) {
     controllers[field] = TextEditingController(
       text: currentValues[field] ?? defaultValue,
     );
   }
-  
+
   final result = await _showBlurDialog<Map<String, String>>(
     context: context,
     builder: (context) => AlertDialog(
@@ -11279,12 +11716,12 @@ Future<Map<String, String>?> _promptAdvancedSettings(
       ],
     ),
   );
-  
+
   // Dispose controllers
   for (final controller in controllers.values) {
     controller.dispose();
   }
-  
+
   return result;
 }
 
@@ -11727,7 +12164,9 @@ Future<List<CustomCurveInput>?> _promptCustomCurves(
   return result;
 }
 
-Future<CustomDataTableInput?> _promptCustomDataTable(BuildContext context) async {
+Future<CustomDataTableInput?> _promptCustomDataTable(
+  BuildContext context,
+) async {
   final weaponNameController = TextEditingController();
   final weaponIdController = TextEditingController();
   final damagePBController = TextEditingController(text: '50');
@@ -11735,7 +12174,73 @@ Future<CustomDataTableInput?> _promptCustomDataTable(BuildContext context) async
   final damageMidController = TextEditingController(text: '40');
   final damageLongController = TextEditingController(text: '30');
   final damageMaxRangeController = TextEditingController(text: '20');
-  
+
+  // Rarity configuration
+  final rarities = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'];
+  final raritySuffixes = {
+    'Common': 'C',
+    'Uncommon': 'UC',
+    'Rare': 'R',
+    'Epic': 'VR',
+    'Legendary': 'SR',
+  };
+  String selectedRarity = 'Common';
+
+  // Store damage values per rarity
+  final rarityDamageValues = <String, Map<String, String>>{};
+
+  // Helper to save current values to the selected rarity
+  void saveCurrentRarityValues() {
+    rarityDamageValues[selectedRarity] = {
+      'damagePB': damagePBController.text,
+      'envDamage': envDamageController.text,
+      'damageMid': damageMidController.text,
+      'damageLong': damageLongController.text,
+      'damageMaxRange': damageMaxRangeController.text,
+      'weaponIdLine': weaponIdController.text,
+    };
+  }
+
+  // Helper to load values for a rarity
+  void loadRarityValues(String rarity) {
+    final values = rarityDamageValues[rarity];
+    if (values != null) {
+      damagePBController.text = values['damagePB'] ?? '50';
+      envDamageController.text = values['envDamage'] ?? '50';
+      damageMidController.text = values['damageMid'] ?? '40';
+      damageLongController.text = values['damageLong'] ?? '30';
+      damageMaxRangeController.text = values['damageMaxRange'] ?? '20';
+      weaponIdController.text = values['weaponIdLine'] ?? '';
+    } else {
+      // Default values
+      damagePBController.text = '50';
+      envDamageController.text = '50';
+      damageMidController.text = '40';
+      damageLongController.text = '30';
+      damageMaxRangeController.text = '20';
+    }
+  }
+
+  // Helper to update weaponId based on rarity
+  void updateWeaponIdForRarity(String newRarity) {
+    final currentId = weaponIdController.text.trim();
+    if (currentId.isEmpty) return;
+
+    // Replace the rarity suffix in the weapon ID
+    String newId = currentId;
+    for (final entry in raritySuffixes.entries) {
+      final pattern = '_${entry.value}_';
+      if (currentId.contains(pattern)) {
+        newId = currentId.replaceFirst(
+          pattern,
+          '_${raritySuffixes[newRarity]}_',
+        );
+        weaponIdController.text = newId;
+        return;
+      }
+    }
+  }
+
   String? imagePath;
   bool advancedMode = false;
   String? errorText;
@@ -11768,6 +12273,54 @@ Future<CustomDataTableInput?> _promptCustomDataTable(BuildContext context) async
                     hintText: 'Assault_Auto_Athena_C_Ore_T03',
                     hintStyle: TextStyle(color: Colors.grey.shade600),
                   ),
+                  onChanged: (value) {
+                    // If user manually edits, update it for current rarity
+                    setState(() => errorText = null);
+                  },
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: selectedRarity,
+                  decoration: const InputDecoration(
+                    labelText: 'Rarity',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: rarities.map((rarity) {
+                    return DropdownMenuItem(
+                      value: rarity,
+                      child: Row(
+                        children: [
+                          Text(rarity),
+                          const SizedBox(width: 8),
+                          Text(
+                            '(${raritySuffixes[rarity]})',
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (newRarity) {
+                    if (newRarity == null) return;
+                    setState(() {
+                      // Save current rarity's values before switching
+                      saveCurrentRarityValues();
+
+                      // Switch to new rarity
+                      selectedRarity = newRarity;
+
+                      // Load values for new rarity (or defaults)
+                      loadRarityValues(newRarity);
+
+                      // Update weaponId to match new rarity
+                      updateWeaponIdForRarity(newRarity);
+
+                      errorText = null;
+                    });
+                  },
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -11787,7 +12340,8 @@ Future<CustomDataTableInput?> _promptCustomDataTable(BuildContext context) async
                           final picked = await FilePicker.platform.pickFiles(
                             type: FileType.image,
                           );
-                          if (picked == null || picked.files.single.path == null) {
+                          if (picked == null ||
+                              picked.files.single.path == null) {
                             return;
                           }
                           setState(() {
@@ -11891,7 +12445,9 @@ Future<CustomDataTableInput?> _promptCustomDataTable(BuildContext context) async
                   return;
                 }
                 if (weaponId.isEmpty) {
-                  setState(() => errorText = 'DataTable line (weaponId) is required.');
+                  setState(
+                    () => errorText = 'DataTable line (weaponId) is required.',
+                  );
                   return;
                 }
                 if (damagePB.isEmpty) {
@@ -11899,9 +12455,14 @@ Future<CustomDataTableInput?> _promptCustomDataTable(BuildContext context) async
                   return;
                 }
                 if (envDamage.isEmpty) {
-                  setState(() => errorText = 'Base Environmental Damage is required.');
+                  setState(
+                    () => errorText = 'Base Environmental Damage is required.',
+                  );
                   return;
                 }
+
+                // Save the current rarity's values before submitting
+                saveCurrentRarityValues();
 
                 Navigator.pop(
                   context,
@@ -11912,9 +12473,18 @@ Future<CustomDataTableInput?> _promptCustomDataTable(BuildContext context) async
                     envDamage: envDamage,
                     advancedMode: advancedMode,
                     imageSourcePath: imagePath,
-                    damageMid: advancedMode ? damageMidController.text.trim() : null,
-                    damageLong: advancedMode ? damageLongController.text.trim() : null,
-                    damageMaxRange: advancedMode ? damageMaxRangeController.text.trim() : null,
+                    damageMid: advancedMode
+                        ? damageMidController.text.trim()
+                        : null,
+                    damageLong: advancedMode
+                        ? damageLongController.text.trim()
+                        : null,
+                    damageMaxRange: advancedMode
+                        ? damageMaxRangeController.text.trim()
+                        : null,
+                    rarityConfigs: rarityDamageValues.isEmpty
+                        ? null
+                        : Map.from(rarityDamageValues),
                   ),
                 );
               },
@@ -11968,7 +12538,8 @@ Future<_CustomGroupEditResult?> _promptEditCustomGroup(
                         final picked = await FilePicker.platform.pickFiles(
                           type: FileType.image,
                         );
-                        if (picked == null || picked.files.single.path == null) {
+                        if (picked == null ||
+                            picked.files.single.path == null) {
                           return;
                         }
                         setState(() {
@@ -12191,7 +12762,8 @@ Future<CustomCurveGroupInfo?> _promptCreateCustomGroup(
                         final picked = await FilePicker.platform.pickFiles(
                           type: FileType.image,
                         );
-                        if (picked == null || picked.files.single.path == null) {
+                        if (picked == null ||
+                            picked.files.single.path == null) {
                           return;
                         }
                         setState(() {
@@ -12712,19 +13284,23 @@ class BackendController extends ChangeNotifier {
     final sanitized = log
         .replaceAll(RegExp(r'\x1B\[[0-?]*[ -/]*[@-~]'), '')
         .trim();
-    
+
     if (sanitized.isEmpty) return;
-    
-    final lines = sanitized.split('\n').where((line) => line.trim().isNotEmpty).toList();
+
+    final lines = sanitized
+        .split('\n')
+        .where((line) => line.trim().isNotEmpty)
+        .toList();
     if (lines.isEmpty) return;
-    
+
     final now = DateTime.now();
     final hour = now.hour;
     final period = hour >= 12 ? 'PM' : 'AM';
     final hour12 = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
     final timezoneAbbr = now.timeZoneName.replaceAll(RegExp(r'[^A-Z]'), '');
-    final timestamp = '[${hour12.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')} $period $timezoneAbbr]';
-    
+    final timestamp =
+        '[${hour12.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')} $period $timezoneAbbr]';
+
     for (final line in lines) {
       _logStore.addLog('$timestamp $line');
     }
@@ -12746,7 +13322,8 @@ String getBackendRoot() {
   // Check if running from an installed location (not from source)
   // If running from Program Files or AppData Local, use separate app data directory
   final executablePath = File(Platform.resolvedExecutable).parent.path;
-  if (executablePath.contains(r'Program Files') || executablePath.contains(r'AppData\Local\Programs')) {
+  if (executablePath.contains(r'Program Files') ||
+      executablePath.contains(r'AppData\Local\Programs')) {
     // Running from installed MSI - use AppData for data storage
     final appDataDir = Platform.environment['APPDATA'];
     if (appDataDir != null) {
@@ -12824,7 +13401,7 @@ String? _resolveBunPath(String backendRoot) {
   for (final path in candidates) {
     if (File(path).existsSync()) return path;
   }
-  
+
   // Return null to let _checkBunAvailable try to find it in PATH
   return null;
 }
@@ -12848,14 +13425,11 @@ class VpnService {
   static Future<String> getVpnIpAddress() async {
     try {
       // Use PowerShell to query Radmin VPN adapter IP address
-      final result = await Process.run(
-        'powershell.exe',
-        [
-          '-NoProfile',
-          '-Command',
-          r'Get-NetIPAddress | Where-Object {$_.InterfaceAlias -like "*Radmin*" -and $_.AddressFamily -eq "IPv4"} | Select-Object -First 1 -ExpandProperty IPAddress',
-        ],
-      );
+      final result = await Process.run('powershell.exe', [
+        '-NoProfile',
+        '-Command',
+        r'Get-NetIPAddress | Where-Object {$_.InterfaceAlias -like "*Radmin*" -and $_.AddressFamily -eq "IPv4"} | Select-Object -First 1 -ExpandProperty IPAddress',
+      ]);
 
       if (result.exitCode == 0) {
         final ip = result.stdout.toString().trim();
@@ -12865,14 +13439,11 @@ class VpnService {
       }
 
       // Fallback: Try alternative command for older Windows versions
-      final fallbackResult = await Process.run(
-        'powershell.exe',
-        [
-          '-NoProfile',
-          '-Command',
-          r'Get-WmiObject Win32_NetworkAdapterConfiguration | Where-Object {$_.Description -like "*Radmin*" -and $_.IPAddress -ne $null} | Select-Object -First 1 -ExpandProperty IPAddress',
-        ],
-      );
+      final fallbackResult = await Process.run('powershell.exe', [
+        '-NoProfile',
+        '-Command',
+        r'Get-WmiObject Win32_NetworkAdapterConfiguration | Where-Object {$_.Description -like "*Radmin*" -and $_.IPAddress -ne $null} | Select-Object -First 1 -ExpandProperty IPAddress',
+      ]);
 
       if (fallbackResult.exitCode == 0) {
         final ip = fallbackResult.stdout.toString().trim();
@@ -12891,4 +13462,3 @@ class VpnService {
     }
   }
 }
-
