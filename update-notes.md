@@ -14,12 +14,9 @@ Markdown Quick Key
 ---
 
 # Improvements
-- DataTable section in Modifcations is now fully available with completed features
-- Profile Creation was added with a button top right of the Profiles menu
-- Added Level and Currency Editor for Users (Level Partially Working)
-- Added Reboot X Pulse Preset (v9.10)
+- Added Clip Size and Reload Time adjustments
 
 # Fixes
-- FIXED CRASHES on certain versions (All seasons should be functional now)
+- Fixed a bug with DataTables
 
 [Full release notes](https://github.com/cipherfps/ATLAS-Backend/releases)
