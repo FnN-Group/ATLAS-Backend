@@ -5264,6 +5264,7 @@ class _GameConfigurationScreenState extends State<GameConfigurationScreen> {
       useWaterStorm: _useWaterStorm,
       startBackendOnLaunch: existing.startBackendOnLaunch,
       disableBackendUpdateCheck: existing.disableBackendUpdateCheck,
+      enableDiscordRpc: existing.enableDiscordRpc,
       useDarkMode: existing.useDarkMode,
       backgroundImagePath: existing.backgroundImagePath,
       backgroundBlur: existing.backgroundBlur,
@@ -7774,6 +7775,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _loading = true;
   bool _startBackendOnLaunch = false;
   bool _disableBackendUpdateCheck = false;
+  bool _enableDiscordRpc = false;
   bool _useDarkMode = true;
   String _backgroundImagePath = '';
   double _backgroundBlur = 18;
@@ -7810,6 +7812,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _startBackendOnLaunch = config.startBackendOnLaunch;
       _disableBackendUpdateCheck = config.disableBackendUpdateCheck;
+      _enableDiscordRpc = config.enableDiscordRpc;
       _useDarkMode = config.useDarkMode;
       _backgroundImagePath = config.backgroundImagePath;
       _backgroundBlur = config.backgroundBlur;
@@ -7868,6 +7871,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await ConfigService.save(
       existing.copyWith(disableBackendUpdateCheck: value),
     );
+  }
+
+  Future<void> _updateEnableDiscordRpc(bool value) async {
+    setState(() => _enableDiscordRpc = value);
+    final existing = await ConfigService.load();
+    await ConfigService.save(existing.copyWith(enableDiscordRpc: value));
+    
+    // Update the backend discordRPC.ts file
+    final rpcFilePath = joinPath([
+      getBackendRoot(),
+      'src',
+      'utils',
+      'discordRPC.ts',
+    ]);
+    final rpcFile = File(rpcFilePath);
+    if (await rpcFile.exists()) {
+      try {
+        final content = await rpcFile.readAsString();
+        final updated = content.replaceFirst(
+          RegExp(r'const ENABLE_DISCORD_RPC = (true|false);'),
+          'const ENABLE_DISCORD_RPC = $value;',
+        );
+        await rpcFile.writeAsString(updated);
+      } catch (_) {
+        // Silently fail if we can't update the file
+      }
+    }
   }
 
   String _backgroundSubtitle() {
@@ -8071,6 +8101,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               title: const Text('Disable Update Checks'),
               subtitle: const Text(
                 'Skip update checks when launching the backend.',
+              ),
+            ),
+            const SizedBox(height: 8),
+            SwitchListTile(
+              value: _enableDiscordRpc,
+              onChanged: _updateEnableDiscordRpc,
+              title: const Text('Enable Discord Rich Presence'),
+              subtitle: const Text(
+                'Show ATLAS activity status on your Discord profile.',
               ),
             ),
           ],
@@ -10409,6 +10448,7 @@ class ConfigSettings {
     required this.useWaterStorm,
     required this.startBackendOnLaunch,
     required this.disableBackendUpdateCheck,
+    required this.enableDiscordRpc,
     required this.useDarkMode,
     required this.backgroundImagePath,
     required this.backgroundBlur,
@@ -10422,6 +10462,7 @@ class ConfigSettings {
   final bool useWaterStorm;
   final bool startBackendOnLaunch;
   final bool disableBackendUpdateCheck;
+  final bool enableDiscordRpc;
   final bool useDarkMode;
   final String backgroundImagePath;
   final double backgroundBlur;
@@ -10435,6 +10476,7 @@ class ConfigSettings {
     bool? useWaterStorm,
     bool? startBackendOnLaunch,
     bool? disableBackendUpdateCheck,
+    bool? enableDiscordRpc,
     bool? useDarkMode,
     String? backgroundImagePath,
     double? backgroundBlur,
@@ -10449,6 +10491,7 @@ class ConfigSettings {
       startBackendOnLaunch: startBackendOnLaunch ?? this.startBackendOnLaunch,
       disableBackendUpdateCheck:
           disableBackendUpdateCheck ?? this.disableBackendUpdateCheck,
+      enableDiscordRpc: enableDiscordRpc ?? this.enableDiscordRpc,
       useDarkMode: useDarkMode ?? this.useDarkMode,
       backgroundImagePath: backgroundImagePath ?? this.backgroundImagePath,
       backgroundBlur: backgroundBlur ?? this.backgroundBlur,
@@ -10472,6 +10515,7 @@ class ConfigService {
         useWaterStorm: false,
         startBackendOnLaunch: false,
         disableBackendUpdateCheck: false,
+        enableDiscordRpc: false,
         useDarkMode: true,
         backgroundImagePath: '',
         backgroundBlur: 18,
@@ -10490,6 +10534,8 @@ class ConfigService {
           (map['StartBackendOnLaunch'] ?? '').toLowerCase() == 'true',
       disableBackendUpdateCheck:
           (map['DisableBackendUpdateCheck'] ?? '').toLowerCase() == 'true',
+      enableDiscordRpc:
+          (map['EnableDiscordRpc'] ?? '').toLowerCase() == 'true',
       useDarkMode: (map['UseDarkMode'] ?? 'true').toLowerCase() == 'true',
       backgroundImagePath: map['BackgroundImagePath'] ?? '',
       backgroundBlur: double.tryParse(map['BackgroundBlur'] ?? '') ?? 18,
@@ -10509,6 +10555,7 @@ class ConfigService {
       ..writeln(
         'DisableBackendUpdateCheck=${settings.disableBackendUpdateCheck}',
       )
+      ..writeln('EnableDiscordRpc=${settings.enableDiscordRpc}')
       ..writeln('UseDarkMode=${settings.useDarkMode}')
       ..writeln('BackgroundImagePath=${settings.backgroundImagePath}')
       ..writeln('BackgroundBlur=${settings.backgroundBlur}')

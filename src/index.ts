@@ -9,6 +9,7 @@ import prompts from "prompts";
 import fs from "node:fs";
 import ini from "ini";
 import { startMatchmakingWebSocket } from "./utils/matchmaking/websocket";
+import { initializeDiscordRPC, updateDiscordPresence } from "./utils/discordRPC";
 
 const resolvedPortEnv = process.env.ATLAS_PORT ?? process.env.PORT ?? "3551";
 const parsedPort = Number(resolvedPortEnv);
@@ -2430,6 +2431,11 @@ async function runInteractiveCLI() {
 const startServer = async () => {
   // Start matchmaking WebSocket server
   startMatchmakingWebSocket(5555);
+  
+  // Initialize Discord RPC
+  await initializeDiscordRPC();
+  updateDiscordPresence("ATLAS Backend Active", `Running on port ${PORT}`);
+  
   Bun.serve({
     port: PORT,
     fetch: app.fetch,
