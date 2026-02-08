@@ -3473,6 +3473,8 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     final displayDefaultDamage = currentVariant?.damagePB ?? weapon.damagePB;
     final displayDefaultEnvDamage =
         currentVariant?.defaultEnvDamage ?? weapon.defaultEnvDamage;
+    final displayDefaultClipSize = weapon.clipSize ?? '30';
+    final displayDefaultReloadTime = currentVariant?.reloadTime ?? '2.0';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -3519,7 +3521,11 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
           onChanged: (value) async {
             if (value) {
               // Prompt for damage value
-              final promptedValue = await _promptValue(context, 'Damage');
+              final promptedValue = await _promptValue(
+                context,
+                'Damage',
+                defaultValue: displayDefaultDamage,
+              );
               if (promptedValue == null) return;
               final newSettings = settings.copyWith(
                 damageEnabled: value,
@@ -3559,7 +3565,11 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: OutlinedButton.icon(
               onPressed: () async {
-                final promptedValue = await _promptValue(context, 'Damage');
+                final promptedValue = await _promptValue(
+                  context,
+                  'Damage',
+                  defaultValue: displayDefaultDamage,
+                );
                 if (promptedValue == null) return;
                 final newSettings = settings.copyWith(
                   damageValue: promptedValue,
@@ -3589,6 +3599,7 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
               final promptedValue = await _promptValue(
                 context,
                 'Environmental Damage',
+                defaultValue: displayDefaultEnvDamage,
               );
               if (promptedValue == null) return;
               final newSettings = settings.copyWith(
@@ -3632,6 +3643,7 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                 final promptedValue = await _promptValue(
                   context,
                   'Environmental Damage',
+                  defaultValue: displayDefaultEnvDamage,
                 );
                 if (promptedValue == null) return;
                 final newSettings = settings.copyWith(
@@ -3650,6 +3662,156 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
               },
               icon: const Icon(Icons.edit),
               label: const Text('Edit Environmental Damage Value'),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+        SwitchListTile(
+          value: settings.clipSizeEnabled,
+          onChanged: (value) async {
+            if (value) {
+              // Prompt for clip size value
+              final promptedValue = await _promptValue(
+                context,
+                'Clip Size',
+                defaultValue: displayDefaultClipSize,
+              );
+              if (promptedValue == null) return;
+              final newSettings = settings.copyWith(
+                clipSizeEnabled: value,
+                clipSizeValue: promptedValue,
+              );
+              await DataTableService.applyWeaponSettings(
+                weapon,
+                newSettings,
+                variantWeaponId: _selectedVariantWeaponId,
+              );
+              final updated = await DataTableService.getWeaponSettings(
+                weapon,
+                variantWeaponId: _selectedVariantWeaponId,
+              );
+              setState(() => _selectedWeaponSettings = updated);
+            } else {
+              final newSettings = settings.copyWith(clipSizeEnabled: value);
+              await DataTableService.applyWeaponSettings(
+                weapon,
+                newSettings,
+                variantWeaponId: _selectedVariantWeaponId,
+              );
+              final updated = await DataTableService.getWeaponSettings(
+                weapon,
+                variantWeaponId: _selectedVariantWeaponId,
+              );
+              setState(() => _selectedWeaponSettings = updated);
+            }
+          },
+          title: const Text('Clip Size'),
+          subtitle: settings.clipSizeEnabled
+              ? Text('Current value: ${settings.clipSizeValue}')
+              : const Text('Enable custom clip size'),
+        ),
+        if (settings.clipSizeEnabled) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: OutlinedButton.icon(
+              onPressed: () async {
+                final promptedValue = await _promptValue(
+                  context,
+                  'Clip Size',
+                  defaultValue: displayDefaultClipSize,
+                );
+                if (promptedValue == null) return;
+                final newSettings = settings.copyWith(
+                  clipSizeValue: promptedValue,
+                );
+                await DataTableService.applyWeaponSettings(
+                  weapon,
+                  newSettings,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
+                final updated = await DataTableService.getWeaponSettings(
+                  weapon,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
+                setState(() => _selectedWeaponSettings = updated);
+              },
+              icon: const Icon(Icons.edit),
+              label: const Text('Edit Clip Size Value'),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+        SwitchListTile(
+          value: settings.reloadTimeEnabled,
+          onChanged: (value) async {
+            if (value) {
+              // Prompt for reload time value
+              final promptedValue = await _promptValue(
+                context,
+                'Reload Time',
+                defaultValue: displayDefaultReloadTime,
+              );
+              if (promptedValue == null) return;
+              final newSettings = settings.copyWith(
+                reloadTimeEnabled: value,
+                reloadTimeValue: promptedValue,
+              );
+              await DataTableService.applyWeaponSettings(
+                weapon,
+                newSettings,
+                variantWeaponId: _selectedVariantWeaponId,
+              );
+              final updated = await DataTableService.getWeaponSettings(
+                weapon,
+                variantWeaponId: _selectedVariantWeaponId,
+              );
+              setState(() => _selectedWeaponSettings = updated);
+            } else {
+              final newSettings = settings.copyWith(reloadTimeEnabled: value);
+              await DataTableService.applyWeaponSettings(
+                weapon,
+                newSettings,
+                variantWeaponId: _selectedVariantWeaponId,
+              );
+              final updated = await DataTableService.getWeaponSettings(
+                weapon,
+                variantWeaponId: _selectedVariantWeaponId,
+              );
+              setState(() => _selectedWeaponSettings = updated);
+            }
+          },
+          title: const Text('Reload Time'),
+          subtitle: settings.reloadTimeEnabled
+              ? Text('Current value: ${settings.reloadTimeValue}')
+              : const Text('Enable custom reload time'),
+        ),
+        if (settings.reloadTimeEnabled) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: OutlinedButton.icon(
+              onPressed: () async {
+                final promptedValue = await _promptValue(
+                  context,
+                  'Reload Time',
+                  defaultValue: displayDefaultReloadTime,
+                );
+                if (promptedValue == null) return;
+                final newSettings = settings.copyWith(
+                  reloadTimeValue: promptedValue,
+                );
+                await DataTableService.applyWeaponSettings(
+                  weapon,
+                  newSettings,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
+                final updated = await DataTableService.getWeaponSettings(
+                  weapon,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
+                setState(() => _selectedWeaponSettings = updated);
+              },
+              icon: const Icon(Icons.edit),
+              label: const Text('Edit Reload Time Value'),
             ),
           ),
           const SizedBox(height: 8),
@@ -8798,6 +8960,8 @@ class CustomDataTableInput {
     this.damageLong,
     this.damageMaxRange,
     this.rarityConfigs,
+    this.clipSize,
+    this.reloadTime,
   });
 
   final String weaponName;
@@ -8810,8 +8974,10 @@ class CustomDataTableInput {
   final String? damageLong;
   final String? damageMaxRange;
   // Map of rarity name -> damage configuration
-  // Each config contains: damagePB, envDamage, damageMid, damageLong, damageMaxRange, weaponIdLine
+  // Each config contains: damagePB, envDamage, damageMid, damageLong, damageMaxRange, weaponIdLine, reloadTime
   final Map<String, Map<String, String>>? rarityConfigs;
+  final String? clipSize;
+  final String? reloadTime;
 }
 
 class DataTableWeapon {
@@ -8826,6 +8992,7 @@ class DataTableWeapon {
     required this.damagePB,
     required this.defaultEnvDamage,
     this.variants,
+    this.clipSize,
   });
 
   final String id;
@@ -8838,6 +9005,7 @@ class DataTableWeapon {
   final String damagePB;
   final String defaultEnvDamage;
   final List<WeaponVariant>? variants;
+  final String? clipSize;
 }
 
 class WeaponVariant {
@@ -8847,6 +9015,7 @@ class WeaponVariant {
     required this.damagePB,
     required this.defaultEnvDamage,
     this.imagePath,
+    this.reloadTime,
   });
 
   final String name;
@@ -8854,6 +9023,7 @@ class WeaponVariant {
   final String damagePB;
   final String defaultEnvDamage;
   final String? imagePath;
+  final String? reloadTime;
 }
 
 class DataTableSettings {
@@ -8864,6 +9034,10 @@ class DataTableSettings {
     required this.damageValue,
     required this.envDamageValue,
     required this.customValues,
+    required this.clipSizeEnabled,
+    required this.clipSizeValue,
+    required this.reloadTimeEnabled,
+    required this.reloadTimeValue,
   });
 
   final bool damageEnabled;
@@ -8872,6 +9046,10 @@ class DataTableSettings {
   final String damageValue;
   final String envDamageValue;
   final Map<String, String> customValues;
+  final bool clipSizeEnabled;
+  final String clipSizeValue;
+  final bool reloadTimeEnabled;
+  final String reloadTimeValue;
 
   DataTableSettings copyWith({
     bool? damageEnabled,
@@ -8880,6 +9058,10 @@ class DataTableSettings {
     String? damageValue,
     String? envDamageValue,
     Map<String, String>? customValues,
+    bool? clipSizeEnabled,
+    String? clipSizeValue,
+    bool? reloadTimeEnabled,
+    String? reloadTimeValue,
   }) {
     return DataTableSettings(
       damageEnabled: damageEnabled ?? this.damageEnabled,
@@ -8888,6 +9070,10 @@ class DataTableSettings {
       damageValue: damageValue ?? this.damageValue,
       envDamageValue: envDamageValue ?? this.envDamageValue,
       customValues: customValues ?? this.customValues,
+      clipSizeEnabled: clipSizeEnabled ?? this.clipSizeEnabled,
+      clipSizeValue: clipSizeValue ?? this.clipSizeValue,
+      reloadTimeEnabled: reloadTimeEnabled ?? this.reloadTimeEnabled,
+      reloadTimeValue: reloadTimeValue ?? this.reloadTimeValue,
     );
   }
 }
@@ -9786,6 +9972,7 @@ class DataTableService {
             damagePB: vMap['damagePB'] ?? '0',
             defaultEnvDamage: vMap['defaultEnvDamage'] ?? '0',
             imagePath: vMap['imagePath'],
+            reloadTime: vMap['reloadTime'],
           );
         }).toList();
       }
@@ -9807,6 +9994,7 @@ class DataTableService {
           damagePB: data['damagePB'] ?? '0',
           defaultEnvDamage: data['defaultEnvDamage'] ?? '0',
           variants: variants,
+          clipSize: data['clipSize'],
         ),
       );
     }
@@ -9874,6 +10062,20 @@ class DataTableService {
     String? variantWeaponId,
   }) async {
     final weaponId = variantWeaponId ?? weapon.weaponId;
+
+    // Get default clipSize and reloadTime
+    String defaultClipSize = weapon.clipSize ?? '30';
+    String defaultReloadTime = '2.0';
+
+    // If variant is selected, get reloadTime from variant
+    if (variantWeaponId != null && weapon.variants != null) {
+      final variant = weapon.variants!.firstWhere(
+        (v) => v.weaponId == variantWeaponId,
+        orElse: () => weapon.variants!.first,
+      );
+      defaultReloadTime = variant.reloadTime ?? '2.0';
+    }
+
     final iniFile = File(BackendPaths.defaultGameIni);
     if (!await iniFile.exists()) {
       return DataTableSettings(
@@ -9883,12 +10085,20 @@ class DataTableService {
         damageValue: weapon.damagePB,
         envDamageValue: weapon.defaultEnvDamage,
         customValues: {},
+        clipSizeEnabled: false,
+        clipSizeValue: defaultClipSize,
+        reloadTimeEnabled: false,
+        reloadTimeValue: defaultReloadTime,
       );
     }
     final content = await iniFile.readAsString();
     final customValues = <String, String>{};
     bool hasDamage = false;
     bool hasEnvDamage = false;
+    bool hasClipSize = false;
+    bool hasReloadTime = false;
+    String? clipSizeValue;
+    String? reloadTimeValue;
 
     for (final field in weapon.damageFields) {
       final regex = RegExp(
@@ -9924,6 +10134,36 @@ class DataTableService {
         customValues[field] = match.group(1)!;
         hasEnvDamage = true;
       }
+    }
+
+    // Check for ClipSize
+    final clipSizeRegex = RegExp(
+      r'^\+DataTable=' +
+          RegExp.escape(weapon.weaponPath) +
+          r';RowUpdate;' +
+          RegExp.escape(weaponId) +
+          r';ClipSize;(.+)$',
+      multiLine: true,
+    );
+    final clipSizeMatch = clipSizeRegex.firstMatch(content);
+    if (clipSizeMatch != null) {
+      clipSizeValue = clipSizeMatch.group(1)!;
+      hasClipSize = true;
+    }
+
+    // Check for ReloadTime
+    final reloadTimeRegex = RegExp(
+      r'^\+DataTable=' +
+          RegExp.escape(weapon.weaponPath) +
+          r';RowUpdate;' +
+          RegExp.escape(weaponId) +
+          r';ReloadTime;(.+)$',
+      multiLine: true,
+    );
+    final reloadTimeMatch = reloadTimeRegex.firstMatch(content);
+    if (reloadTimeMatch != null) {
+      reloadTimeValue = reloadTimeMatch.group(1)!;
+      hasReloadTime = true;
     }
 
     // Check if values are consistent (simple mode) or different (advanced mode)
@@ -9962,6 +10202,10 @@ class DataTableService {
       damageValue: dmgValue ?? weapon.damagePB,
       envDamageValue: envDmgValue ?? weapon.defaultEnvDamage,
       customValues: customValues,
+      clipSizeEnabled: hasClipSize,
+      clipSizeValue: clipSizeValue ?? defaultClipSize,
+      reloadTimeEnabled: hasReloadTime,
+      reloadTimeValue: reloadTimeValue ?? defaultReloadTime,
     );
   }
 
@@ -9979,6 +10223,8 @@ class DataTableService {
     for (final field in [
       ...weapon.damageFields,
       ...weapon.environmentalDamageFields,
+      'ClipSize',
+      'ReloadTime',
     ]) {
       final regex = RegExp(
         r'^\+DataTable=' +
@@ -10029,6 +10275,18 @@ class DataTableService {
           );
         }
       }
+    }
+
+    if (settings.clipSizeEnabled) {
+      linesToAdd.add(
+        '+DataTable=${weapon.weaponPath};RowUpdate;$weaponId;ClipSize;${settings.clipSizeValue}',
+      );
+    }
+
+    if (settings.reloadTimeEnabled) {
+      linesToAdd.add(
+        '+DataTable=${weapon.weaponPath};RowUpdate;$weaponId;ReloadTime;${settings.reloadTimeValue}',
+      );
     }
 
     if (linesToAdd.isNotEmpty) {
@@ -10112,6 +10370,7 @@ class DataTableService {
       'environmentalDamageFields': envDamageFields,
       'damagePB': input.damagePB,
       'defaultEnvDamage': input.envDamage,
+      if (input.clipSize != null) 'clipSize': input.clipSize,
     };
 
     await dataTablesFile.parent.create(recursive: true);
@@ -11589,7 +11848,11 @@ class DataService {
   }
 }
 
-Future<String?> _promptValue(BuildContext context, String name) async {
+Future<String?> _promptValue(
+  BuildContext context,
+  String name, {
+  String? defaultValue,
+}) async {
   bool isValidNumeric(String value) =>
       RegExp(r'^[+-]?(?:\d+\.?\d*|\.\d+)$').hasMatch(value.trim());
   final controller = TextEditingController();
@@ -11606,7 +11869,11 @@ Future<String?> _promptValue(BuildContext context, String name) async {
         inputFormatters: [
           FilteringTextInputFormatter.allow(RegExp(r'[0-9+\-.]')),
         ],
-        decoration: const InputDecoration(labelText: 'Value'),
+        decoration: InputDecoration(
+          labelText: 'Value',
+          hintText: defaultValue,
+          hintStyle: TextStyle(color: Colors.grey.shade600),
+        ),
       ),
       actions: [
         _HoverScale(
@@ -12174,6 +12441,8 @@ Future<CustomDataTableInput?> _promptCustomDataTable(
   final damageMidController = TextEditingController(text: '40');
   final damageLongController = TextEditingController(text: '30');
   final damageMaxRangeController = TextEditingController(text: '20');
+  final clipSizeController = TextEditingController(text: '30');
+  final reloadTimeController = TextEditingController(text: '2.0');
 
   // Rarity configuration
   final rarities = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'];
@@ -12408,6 +12677,28 @@ Future<CustomDataTableInput?> _promptCustomDataTable(
                   keyboardType: TextInputType.number,
                 ),
                 const SizedBox(height: 16),
+                TextField(
+                  controller: clipSizeController,
+                  decoration: InputDecoration(
+                    labelText: 'Clip Size',
+                    hintText: '30',
+                    hintStyle: TextStyle(color: Colors.grey.shade600),
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: reloadTimeController,
+                  decoration: InputDecoration(
+                    labelText: 'Reload Time',
+                    hintText: '2.0',
+                    hintStyle: TextStyle(color: Colors.grey.shade600),
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                ),
+                const SizedBox(height: 16),
                 SwitchListTile(
                   value: advancedMode,
                   onChanged: (value) => setState(() => advancedMode = value),
@@ -12485,6 +12776,12 @@ Future<CustomDataTableInput?> _promptCustomDataTable(
                     rarityConfigs: rarityDamageValues.isEmpty
                         ? null
                         : Map.from(rarityDamageValues),
+                    clipSize: clipSizeController.text.trim().isNotEmpty
+                        ? clipSizeController.text.trim()
+                        : null,
+                    reloadTime: reloadTimeController.text.trim().isNotEmpty
+                        ? reloadTimeController.text.trim()
+                        : null,
                   ),
                 );
               },
