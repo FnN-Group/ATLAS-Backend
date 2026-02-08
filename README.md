@@ -15,18 +15,22 @@ This backend has features such as the following:
 - A well sorted and clean GUI with ease of access to all features
 - CLI version still exists under the old branch
 
-### 1. Straight Bloom
+### 2. Straight Bloom
 - Toggle Straight Bloom (Straight Sniper Bullets)
 
-### 2. CurveTables
+### 3. CurveTables
 - CurveTable Toggle
 - CurveTable Editor
 - CurveTable Importer
 
-### 3. Importing/Exporting Data
+### **4. DataTables**
+- Customizable Gun Properties
+- You can set values for things like Damage, Environment Damage, Clip Size, Reload Time, etc.
+
+### 5. Importing/Exporting Data
 - Bulk Importing/Exporting Client Settings, Profiles
 
-### 4. Other Features
+### 6. Other Features
 - Arena Playlist/Points (22.40 and under)
 - Arena Points Saving (Unfinished)
 - Arena Point Leaderboard with all Profiles
