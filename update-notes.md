@@ -14,9 +14,7 @@ Markdown Quick Key
 ---
 
 # Improvements
-- Added Clip Size and Reload Time adjustments
-
-# Fixes
-- Fixed a bug with DataTables
+- Added Ammunition CurveTables group (Ammo Stack Size)
+- Added "Close Fortnite" quick action, which closes all Fortnite processes
 
 [Full release notes](https://github.com/cipherfps/ATLAS-Backend/releases)

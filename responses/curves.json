@@ -123,5 +123,25 @@
     "key": "Default.SafeZone.Damage",
     "type": "static",
     "staticValue": "0"
+  },
+  "21": {
+    "name": "Shells",
+    "key": "Default.Ammo.MaxStackAmount.Shells",
+    "type": "amount"
+  },
+  "22": {
+    "name": "Light Ammo",
+    "key": "Default.Ammo.MaxStackAmount.Light",
+    "type": "amount"
+  },
+  "23": {
+    "name": "Medium Ammo",
+    "key": "Default.Ammo.MaxStackAmount.Medium",
+    "type": "amount"
+  },
+  "24": {
+    "name": "Heavy Ammo",
+    "key": "Default.Ammo.MaxStackAmount.Heavy",
+    "type": "amount"
   }
 }

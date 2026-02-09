@@ -1729,6 +1729,13 @@ class _SidePanel extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             _ActionButton(
+              label: 'Close Fortnite',
+              icon: Icons.sports_esports,
+              color: const Color(0xFFFFB86B),
+              onPressed: Platform.isWindows ? controller.closeFortnite : null,
+            ),
+            const SizedBox(height: 12),
+            _ActionButton(
               label: 'Open Logs',
               icon: Icons.receipt_long,
               color: const Color(0xFF7CC0FF),
@@ -1786,13 +1793,6 @@ class _SidePanel extends StatelessWidget {
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Welcome to ATLAS Backend!',
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: _onSurface(context, 0.6)),
             ),
           ],
         ),
@@ -9185,6 +9185,13 @@ const List<CurveGroup> _baseCurveGroups = [
     keywords: ['neutral editing'],
   ),
   CurveGroup(
+    id: 'ammunition',
+    title: 'Ammunition',
+    imageName: 'ammo.webp',
+    icon: Icons.inventory_2,
+    keywords: ['ammo', 'ammunition', 'maxstackamount', 'max stack'],
+  ),
+  CurveGroup(
     id: 'storm',
     title: 'Storm',
     imageName: 'storm.webp',
@@ -13479,6 +13486,38 @@ class BackendController extends ChangeNotifier {
     isRunning = false;
     _setStatus('Offline', Colors.redAccent);
     notifyListeners();
+  }
+
+  Future<void> closeFortnite() async {
+    if (!Platform.isWindows) {
+      _addLog('Close Fortnite is only supported on Windows.');
+      return;
+    }
+
+    _addLog('Closing Fortnite...');
+    const processes = <String>[
+      'FortniteClient-Win64-Shipping.exe',
+      'FortniteLauncher.exe',
+      'FortniteClient-Win64-Shipping_BE.exe',
+      'FortniteClient-Win64-Shipping_EAC.exe',
+      'EasyAntiCheat.exe',
+      'BEService.exe',
+      'BattlEye.exe',
+      'EpicGamesLauncher.exe',
+      'EpicWebHelper.exe',
+      'CrashReportClient.exe',
+      'UnrealCEFSubProcess.exe',
+    ];
+
+    for (final process in processes) {
+      try {
+        await Process.run('taskkill', ['/F', '/IM', process]);
+      } catch (_) {
+        // Ignore failures (process not running, permissions, etc.).
+      }
+    }
+
+    _addLog('Done.');
   }
 
   Future<void> restartBackend() async {
