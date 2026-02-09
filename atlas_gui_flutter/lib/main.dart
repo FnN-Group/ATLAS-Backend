@@ -2422,6 +2422,153 @@ Future<void> _showAboutDialog(BuildContext context) async {
   );
 }
 
+Future<void> _showCustomCosmeticPresetsInfoDialog(BuildContext context) async {
+  const discordUrl = 'https://discord.gg/GqgakxU6bm';
+  await _showBlurDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Row(
+        children: [
+          Icon(Icons.palette_rounded, color: Theme.of(context).colorScheme.secondary),
+          const SizedBox(width: 10),
+          const Text('Custom Cosmetic Presets'),
+        ],
+      ),
+      content: SizedBox(
+        width: 460,
+        child: Builder(
+          builder: (context) {
+            final colorScheme = Theme.of(context).colorScheme;
+            final onSurface = colorScheme.onSurface;
+            final onSurfaceMuted = onSurface.withOpacity(0.75);
+            final accent = colorScheme.secondary;
+            final cardFill = colorScheme.surfaceVariant.withOpacity(0.6);
+            final cardBorder = onSurface.withOpacity(0.18);
+
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: accent.withOpacity(0.10),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: accent.withOpacity(0.28)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 1),
+                        child: Icon(
+                          Icons.info_outline_rounded,
+                          size: 18,
+                          color: accent,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Custom Cosmetic Presets require additional pak files. '
+                          'You can download the required paks from the Discord server.',
+                          style: TextStyle(color: onSurfaceMuted),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: cardFill,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: cardBorder),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.forum_rounded,
+                        size: 18,
+                        color: onSurfaceMuted,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Discord server',
+                              style: TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w700,
+                                color: onSurface.withOpacity(0.92),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            SelectableText(
+                              discordUrl,
+                              style: TextStyle(
+                                fontFamily: 'Courier',
+                                fontSize: 12.8,
+                                fontWeight: FontWeight.w500,
+                                color: onSurface,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      _HoverScale(
+                        child: IconButton(
+                          tooltip: 'Open Discord',
+                          onPressed: () => _openUrl(discordUrl),
+                          icon: const Icon(Icons.open_in_new_rounded),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+      actions: [
+        _HoverScale(
+          child: TextButton.icon(
+            onPressed: () async {
+              await Clipboard.setData(const ClipboardData(text: discordUrl));
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Discord link copied.')),
+                );
+              }
+            },
+            icon: const Icon(Icons.copy_rounded, size: 18),
+            label: const Text('Copy link'),
+          ),
+        ),
+        _HoverScale(
+          child: ElevatedButton.icon(
+            onPressed: () => _openUrl(discordUrl),
+            icon: const Icon(Icons.open_in_new_rounded, size: 18),
+            label: const Text('Open Discord'),
+          ),
+        ),
+        _HoverScale(
+          child: TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 Future<void> _openUrl(String url) async {
   try {
     if (Platform.isWindows) {
@@ -2664,6 +2811,75 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     await _showCurveImportSummary(context, grouped, missing: missing);
   }
 
+  Future<void> _restoreDefaultGameIniFromTemplate() async {
+    final confirm = await DataService._confirmDialog(
+      context,
+      'Restore DefaultGame.ini from template? This will overwrite your current DefaultGame.ini in static/hotfixes.',
+    );
+    if (!confirm) return;
+
+    final templatePaths = [
+      joinPath([
+        getBackendRoot(),
+        'static',
+        'hotfixes',
+        'DefaultGame Template',
+        'DefaultGame.ini',
+      ]),
+      joinPath([
+        getInstallationRoot(),
+        'static',
+        'hotfixes',
+        'DefaultGame Template',
+        'DefaultGame.ini',
+      ]),
+    ];
+    File? templateFile;
+    for (final path in templatePaths) {
+      final candidate = File(path);
+      if (await candidate.exists()) {
+        templateFile = candidate;
+        break;
+      }
+    }
+    if (templateFile == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Template DefaultGame.ini not found in static/hotfixes/DefaultGame Template.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final targetFile = File(BackendPaths.defaultGameIni);
+    try {
+      if (await targetFile.exists()) {
+        await targetFile.copy('${targetFile.path}.bak');
+      }
+      await templateFile.copy(targetFile.path);
+
+      // Reset Modifications toggles to a clean template state.
+      await DataTableService.setUIEnabledState(false);
+      final curveBackup = File(BackendPaths.modificationsBackup);
+      await curveBackup.parent.create(recursive: true);
+      await curveBackup.writeAsString(jsonEncode({'curveTableLines': []}));
+
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('DefaultGame.ini restored from template.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to restore DefaultGame.ini: $error')),
+      );
+    }
+  }
+
   Future<void> _toggleCurve(CurveEntry entry, bool value) async {
     if (!_curveTablesEnabled) return;
     if (value && entry.type == 'amount' && entry.staticValue == null) {
@@ -2836,31 +3052,44 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     );
     return _BaseScreen(
       title: 'Modifications',
-      trailing: _HoverScale(
-        child: OutlinedButton.icon(
-          onPressed: () async {
-            final hotfixesPath = joinPath([
-              getBackendRoot(),
-              'static',
-              'hotfixes',
-            ]);
-            if (Platform.isWindows) {
-              try {
-                await Process.start('explorer', [hotfixesPath]);
-              } catch (_) {}
-            } else if (Platform.isMacOS) {
-              try {
-                await Process.start('open', [hotfixesPath]);
-              } catch (_) {}
-            } else if (Platform.isLinux) {
-              try {
-                await Process.start('xdg-open', [hotfixesPath]);
-              } catch (_) {}
-            }
-          },
-          icon: const Icon(Icons.folder_open),
-          label: const Text('Open Folder'),
-        ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _HoverScale(
+            child: OutlinedButton.icon(
+              onPressed: () async {
+                final hotfixesPath = joinPath([
+                  getBackendRoot(),
+                  'static',
+                  'hotfixes',
+                ]);
+                if (Platform.isWindows) {
+                  try {
+                    await Process.start('explorer', [hotfixesPath]);
+                  } catch (_) {}
+                } else if (Platform.isMacOS) {
+                  try {
+                    await Process.start('open', [hotfixesPath]);
+                  } catch (_) {}
+                } else if (Platform.isLinux) {
+                  try {
+                    await Process.start('xdg-open', [hotfixesPath]);
+                  } catch (_) {}
+                }
+              },
+              icon: const Icon(Icons.folder_open),
+              label: const Text('Open Folder'),
+            ),
+          ),
+          const SizedBox(width: 10),
+          _HoverScale(
+            child: OutlinedButton.icon(
+              onPressed: _restoreDefaultGameIniFromTemplate,
+              icon: const Icon(Icons.restore_rounded),
+              label: const Text('Restore DefaultGame.ini'),
+            ),
+          ),
+        ],
       ),
       child: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -7006,7 +7235,46 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const _SectionTitle(title: 'Custom Cosmetic Presets'),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const _SectionTitle(title: 'Custom Cosmetic Presets'),
+                          const SizedBox(width: 8),
+                          _HoverScale(
+                            scale: 1.08,
+                            child: Tooltip(
+                              message: 'Info',
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: () =>
+                                      _showCustomCosmeticPresetsInfoDialog(
+                                        context,
+                                      ),
+                                  borderRadius: BorderRadius.circular(999),
+                                  child: Container(
+                                    width: 28,
+                                    height: 28,
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: _onSurface(context, 0.06),
+                                      borderRadius: BorderRadius.circular(999),
+                                      border: Border.all(
+                                        color: _onSurface(context, 0.14),
+                                      ),
+                                    ),
+                                    child: Icon(
+                                      Icons.help_outline_rounded,
+                                      size: 18,
+                                      color: _onSurface(context, 0.78),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
                         initialValue: presetValue,
@@ -9966,6 +10234,19 @@ class CurveTableService {
 }
 
 class DataTableService {
+  // Preserve any manual fixes under the "# Fixes" marker in DefaultGame.ini.
+  static ({String editable, String protected}) _splitProtectedFixesBlock(
+    String content,
+  ) {
+    final match =
+        RegExp(r'^\s*#\s*Fixes\s*$', multiLine: true).firstMatch(content);
+    if (match == null) return (editable: content, protected: '');
+    return (
+      editable: content.substring(0, match.start),
+      protected: content.substring(match.start),
+    );
+  }
+
   static Future<List<DataTableWeapon>> loadWeapons() async {
     final dataTablesFile = File(BackendPaths.dataTablesJson);
     if (!await dataTablesFile.exists()) {
@@ -10233,6 +10514,9 @@ class DataTableService {
     final iniFile = File(BackendPaths.defaultGameIni);
     if (!await iniFile.exists()) return;
     var content = await iniFile.readAsString();
+    final split = _splitProtectedFixesBlock(content);
+    var editable = split.editable;
+    final protected = split.protected;
 
     // Remove existing DataTable lines for this weapon
     for (final field in [
@@ -10251,9 +10535,9 @@ class DataTableService {
             r';.*$',
         multiLine: true,
       );
-      content = content.replaceAll(regex, '');
+      editable = editable.replaceAll(regex, '');
     }
-    content = content.replaceAll(RegExp(r'\n\n+'), '\n');
+    editable = editable.replaceAll(RegExp(r'\n\n+'), '\n');
 
     // Add new lines if enabled
     final linesToAdd = <String>[];
@@ -10306,27 +10590,30 @@ class DataTableService {
 
     if (linesToAdd.isNotEmpty) {
       final ensured = IniService.ensureAssetSection(
-        content,
+        editable,
         BackendPaths.dataTableComment,
         preferPrepend: true,
       );
-      content = ensured.content;
+      editable = ensured.content;
       final insertPoint = ensured.insertPoint;
-      content =
-          '${content.substring(0, insertPoint)}${linesToAdd.join('\n')}\n${content.substring(insertPoint)}';
+      editable =
+          '${editable.substring(0, insertPoint)}${linesToAdd.join('\n')}\n${editable.substring(insertPoint)}';
     }
 
-    await iniFile.writeAsString(content);
+    await iniFile.writeAsString('$editable$protected');
   }
 
   static Future<void> clearAllDataTables() async {
     final iniFile = File(BackendPaths.defaultGameIni);
     if (!await iniFile.exists()) return;
     var content = await iniFile.readAsString();
+    final split = _splitProtectedFixesBlock(content);
+    var editable = split.editable;
+    final protected = split.protected;
     final regex = RegExp(r'^\+DataTable=.*$', multiLine: true);
-    content = content.replaceAll(regex, '');
-    content = content.replaceAll(RegExp(r'\n\n+'), '\n');
-    await iniFile.writeAsString(content);
+    editable = editable.replaceAll(regex, '');
+    editable = editable.replaceAll(RegExp(r'\n\n+'), '\n');
+    await iniFile.writeAsString('$editable$protected');
   }
 
   static Future<void> addCustomWeapon(CustomDataTableInput input) async {

@@ -189,3 +189,4 @@ exports/*
 !exports/.gitkeep
 responses/modifications-backup.json
 flutter/
+static/hotfixes/*.bak
