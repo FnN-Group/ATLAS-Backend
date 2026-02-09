@@ -2349,7 +2349,7 @@ Color _darken(Color color, double amount) {
 
 Future<void> _showAboutDialog(BuildContext context) async {
   const url = 'https://guns.lol/cipherfps';
-  const supportUrl = 'https://discord.gg/G9MAF77V7R';
+  const supportUrl = 'https://discord.gg/GqgakxU6bm';
   const githubUrl = 'https://github.com/cipherfps/ATLAS-Backend';
   await _showBlurDialog<void>(
     context: context,

@@ -113,7 +113,7 @@ echo.
 echo To start ATLAS, run: start.bat
 echo.
 echo For support, join the Discord:
-echo https://discord.gg/G9MAF77V7R
+echo https://discord.gg/GqgakxU6bm
 echo.
 pause
 goto :exit

@@ -11,21 +11,21 @@
         "_type": "CommonUI Simple Message Base",
         "title": "ATLAS",
         "body": {
-          "ar": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R",
-          "de": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R",
-          "en": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R",
-          "es": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R",
-          "es-419": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R",
-          "fr": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R",
-          "it": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R",
-          "ja": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R",
-          "ko": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R",
-          "pl": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R",
-          "pt-BR": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R",
-          "ru": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R",
-          "tr": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R",
-          "zh-CN": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R",
-          "zh-Hant": "ATLAS\n@cipherfps\nhttps://discord.gg/G9MAF77V7R"
+          "ar": "ATLAS\n@cipherfps\nhttps://discord.gg/GqgakxU6bm",
+          "de": "ATLAS\n@cipherfps\nhttps://discord.gg/GqgakxU6bm",
+          "en": "ATLAS\n@cipherfps\nhttps://discord.gg/GqgakxU6bm",
+          "es": "ATLAS\n@cipherfps\nhttps://discord.gg/GqgakxU6bm",
+          "es-419": "ATLAS\n@cipherfps\nhttps://discord.gg/GqgakxU6bm",
+          "fr": "ATLAS\n@cipherfps\nhttps://discord.gg/GqgakxU6bm",
+          "it": "ATLAS\n@cipherfps\nhttps://discord.gg/GqgakxU6bm",
+          "ja": "ATLAS\n@cipherfps\nhttps://discord.gg/GqgakxU6bm",
+          "ko": "ATLAS\n@cipherfps\nhttps://discord.gg/GqgakxU6bm",
+          "pl": "ATLAS\n@cipherfps\nhttps://discord.gg/GqgakxU6bm",
+          "pt-BR": "ATLAS\n@cipherfps\nhttps://discord.gg/GqgakxU6bm",
+          "ru": "ATLAS\n@cipherfps\nhttps://discord.gg/GqgakxU6bm",
+          "tr": "ATLAS\n@cipherfps\nhttps://discord.gg/GqgakxU6bm",
+          "zh-CN": "ATLAS\n@cipherfps\nhttps://discord.gg/GqgakxU6bm",
+          "zh-Hant": "ATLAS\n@cipherfps\nhttps://discord.gg/GqgakxU6bm"
         }
       }
     },
@@ -246,7 +246,7 @@
             "zh-CN": "åŠ å…¥æˆ‘ä»¬çš„DiscordæœåŠ¡å™¨ï¼",
             "zh-Hant": "åŠ å…¥æˆ‘å€‘çš„Discordä¼ºæœå™¨ï¼"
           },
-          "body": "https://discord.gg/G9MAF77V7R",
+          "body": "https://discord.gg/GqgakxU6bm",
           "spotlight": false
         },
         {
@@ -1550,7 +1550,7 @@
         {
           "_type": "CommonUI Simple Message Base",
           "title": "ATLAS",
-          "body": "@cipherfps\nDiscord: https://discord.gg/G9MAF77V7R",
+          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm",
           "hidden": false,
           "spotlight": false,
           "subgame": "br"
@@ -1574,7 +1574,7 @@
         {
           "_type": "CommonUI Emergency Notice Base",
           "title": "ATLAS",
-          "body": "@cipherfps\nDiscord: https://discord.gg/G9MAF77V7R",
+          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm",
           "hidden": false,
           "gamemodes": []
         }
@@ -2038,7 +2038,7 @@
         {
           "_type": "CommonUI Simple Message Base",
           "title": "ATLAS",
-          "body": "@cipherfps\nDiscord: https://discord.gg/G9MAF77V7R",
+          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm",
           "image": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/images/ATLAS-Backend-Banner.png",
           "hidden": false,
           "spotlight": false
@@ -2046,7 +2046,7 @@
         {
           "_type": "CommonUI Simple Message Base",
           "title": "Join our Discord server!",
-          "body": "https://discord.gg/G9MAF77V7R",
+          "body": "https://discord.gg/GqgakxU6bm",
           "image": "https://fortnite-public-service-prod11.ol.epicgames.com/images/discord.png",
           "hidden": false,
           "spotlight": false,
@@ -2059,7 +2059,7 @@
           "id": "AtlasNewsBRS10",
           "entryType": "Website",
           "title": "ATLAS",
-          "body": "@cipherfps\nDiscord: https://discord.gg/G9MAF77V7R",
+          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm",
           "tabTitleOverride": "ATLAS",
           "sortingPriority": 90,
           "image": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/images/ATLAS-Backend-Banner.png",
@@ -2072,7 +2072,7 @@
           "videoAutoplay": false,
           "videoFullscreen": false,
           "websiteButtonText": "Discord",
-          "websiteURL": "https://discord.gg/G9MAF77V7R"
+          "websiteURL": "https://discord.gg/GqgakxU6bm"
         }
       ]
     },
@@ -2095,7 +2095,7 @@
           "id": "AtlasNewsBRv2S10",
           "entryType": "Website",
           "title": "ATLAS",
-          "body": "@cipherfps\nDiscord: https://discord.gg/G9MAF77V7R",
+          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm",
           "tabTitleOverride": "ATLAS",
           "sortingPriority": 90,
           "image": "https://fortnite-public-service-prod11.ol.epicgames.com/images/motd.png",
@@ -2108,7 +2108,7 @@
           "videoAutoplay": false,
           "videoFullscreen": false,
           "websiteButtonText": "Discord",
-          "websiteURL": "https://discord.gg/G9MAF77V7R"
+          "websiteURL": "https://discord.gg/GqgakxU6bm"
         }
       ]
     },
@@ -2170,7 +2170,7 @@
             "zh-CN": "åŠ å…¥æˆ‘ä»¬çš„DiscordæœåŠ¡å™¨!",
             "zh-Hant": "åŠ å…¥æˆ‘å€‘çš„Discordä¼ºæœå™¨!"
           },
-          "body": "https://discord.gg/G9MAF77V7R",
+          "body": "https://discord.gg/GqgakxU6bm",
           "spotlight": false
         },
         {

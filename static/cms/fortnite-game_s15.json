@@ -11,9 +11,9 @@
       "contentFields": {
         "entryType": "Website",
         "title": "ATLAS",
-        "body": "@cipherfps\nDiscord: https://discord.gg/G9MAF77V7R",
+        "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm",
         "FullScreenTitle": "ATLAS",
-        "FullScreenBody": "@cipherfps\nDiscord: https://discord.gg/G9MAF77V7R",
+        "FullScreenBody": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm",
         "TeaserTitle": "ATLAS",
         "tabTitleOverride": "ATLAS",
         "image": [
@@ -56,7 +56,7 @@
         "videoMute": false,
         "videoStreamingEnabled": false,
         "websiteButtonText": "Discord",
-        "websiteURL": "https://discord.gg/G9MAF77V7R"
+        "websiteURL": "https://discord.gg/GqgakxU6bm"
       },
       "contentHash": "ATLAS-contenthash",
       "contentSchemaName": "MotdWebsiteNewsWithVideo"

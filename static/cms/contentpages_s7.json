@@ -11,21 +11,21 @@
         "_type": "CommonUI Simple Message Base",
         "title": "ATLAS",
         "body": {
-          "ar": "Ø§Ù†Ø¶Ù… Ø¥Ù„Ù‰ Ø®Ø§Ø¯Ù… Ø§Ù„Ø¯ÙŠØ³ÙƒÙˆØ±Ø¯ Ø§Ù„Ø®Ø§Øµ Ø¨Ù†Ø§: https://discord.gg/G9MAF77V7R",
-          "de": "Tritt unserem Discord bei: https://discord.gg/G9MAF77V7R",
-          "en": "Join our Discord: https://discord.gg/G9MAF77V7R",
-          "es": "Ãšnete a nuestro Discord: https://discord.gg/G9MAF77V7R",
-          "es-419": "Ãšnete a nuestro Discord: https://discord.gg/G9MAF77V7R",
-          "fr": "Rejoignez notre Discord : https://discord.gg/G9MAF77V7R",
-          "it": "Unisciti al nostro Discord: https://discord.gg/G9MAF77V7R",
-          "ja": "ç§ãŸã¡ã®Discordã«å‚åŠ ã—ã¦ãã ã•ã„: https://discord.gg/G9MAF77V7R",
-          "ko": "ìš°ë¦¬ì˜ Discordì— ì°¸ì—¬í•˜ì„¸ìš”: https://discord.gg/G9MAF77V7R",
-          "pl": "DoÅ‚Ä…cz do naszego Discorda: https://discord.gg/G9MAF77V7R",
-          "pt-BR": "Junte-se ao nosso Discord: https://discord.gg/G9MAF77V7R",
-          "ru": "ÐŸÑ€Ð¸ÑÐ¾ÐµÐ´Ð¸Ð½ÑÐ¹Ñ‚ÐµÑÑŒ Ðº Ð½Ð°ÑˆÐµÐ¼Ñƒ Discord: https://discord.gg/G9MAF77V7R",
-          "tr": "Discord sunucumuza katÄ±l: https://discord.gg/G9MAF77V7R",
-          "zh-CN": "åŠ å…¥æˆ‘ä»¬çš„Discord: https://discord.gg/G9MAF77V7R",
-          "zh-Hant": "åŠ å…¥æˆ‘å€‘çš„Discord: https://discord.gg/G9MAF77V7R"
+          "ar": "Ø§Ù†Ø¶Ù… Ø¥Ù„Ù‰ Ø®Ø§Ø¯Ù… Ø§Ù„Ø¯ÙŠØ³ÙƒÙˆØ±Ø¯ Ø§Ù„Ø®Ø§Øµ Ø¨Ù†Ø§: https://discord.gg/GqgakxU6bm",
+          "de": "Tritt unserem Discord bei: https://discord.gg/GqgakxU6bm",
+          "en": "Join our Discord: https://discord.gg/GqgakxU6bm",
+          "es": "Ãšnete a nuestro Discord: https://discord.gg/GqgakxU6bm",
+          "es-419": "Ãšnete a nuestro Discord: https://discord.gg/GqgakxU6bm",
+          "fr": "Rejoignez notre Discord : https://discord.gg/GqgakxU6bm",
+          "it": "Unisciti al nostro Discord: https://discord.gg/GqgakxU6bm",
+          "ja": "ç§ãŸã¡ã®Discordã«å‚åŠ ã—ã¦ãã ã•ã„: https://discord.gg/GqgakxU6bm",
+          "ko": "ìš°ë¦¬ì˜ Discordì— ì°¸ì—¬í•˜ì„¸ìš”: https://discord.gg/GqgakxU6bm",
+          "pl": "DoÅ‚Ä…cz do naszego Discorda: https://discord.gg/GqgakxU6bm",
+          "pt-BR": "Junte-se ao nosso Discord: https://discord.gg/GqgakxU6bm",
+          "ru": "ÐŸÑ€Ð¸ÑÐ¾ÐµÐ´Ð¸Ð½ÑÐ¹Ñ‚ÐµÑÑŒ Ðº Ð½Ð°ÑˆÐµÐ¼Ñƒ Discord: https://discord.gg/GqgakxU6bm",
+          "tr": "Discord sunucumuza katÄ±l: https://discord.gg/GqgakxU6bm",
+          "zh-CN": "åŠ å…¥æˆ‘ä»¬çš„Discord: https://discord.gg/GqgakxU6bm",
+          "zh-Hant": "åŠ å…¥æˆ‘å€‘çš„Discord: https://discord.gg/GqgakxU6bm"
         }
       }
     },
@@ -246,7 +246,7 @@
             "zh-CN": "åŠ å…¥æˆ‘ä»¬çš„DiscordæœåŠ¡å™¨ï¼",
             "zh-Hant": "åŠ å…¥æˆ‘å€‘çš„Discordä¼ºæœå™¨ï¼"
           },
-          "body": "https://discord.gg/G9MAF77V7R",
+          "body": "https://discord.gg/GqgakxU6bm",
           "spotlight": false
         },
         {
@@ -356,7 +356,7 @@
           "hidden": false,
           "_type": "CommonUI Simple Message Base",
           "title": "ATLAS",
-          "body": "@cipherfps\nDiscord: https://discord.gg/G9MAF77V7R",
+          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm",
           "spotlight": true
         }
       ]
@@ -382,21 +382,21 @@
           "_type": "CommonUI Emergency Notice Base",
           "title": "ATLAS",
           "body": {
-            "ar": "ØªÙ… Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ø®Ø§Ø¯Ù… Ø¨ÙˆØ§Ø³Ø·Ø© ATLAS\nØ¯ÙŠØ³ÙƒÙˆØ±Ø¯: https://discord.gg/G9MAF77V7R",
-            "de": "Server erstellt von ATLAS\nDiscord: https://discord.gg/G9MAF77V7R",
-            "en": "Server created by ATLAS\nDiscord: https://discord.gg/G9MAF77V7R",
-            "es": "Servidor creado por ATLAS\nDiscord: https://discord.gg/G9MAF77V7R",
-            "es-419": "Servidor creado por ATLAS\nDiscord: https://discord.gg/G9MAF77V7R",
-            "fr": "Serveur crÃ©Ã© par ATLAS\nDiscord : https://discord.gg/G9MAF77V7R",
-            "it": "Server creato da ATLAS\nDiscord: https://discord.gg/G9MAF77V7R",
-            "ja": "ATLAS ã«ã‚ˆã£ã¦ä½œæˆã•ã‚ŒãŸã‚µãƒ¼ãƒãƒ¼\nDiscord: https://discord.gg/G9MAF77V7R",
-            "ko": "ATLASê°€ ë§Œë“  ì„œë²„\nDiscord: https://discord.gg/G9MAF77V7R",
-            "pl": "Serwer stworzony przez ATLAS\nDiscord: https://discord.gg/G9MAF77V7R",
-            "pt-BR": "Servidor criado por ATLAS\nDiscord: https://discord.gg/G9MAF77V7R",
-            "ru": "Ð¡ÐµÑ€Ð²ÐµÑ€ ÑÐ¾Ð·Ð´Ð°Ð½ ATLAS\nDiscord: https://discord.gg/G9MAF77V7R",
-            "tr": "ATLAS tarafÄ±ndan oluÅŸturulan sunucu\nDiscord: https://discord.gg/G9MAF77V7R",
-            "zh-CN": "æœåŠ¡å™¨ç”± ATLAS åˆ›å»º\nDiscord: https://discord.gg/G9MAF77V7R",
-            "zh-Hant": "ä¼ºæœå™¨ç”± ATLAS å»ºç«‹\nDiscord: https://discord.gg/G9MAF77V7R"
+            "ar": "ØªÙ… Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ø®Ø§Ø¯Ù… Ø¨ÙˆØ§Ø³Ø·Ø© ATLAS\nØ¯ÙŠØ³ÙƒÙˆØ±Ø¯: https://discord.gg/GqgakxU6bm",
+            "de": "Server erstellt von ATLAS\nDiscord: https://discord.gg/GqgakxU6bm",
+            "en": "Server created by ATLAS\nDiscord: https://discord.gg/GqgakxU6bm",
+            "es": "Servidor creado por ATLAS\nDiscord: https://discord.gg/GqgakxU6bm",
+            "es-419": "Servidor creado por ATLAS\nDiscord: https://discord.gg/GqgakxU6bm",
+            "fr": "Serveur crÃ©Ã© par ATLAS\nDiscord : https://discord.gg/GqgakxU6bm",
+            "it": "Server creato da ATLAS\nDiscord: https://discord.gg/GqgakxU6bm",
+            "ja": "ATLAS ã«ã‚ˆã£ã¦ä½œæˆã•ã‚ŒãŸã‚µãƒ¼ãƒãƒ¼\nDiscord: https://discord.gg/GqgakxU6bm",
+            "ko": "ATLASê°€ ë§Œë“  ì„œë²„\nDiscord: https://discord.gg/GqgakxU6bm",
+            "pl": "Serwer stworzony przez ATLAS\nDiscord: https://discord.gg/GqgakxU6bm",
+            "pt-BR": "Servidor criado por ATLAS\nDiscord: https://discord.gg/GqgakxU6bm",
+            "ru": "Ð¡ÐµÑ€Ð²ÐµÑ€ ÑÐ¾Ð·Ð´Ð°Ð½ ATLAS\nDiscord: https://discord.gg/GqgakxU6bm",
+            "tr": "ATLAS tarafÄ±ndan oluÅŸturulan sunucu\nDiscord: https://discord.gg/GqgakxU6bm",
+            "zh-CN": "æœåŠ¡å™¨ç”± ATLAS åˆ›å»º\nDiscord: https://discord.gg/GqgakxU6bm",
+            "zh-Hant": "ä¼ºæœå™¨ç”± ATLAS å»ºç«‹\nDiscord: https://discord.gg/GqgakxU6bm"
           }
         }
       ]
@@ -640,13 +640,13 @@
           "tabTitleOverride": "ATLAS",
           "_type": "CommonUI Simple Message MOTD",
           "title": "Welcome to ATLAS!",
-          "body": "@cipherfps\nDiscord: https://discord.gg/G9MAF77V7R",
+          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm",
           "offerAction": "ShowOfferDetails",
           "videoLoop": false,
           "videoStreamingEnabled": false,
           "sortingPriority": 90,
           "websiteButtonText": "Discord",
-          "websiteURL": "https://discord.gg/G9MAF77V7R",
+          "websiteURL": "https://discord.gg/GqgakxU6bm",
           "id": "atlas-motd",
           "videoAutoplay": false,
           "videoFullscreen": false,
@@ -660,7 +660,7 @@
           "_type": "CommonUI Simple Message Base",
           "adspace": "DISCORD!",
           "title": "Join our Discord server!",
-          "body": "https://discord.gg/G9MAF77V7R",
+          "body": "https://discord.gg/GqgakxU6bm",
           "spotlight": false
         },
         {
@@ -669,7 +669,7 @@
           "_type": "CommonUI Simple Message Base",
           "adspace": "ENJOY!",
           "title": "ATLAS",
-          "body": "@cipherfps\nDiscord: https://discord.gg/G9MAF77V7R",
+          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm",
           "spotlight": false
         }
       ]
@@ -695,13 +695,13 @@
           "tabTitleOverride": "ATLAS",
           "_type": "CommonUI Simple Message MOTD",
           "title": "Welcome to ATLAS!",
-          "body": "@cipherfps\nDiscord: https://discord.gg/G9MAF77V7R",
+          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm",
           "offerAction": "ShowOfferDetails",
           "videoLoop": false,
           "videoStreamingEnabled": false,
           "sortingPriority": 90,
           "websiteButtonText": "Discord",
-          "websiteURL": "https://discord.gg/G9MAF77V7R",
+          "websiteURL": "https://discord.gg/GqgakxU6bm",
           "id": "atlas-motd",
           "videoAutoplay": false,
           "videoFullscreen": false,
