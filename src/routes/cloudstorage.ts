@@ -10,17 +10,28 @@ const hotfixCache = new Map<
 >();
 
 export default function () {
-  app.get("/fortnite/api/cloudstorage/system", async (c) => {
-    try {
-      const hotfixesDir = path.join(__dirname, "../../static/hotfixes");
-      const csFiles: any = [];
+  async function listSystemHotfixFiles() {
+    const hotfixesDir = path.join(__dirname, "../../static/hotfixes");
+    const csFiles: any[] = [];
 
-      const files = await fs.promises.readdir(hotfixesDir);
-      for (const file of files) {
-        const filePath = path.join(hotfixesDir, file);
+    // Note: `static/hotfixes` can contain folders (eg "DefaultGame Template") and local backups.
+    // Only expose actual hotfix files to the game to avoid EISDIR crashes.
+    const entries = await fs.promises.readdir(hotfixesDir, {
+      withFileTypes: true,
+    });
+
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+
+      const file = entry.name;
+      // System hotfixes are INI files; ignore backups/strays (eg *.bak).
+      if (!file.toLowerCase().endsWith(".ini")) continue;
+
+      const filePath = path.join(hotfixesDir, file);
+      try {
         const [f, fileStat] = await Promise.all([
           fs.promises.readFile(filePath),
-          fs.promises.stat(filePath)
+          fs.promises.stat(filePath),
         ]);
 
         csFiles.push({
@@ -30,51 +41,38 @@ export default function () {
           hash256: crypto.createHash("sha256").update(f as any).digest("hex"),
           length: fileStat.size,
           contentType: "application/octet-stream",
-          uploaded: new Date().toISOString(),
+          uploaded: fileStat.mtime.toISOString(),
           storageType: "S3",
           storageIds: {},
           doNotCache: true,
         });
+      } catch (err) {
+        console.error(`Error reading hotfix file ${file}:`, err);
       }
+    }
 
+    return csFiles;
+  }
+
+  app.get("/fortnite/api/cloudstorage/system", async (c) => {
+    try {
+      const csFiles = await listSystemHotfixFiles();
       return c.json(csFiles);
     } catch (err) {
       console.error("Error fetching system cloudstorage:", err);
-      return c.status(500);
+      // Be resilient: if something goes wrong, return "no files" instead of failing the client.
+      return c.json([]);
     }
   });
 
   app.get("/fortnite/api/cloudstorage/system/config", async (c) => {
     try {
-      const hotfixesDir = path.join(__dirname, "../../static/hotfixes");
-      const csFiles: any = [];
-
-      const files = await fs.promises.readdir(hotfixesDir);
-      for (const file of files) {
-        const filePath = path.join(hotfixesDir, file);
-        const [f, fileStat] = await Promise.all([
-          fs.promises.readFile(filePath),
-          fs.promises.stat(filePath)
-        ]);
-
-        csFiles.push({
-          uniqueFilename: file,
-          filename: file,
-          hash: crypto.createHash("sha1").update(f as any).digest("hex"),
-          hash256: crypto.createHash("sha256").update(f as any).digest("hex"),
-          length: fileStat.size,
-          contentType: "application/octet-stream",
-          uploaded: new Date().toISOString(),
-          storageType: "S3",
-          storageIds: {},
-          doNotCache: true,
-        });
-      }
-
+      const csFiles = await listSystemHotfixFiles();
       return c.json(csFiles);
     } catch (err) {
       console.error("Error fetching system config cloudstorage:", err);
-      return c.status(500);
+      // Be resilient: if something goes wrong, return "no files" instead of failing the client.
+      return c.json([]);
     }
   });
 
