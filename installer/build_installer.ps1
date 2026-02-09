@@ -113,6 +113,13 @@ if (Test-Path $stagedClientSettingsDir) {
   }
 }
 
+# Hotfix backups are local artifacts and should never ship in the MSI.
+$stagedHotfixesDir = Join-Path $stagedStaticDir "hotfixes"
+if (Test-Path $stagedHotfixesDir) {
+  Get-ChildItem -LiteralPath $stagedHotfixesDir -Recurse -File -Filter "*.bak" -ErrorAction SilentlyContinue |
+    Remove-Item -Force -ErrorAction SilentlyContinue
+}
+
 $bunDir = Join-Path $buildRoot "tools\\bun"
 $bunExe = Join-Path $bunDir "bun.exe"
 if (-not (Test-Path $bunExe)) {

@@ -14,7 +14,11 @@ Markdown Quick Key
 ---
 
 # Improvements
-- Added Ammunition CurveTables group (Ammo Stack Size)
-- Added "Close Fortnite" quick action, which closes all Fortnite processes
+- Added a "Restore DefaultGame.ini" button (restores from template, creates a backup, and resets related toggles).
+- Added an info button with pak requirements + Discord link.
+
+# Fixes
+- Clearing/reapplying DataTables no longer touches knockback fix lines.
+- Updated links to official ATLAS discord
 
 [Full release notes](https://github.com/cipherfps/ATLAS-Backend/releases)
