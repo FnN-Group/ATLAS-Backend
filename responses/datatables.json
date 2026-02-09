@@ -416,5 +416,19 @@
         "reloadTime": "3.24"
       }
     ]
+  },
+  "11": {
+    "name": "Grappler",
+    "weaponPath": "/Game/Athena/Items/Weapons/AthenaRangedWeapons",
+    "weaponId": "Special_HookGun_Athena_SR_Ore_T03",
+    "imagePath": "Grappler.webp",
+    "clipSize": "10"
+  },
+  "12": {
+    "name": "Batman's Grapnel Gun",
+    "weaponPath": "/Game/Athena/Items/Weapons/AthenaRangedWeapons",
+    "weaponId": "Special_BadgerGrape_Athena_SR_Ore_T03",
+    "imagePath": "BatmanGrapnelGun.webp",
+    "clipSize": "10"
   }
 }

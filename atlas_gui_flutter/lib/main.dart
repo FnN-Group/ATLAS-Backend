@@ -3476,6 +3476,14 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     final displayDefaultClipSize = weapon.clipSize ?? '30';
     final displayDefaultReloadTime = currentVariant?.reloadTime ?? '2.0';
 
+    // Check which fields are available for this weapon
+    final hasDamageFields = weapon.damageFields.isNotEmpty;
+    final hasEnvDamageFields = weapon.environmentalDamageFields.isNotEmpty;
+    final hasClipSize = weapon.clipSize != null;
+    final hasReloadTime = hasVariants 
+        ? (currentVariant?.reloadTime != null)
+        : false;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -3516,7 +3524,7 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
           ),
           const SizedBox(height: 12),
         ],
-        SwitchListTile(
+        if (hasDamageFields) SwitchListTile(
           value: settings.damageEnabled,
           onChanged: (value) async {
             if (value) {
@@ -3591,7 +3599,7 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
           ),
           const SizedBox(height: 8),
         ],
-        SwitchListTile(
+        if (hasEnvDamageFields) SwitchListTile(
           value: settings.envDamageEnabled,
           onChanged: (value) async {
             if (value) {
@@ -3666,7 +3674,7 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
           ),
           const SizedBox(height: 8),
         ],
-        SwitchListTile(
+        if (hasClipSize) SwitchListTile(
           value: settings.clipSizeEnabled,
           onChanged: (value) async {
             if (value) {
@@ -3741,7 +3749,7 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
           ),
           const SizedBox(height: 8),
         ],
-        SwitchListTile(
+        if (hasReloadTime) SwitchListTile(
           value: settings.reloadTimeEnabled,
           onChanged: (value) async {
             if (value) {
@@ -3816,7 +3824,7 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
           ),
           const SizedBox(height: 8),
         ],
-        SwitchListTile(
+        if (hasDamageFields || hasEnvDamageFields) SwitchListTile(
           value: settings.advancedMode,
           onChanged: (value) async {
             if (value) {
@@ -12439,17 +12447,44 @@ Future<List<CustomCurveInput>?> _promptCustomCurves(
 }
 
 Future<CustomDataTableInput?> _promptCustomDataTable(
-  BuildContext context,
-) async {
-  final weaponNameController = TextEditingController();
-  final weaponIdController = TextEditingController();
-  final damagePBController = TextEditingController(text: '50');
-  final envDamageController = TextEditingController(text: '50');
-  final damageMidController = TextEditingController(text: '40');
-  final damageLongController = TextEditingController(text: '30');
-  final damageMaxRangeController = TextEditingController(text: '20');
-  final clipSizeController = TextEditingController(text: '30');
-  final reloadTimeController = TextEditingController(text: '2.0');
+  BuildContext context, {
+  CustomDataTableInput? existingInput,
+}) async {
+  // Determine which fields to show based on existing data
+  final bool hasDamageFields = existingInput == null || 
+      (existingInput.damagePB.isNotEmpty || existingInput.envDamage.isNotEmpty);
+  final bool hasClipSize = existingInput == null || 
+      (existingInput.clipSize?.isNotEmpty ?? false);
+  final bool hasReloadTime = existingInput == null || 
+      (existingInput.reloadTime?.isNotEmpty ?? false);
+
+  final weaponNameController = TextEditingController(
+    text: existingInput?.weaponName ?? '',
+  );
+  final weaponIdController = TextEditingController(
+    text: existingInput?.weaponIdLine ?? '',
+  );
+  final damagePBController = TextEditingController(
+    text: existingInput?.damagePB ?? '50',
+  );
+  final envDamageController = TextEditingController(
+    text: existingInput?.envDamage ?? '50',
+  );
+  final damageMidController = TextEditingController(
+    text: existingInput?.damageMid ?? '40',
+  );
+  final damageLongController = TextEditingController(
+    text: existingInput?.damageLong ?? '30',
+  );
+  final damageMaxRangeController = TextEditingController(
+    text: existingInput?.damageMaxRange ?? '20',
+  );
+  final clipSizeController = TextEditingController(
+    text: existingInput?.clipSize ?? '30',
+  );
+  final reloadTimeController = TextEditingController(
+    text: existingInput?.reloadTime ?? '2.0',
+  );
 
   // Rarity configuration
   final rarities = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'];
@@ -12464,21 +12499,28 @@ Future<CustomDataTableInput?> _promptCustomDataTable(
 
   // Store damage values per rarity
   final rarityDamageValues = <String, Map<String, String>>{};
+  if (existingInput?.rarityConfigs != null) {
+    rarityDamageValues.addAll(existingInput!.rarityConfigs!);
+  }
 
   // Helper to save current values to the selected rarity
   void saveCurrentRarityValues() {
-    rarityDamageValues[selectedRarity] = {
-      'damagePB': damagePBController.text,
-      'envDamage': envDamageController.text,
-      'damageMid': damageMidController.text,
-      'damageLong': damageLongController.text,
-      'damageMaxRange': damageMaxRangeController.text,
-      'weaponIdLine': weaponIdController.text,
-    };
+    if (hasDamageFields) {
+      rarityDamageValues[selectedRarity] = {
+        'damagePB': damagePBController.text,
+        'envDamage': envDamageController.text,
+        'damageMid': damageMidController.text,
+        'damageLong': damageLongController.text,
+        'damageMaxRange': damageMaxRangeController.text,
+        'weaponIdLine': weaponIdController.text,
+      };
+    }
   }
 
   // Helper to load values for a rarity
   void loadRarityValues(String rarity) {
+    if (!hasDamageFields) return;
+    
     final values = rarityDamageValues[rarity];
     if (values != null) {
       damagePBController.text = values['damagePB'] ?? '50';
@@ -12517,8 +12559,8 @@ Future<CustomDataTableInput?> _promptCustomDataTable(
     }
   }
 
-  String? imagePath;
-  bool advancedMode = false;
+  String? imagePath = existingInput?.imageSourcePath;
+  bool advancedMode = existingInput?.advancedMode ?? false;
   String? errorText;
 
   final result = await _showBlurDialog<CustomDataTableInput>(
@@ -12555,7 +12597,7 @@ Future<CustomDataTableInput?> _promptCustomDataTable(
                   },
                 ),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
+                if (hasDamageFields) ...[DropdownButtonFormField<String>(
                   value: selectedRarity,
                   decoration: const InputDecoration(
                     labelText: 'Rarity',
@@ -12599,6 +12641,8 @@ Future<CustomDataTableInput?> _promptCustomDataTable(
                   },
                 ),
                 const SizedBox(height: 12),
+                ],
+                if (!hasDamageFields) const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
@@ -12631,7 +12675,7 @@ Future<CustomDataTableInput?> _promptCustomDataTable(
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                if (hasDamageFields) ...[const SizedBox(height: 16),
                 TextField(
                   controller: damagePBController,
                   decoration: InputDecoration(
@@ -12640,8 +12684,8 @@ Future<CustomDataTableInput?> _promptCustomDataTable(
                     hintStyle: TextStyle(color: Colors.grey.shade600),
                   ),
                   keyboardType: TextInputType.number,
-                ),
-                if (advancedMode) ...[
+                ),],
+                if (hasDamageFields && advancedMode) ...[
                   const SizedBox(height: 12),
                   TextField(
                     controller: damageMidController,
@@ -12673,7 +12717,7 @@ Future<CustomDataTableInput?> _promptCustomDataTable(
                     keyboardType: TextInputType.number,
                   ),
                 ],
-                const SizedBox(height: 12),
+                if (hasDamageFields) ...[const SizedBox(height: 12),
                 TextField(
                   controller: envDamageController,
                   decoration: InputDecoration(
@@ -12682,8 +12726,8 @@ Future<CustomDataTableInput?> _promptCustomDataTable(
                     hintStyle: TextStyle(color: Colors.grey.shade600),
                   ),
                   keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: 16),
+                ),],
+                if (hasClipSize) ...[const SizedBox(height: 16),
                 TextField(
                   controller: clipSizeController,
                   decoration: InputDecoration(
@@ -12692,8 +12736,8 @@ Future<CustomDataTableInput?> _promptCustomDataTable(
                     hintStyle: TextStyle(color: Colors.grey.shade600),
                   ),
                   keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: 12),
+                ),],
+                if (hasReloadTime) ...[const SizedBox(height: 12),
                 TextField(
                   controller: reloadTimeController,
                   decoration: InputDecoration(
@@ -12704,14 +12748,14 @@ Future<CustomDataTableInput?> _promptCustomDataTable(
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
-                ),
-                const SizedBox(height: 16),
+                ),],
+                if (hasDamageFields) ...[const SizedBox(height: 16),
                 SwitchListTile(
                   value: advancedMode,
                   onChanged: (value) => setState(() => advancedMode = value),
                   title: const Text('Advanced Options'),
                   subtitle: const Text('Configure damage for different ranges'),
-                ),
+                ),],
                 if (errorText != null) ...[
                   const SizedBox(height: 12),
                   Text(
@@ -12735,8 +12779,8 @@ Future<CustomDataTableInput?> _promptCustomDataTable(
               onPressed: () {
                 final weaponName = weaponNameController.text.trim();
                 final weaponId = weaponIdController.text.trim();
-                final damagePB = damagePBController.text.trim();
-                final envDamage = envDamageController.text.trim();
+                final damagePB = hasDamageFields ? damagePBController.text.trim() : '';
+                final envDamage = hasDamageFields ? envDamageController.text.trim() : '';
 
                 if (weaponName.isEmpty) {
                   setState(() => errorText = 'Weapon name is required.');
@@ -12748,11 +12792,11 @@ Future<CustomDataTableInput?> _promptCustomDataTable(
                   );
                   return;
                 }
-                if (damagePB.isEmpty) {
+                if (hasDamageFields && damagePB.isEmpty) {
                   setState(() => errorText = 'Base DamagePB is required.');
                   return;
                 }
-                if (envDamage.isEmpty) {
+                if (hasDamageFields && envDamage.isEmpty) {
                   setState(
                     () => errorText = 'Base Environmental Damage is required.',
                   );
@@ -12760,7 +12804,9 @@ Future<CustomDataTableInput?> _promptCustomDataTable(
                 }
 
                 // Save the current rarity's values before submitting
-                saveCurrentRarityValues();
+                if (hasDamageFields) {
+                  saveCurrentRarityValues();
+                }
 
                 Navigator.pop(
                   context,
@@ -12769,24 +12815,24 @@ Future<CustomDataTableInput?> _promptCustomDataTable(
                     weaponIdLine: weaponId,
                     damagePB: damagePB,
                     envDamage: envDamage,
-                    advancedMode: advancedMode,
+                    advancedMode: hasDamageFields && advancedMode,
                     imageSourcePath: imagePath,
-                    damageMid: advancedMode
+                    damageMid: (hasDamageFields && advancedMode)
                         ? damageMidController.text.trim()
                         : null,
-                    damageLong: advancedMode
+                    damageLong: (hasDamageFields && advancedMode)
                         ? damageLongController.text.trim()
                         : null,
-                    damageMaxRange: advancedMode
+                    damageMaxRange: (hasDamageFields && advancedMode)
                         ? damageMaxRangeController.text.trim()
                         : null,
-                    rarityConfigs: rarityDamageValues.isEmpty
-                        ? null
-                        : Map.from(rarityDamageValues),
-                    clipSize: clipSizeController.text.trim().isNotEmpty
+                    rarityConfigs: (hasDamageFields && rarityDamageValues.isNotEmpty)
+                        ? Map.from(rarityDamageValues)
+                        : null,
+                    clipSize: (hasClipSize && clipSizeController.text.trim().isNotEmpty)
                         ? clipSizeController.text.trim()
                         : null,
-                    reloadTime: reloadTimeController.text.trim().isNotEmpty
+                    reloadTime: (hasReloadTime && reloadTimeController.text.trim().isNotEmpty)
                         ? reloadTimeController.text.trim()
                         : null,
                   ),
