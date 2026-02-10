@@ -1441,7 +1441,8 @@ class _AtlasStartupAnimationOverlayState
     _textOffsetY = Tween<double>(begin: 48.0, end: 0.0).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(0.35, 0.85, curve: Curves.easeOutBack),
+        // Use a non-overshooting curve so the startup text doesn't "bounce".
+        curve: const Interval(0.35, 0.85, curve: Curves.easeOutCubic),
       ),
     );
 

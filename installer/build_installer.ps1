@@ -26,6 +26,10 @@ if (-not (Test-Path $wxsFile)) {
   throw "Missing WiX source file: $wxsFile"
 }
 
+if (-not (Test-Path $distDir)) {
+  New-Item -ItemType Directory -Path $distDir | Out-Null
+}
+
 if ([string]::IsNullOrWhiteSpace($Version)) {
   $packageJson = Join-Path $root "package.json"
   if (Test-Path $packageJson) {
