@@ -34,6 +34,12 @@ constexpr const wchar_t kGetPreferredBrightnessRegKey[] =
   L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize";
 constexpr const wchar_t kGetPreferredBrightnessRegValue[] = L"AppsUseLightTheme";
 
+// Registry key/value used to persist window position between launches.
+constexpr const wchar_t kWindowPlacementRegKey[] = L"Software\\ATLAS";
+constexpr const wchar_t kWindowPositionRegValue[] = L"WindowPosition";
+// Backwards-compat: older builds stored the entire WINDOWPLACEMENT.
+constexpr const wchar_t kLegacyWindowPlacementRegValue[] = L"WindowPlacement";
+
 // The number of Win32Window objects that currently exist.
 static int g_active_window_count = 0;
 
@@ -59,6 +65,67 @@ void EnableFullDpiSupportIfAvailable(HWND hwnd) {
     enable_non_client_dpi_scaling(hwnd);
   }
   FreeLibrary(user32_module);
+}
+
+bool IsPointOnAnyMonitor(const POINT& point) {
+  return MonitorFromPoint(point, MONITOR_DEFAULTTONULL) != nullptr;
+}
+
+bool LoadPersistedWindowPosition(POINT* position_out) {
+  if (!position_out) {
+    return false;
+  }
+
+  POINT position{};
+  DWORD data_size = sizeof(position);
+  LSTATUS result =
+      RegGetValue(HKEY_CURRENT_USER, kWindowPlacementRegKey,
+                  kWindowPositionRegValue, RRF_RT_REG_BINARY, nullptr, &position,
+                  &data_size);
+  if (result != ERROR_SUCCESS || data_size != sizeof(position)) {
+    // Fallback: attempt to read legacy WINDOWPLACEMENT.
+    WINDOWPLACEMENT legacy{};
+    DWORD legacy_size = sizeof(legacy);
+    LSTATUS legacy_result =
+        RegGetValue(HKEY_CURRENT_USER, kWindowPlacementRegKey,
+                    kLegacyWindowPlacementRegValue, RRF_RT_REG_BINARY, nullptr,
+                    &legacy, &legacy_size);
+    if (legacy_result != ERROR_SUCCESS || legacy_size != sizeof(legacy)) {
+      return false;
+    }
+    position = POINT{legacy.rcNormalPosition.left, legacy.rcNormalPosition.top};
+  }
+
+  if (!IsPointOnAnyMonitor(position)) {
+    return false;
+  }
+
+  *position_out = position;
+  return true;
+}
+
+void PersistWindowPosition(HWND hwnd) {
+  if (!hwnd) {
+    return;
+  }
+
+  WINDOWPLACEMENT placement{};
+  placement.length = sizeof(placement);
+  if (!GetWindowPlacement(hwnd, &placement)) {
+    return;
+  }
+
+  POINT position{placement.rcNormalPosition.left, placement.rcNormalPosition.top};
+
+  HKEY key = nullptr;
+  if (RegCreateKeyEx(HKEY_CURRENT_USER, kWindowPlacementRegKey, 0, nullptr, 0,
+                     KEY_SET_VALUE, nullptr, &key, nullptr) != ERROR_SUCCESS) {
+    return;
+  }
+
+  RegSetValueEx(key, kWindowPositionRegValue, 0, REG_BINARY,
+                reinterpret_cast<const BYTE*>(&position), sizeof(position));
+  RegCloseKey(key);
 }
 
 }  // namespace
@@ -136,16 +203,51 @@ bool Win32Window::Create(const std::wstring& title,
   const wchar_t* window_class =
       WindowClassRegistrar::GetInstance()->GetWindowClass();
 
-  const POINT target_point = {static_cast<LONG>(origin.x),
-                              static_cast<LONG>(origin.y)};
+  POINT persisted_position{};
+  bool has_persisted_position = LoadPersistedWindowPosition(&persisted_position);
+
+  POINT cursor_position{};
+  bool has_cursor_position = GetCursorPos(&cursor_position);
+
+  const POINT target_point =
+      has_persisted_position
+          ? persisted_position
+          : (has_cursor_position ? cursor_position
+                                 : POINT{static_cast<LONG>(origin.x),
+                                         static_cast<LONG>(origin.y)});
   HMONITOR monitor = MonitorFromPoint(target_point, MONITOR_DEFAULTTONEAREST);
   UINT dpi = FlutterDesktopGetDpiForMonitor(monitor);
   double scale_factor = dpi / 96.0;
 
+  const int window_width = Scale(size.width, scale_factor);
+  const int window_height = Scale(size.height, scale_factor);
+
+  // Persisted position is stored in physical pixels; default origin is provided
+  // in logical pixels (96 DPI) and is scaled to physical pixels. For a first
+  // run (no persisted position), center the window on the target monitor.
+  int window_x = 0;
+  int window_y = 0;
+  if (has_persisted_position) {
+    window_x = persisted_position.x;
+    window_y = persisted_position.y;
+  } else {
+    MONITORINFO monitor_info{};
+    monitor_info.cbSize = sizeof(monitor_info);
+    if (GetMonitorInfo(monitor, &monitor_info)) {
+      const RECT work = monitor_info.rcWork;
+      const int work_width = work.right - work.left;
+      const int work_height = work.bottom - work.top;
+      window_x = work.left + (work_width - window_width) / 2;
+      window_y = work.top + (work_height - window_height) / 2;
+    } else {
+      window_x = Scale(origin.x, scale_factor);
+      window_y = Scale(origin.y, scale_factor);
+    }
+  }
+
   HWND window = CreateWindow(
       window_class, title.c_str(), WS_OVERLAPPEDWINDOW,
-      Scale(origin.x, scale_factor), Scale(origin.y, scale_factor),
-      Scale(size.width, scale_factor), Scale(size.height, scale_factor),
+      window_x, window_y, window_width, window_height,
       nullptr, nullptr, GetModuleHandle(nullptr), this);
 
   if (!window) {
@@ -188,6 +290,7 @@ Win32Window::MessageHandler(HWND hwnd,
                             LPARAM const lparam) noexcept {
   switch (message) {
     case WM_DESTROY:
+      PersistWindowPosition(hwnd);
       window_handle_ = nullptr;
       Destroy();
       if (quit_on_close_) {
