@@ -13,7 +13,10 @@ Markdown Quick Key
 
 ---
 
-# Emergency Fix
-- Fixed launching newer versions (accidentally broke it)
+# Improvements
+- Redesign for Modifications menu
+- New Start-Up Animation
+- Added Particles in Background
+- Backend runtime Timer next to logs
 
 [Full release notes](https://github.com/cipherfps/ATLAS-Backend/releases)
