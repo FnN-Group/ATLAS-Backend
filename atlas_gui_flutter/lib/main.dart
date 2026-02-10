@@ -2736,6 +2736,8 @@ class ModificationsScreen extends StatefulWidget {
   State<ModificationsScreen> createState() => _ModificationsScreenState();
 }
 
+enum _ModificationsTab { curveTables, dataTables }
+
 class _ModificationsScreenState extends State<ModificationsScreen> {
   bool _isLoading = true;
   bool _straightBloom = false;
@@ -2755,6 +2757,8 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
   final Map<String, TextEditingController> _dataTableControllers = {};
   final Map<String, String> _weaponVariantSelections =
       {}; // weaponId -> variantWeaponId
+
+  _ModificationsTab _tab = _ModificationsTab.curveTables;
 
   @override
   void initState() {
@@ -2805,6 +2809,34 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     await _load();
   }
 
+  Future<void> _setDataTablesEnabled(bool enabled) async {
+    await DataTableService.setUIEnabledState(enabled);
+    if (!mounted) return;
+    setState(() => _dataTablesEnabled = enabled);
+
+    // Auto-select first weapon when enabling.
+    if (enabled && _weapons.isNotEmpty && _selectedWeaponId == null) {
+      final firstWeapon = _weapons.first;
+      final hasVariants =
+          firstWeapon.variants != null && firstWeapon.variants!.isNotEmpty;
+      String? variantWeaponId;
+      if (hasVariants) {
+        variantWeaponId = firstWeapon.variants!.first.weaponId;
+      }
+
+      final settings = await DataTableService.getWeaponSettings(
+        firstWeapon,
+        variantWeaponId: variantWeaponId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _selectedWeaponId = firstWeapon.id;
+        _selectedVariantWeaponId = variantWeaponId;
+        _selectedWeaponSettings = settings;
+      });
+    }
+  }
+
   Future<void> _importCurvesInModifications() async {
     final picked = await FilePicker.platform.pickFiles(
       dialogTitle: 'Import DefaultGame.ini',
@@ -2817,12 +2849,16 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     final source = File(path);
     if (!await source.exists()) return;
     final importContent = await source.readAsString();
+    await _importCurvesFromIniContent(importContent);
+  }
+
+  Future<int> _importCurvesFromIniContent(String importContent) async {
     final regex = RegExp(
       '^\\+CurveTable=(.+?);RowUpdate;(.+?);(\\d+);(.+)\$',
       multiLine: true,
     );
     final matches = regex.allMatches(importContent).toList();
-    if (matches.isEmpty) return;
+    if (matches.isEmpty) return 0;
 
     final grouped = <String, List<String>>{};
     for (final match in matches) {
@@ -2876,14 +2912,15 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     }
 
     await _load();
-    if (!mounted) return;
+    if (!mounted) return matches.length;
     await _showCurveImportSummary(context, grouped, missing: missing);
+    return matches.length;
   }
 
   Future<void> _restoreDefaultGameIniFromTemplate() async {
     final confirm = await DataService._confirmDialog(
       context,
-      'Restore DefaultGame.ini from template? This will overwrite your current DefaultGame.ini in static/hotfixes.',
+      'Repair DefaultGame.ini from template? This will overwrite your current DefaultGame.ini in static/hotfixes.',
     );
     if (!confirm) return;
 
@@ -2939,12 +2976,12 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
       await _load();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('DefaultGame.ini restored from template.')),
+        const SnackBar(content: Text('DefaultGame.ini repaired from template.')),
       );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to restore DefaultGame.ini: $error')),
+        SnackBar(content: Text('Failed to repair DefaultGame.ini: $error')),
       );
     }
   }
@@ -3087,26 +3124,83 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     final source = File(path);
     if (!await source.exists()) return;
     final importContent = await source.readAsString();
+    await _importDataTablesFromIniContent(importContent);
+  }
 
+  Future<int> _importDataTablesFromIniContent(
+    String importContent, {
+    bool showNoEntriesSnackBar = true,
+  }) async {
     // Match +DataTable= lines
     final regex = RegExp(r'^\+DataTable=(.+)$', multiLine: true);
     final matches = regex.allMatches(importContent).toList();
     if (matches.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No DataTable entries found in file')),
-      );
-      return;
+      if (showNoEntriesSnackBar) {
+        if (!mounted) return 0;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No DataTable entries found in file')),
+        );
+      }
+      return 0;
     }
 
     final lines = matches.map((m) => m.group(0)!).toList();
     await DataTableService.importDataTableLines(lines);
     await _load();
 
-    if (!mounted) return;
+    if (!mounted) return lines.length;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Imported ${lines.length} DataTable entries')),
     );
+    return lines.length;
+  }
+
+  Future<void> _importIniInModifications() async {
+    final picked = await FilePicker.platform.pickFiles(
+      dialogTitle: 'Import DefaultGame.ini',
+      type: FileType.custom,
+      allowedExtensions: ['ini'],
+    );
+    if (picked == null || picked.files.single.path == null) return;
+    final path = picked.files.single.path!;
+
+    final source = File(path);
+    if (!await source.exists()) return;
+    final importContent = await source.readAsString();
+
+    final attemptCurves = _curveTablesEnabled;
+    final attemptDataTables = _dataTablesEnabled;
+    int curveLines = 0;
+    int dataTableLines = 0;
+
+    if (attemptCurves) {
+      curveLines = await _importCurvesFromIniContent(importContent);
+    }
+    if (attemptDataTables) {
+      dataTableLines = await _importDataTablesFromIniContent(
+        importContent,
+        // Avoid "no DataTables" noise when the same file imported CurveTables.
+        showNoEntriesSnackBar: !attemptCurves,
+      );
+    }
+
+    if (!mounted) return;
+
+    if (attemptCurves && attemptDataTables) {
+      if (curveLines == 0 && dataTableLines == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No CurveTable or DataTable entries found in file'),
+          ),
+        );
+      }
+    } else if (attemptCurves && !attemptDataTables) {
+      if (curveLines == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No CurveTable entries found in file')),
+        );
+      }
+    }
   }
 
   @override
@@ -3152,20 +3246,76 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
           ),
           const SizedBox(width: 10),
           _HoverScale(
+            enabled:
+                !_isLoading && (_curveTablesEnabled || _dataTablesEnabled),
+            child: OutlinedButton.icon(
+              onPressed:
+                  (!_isLoading && (_curveTablesEnabled || _dataTablesEnabled))
+                      ? _importIniInModifications
+                      : null,
+              icon: const Icon(Icons.file_upload_outlined),
+              label: const Text('Import INI'),
+            ),
+          ),
+          const SizedBox(width: 10),
+          _HoverScale(
             child: OutlinedButton.icon(
               onPressed: _restoreDefaultGameIniFromTemplate,
               icon: const Icon(Icons.restore_rounded),
-              label: const Text('Restore DefaultGame.ini'),
+              label: const Text('Repair INI'),
             ),
           ),
         ],
       ),
       child: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              children: [
-                const _SectionTitle(title: 'Straight Bloom'),
-                SwitchListTile(
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final isWide = constraints.maxWidth >= 1040;
+
+                Widget disabledCard({
+                  required IconData icon,
+                  required String title,
+                  required String message,
+                }) {
+                  return Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: _onSurface(context, 0.12)),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(icon, color: _onSurface(context, 0.6)),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                title,
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                message,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(color: _onSurface(context, 0.7)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                final straightBloomSwitch = SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
                   value: _straightBloom,
                   onChanged: _toggleStraightBloom,
                   title: Text(
@@ -3174,10 +3324,10 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                         : 'Straight Bloom Disabled',
                   ),
                   subtitle: const Text('Toggles no-spread for all snipers.'),
-                ),
-                const SizedBox(height: 20),
-                const _SectionTitle(title: 'CurveTables'),
-                SwitchListTile(
+                );
+
+                final curveTablesSwitch = SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
                   value: _curveTablesEnabled,
                   onChanged: (_) => _toggleCurveTables(),
                   title: Text(
@@ -3186,16 +3336,131 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                         : 'CurveTables Disabled',
                   ),
                   subtitle: const Text('Toggle all CurveTable entries on/off'),
-                ),
-                const SizedBox(height: 8),
-                if (_curveTablesEnabled) ...[
-                  const SizedBox(height: 12),
-                  _curveLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Wrap(
+                );
+
+                final dataTablesSwitch = SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: _dataTablesEnabled,
+                  onChanged: _setDataTablesEnabled,
+                  title: Text(
+                    _dataTablesEnabled
+                        ? 'DataTables Enabled'
+                        : 'DataTables Disabled',
+                  ),
+                  subtitle: const Text('Toggle weapon damage modifications'),
+                );
+
+                final togglesPanel = ListView(
+                  padding: EdgeInsets.zero,
+                  children: [
+                    const _SectionTitle(title: 'Straight Bloom'),
+                    straightBloomSwitch,
+                    const SizedBox(height: 20),
+                    const _SectionTitle(title: 'CurveTables'),
+                    curveTablesSwitch,
+                    const SizedBox(height: 20),
+                    const _SectionTitle(title: 'DataTables'),
+                    dataTablesSwitch,
+                  ],
+                );
+
+                final accent = Theme.of(context).colorScheme.secondary;
+
+                Widget tabPill({
+                  required String label,
+                  required _ModificationsTab tab,
+                }) {
+                  final selected = _tab == tab;
+                  return _HoverRegion(
+                    builder: (context, hovered) {
+                      final bgColor = selected
+                          ? accent.withOpacity(0.18)
+                          : hovered
+                              ? Colors.black.withOpacity(0.06)
+                              : Colors.transparent;
+                      final borderColor =
+                          selected ? accent.withOpacity(0.55) : Colors.transparent;
+                      return GestureDetector(
+                        onTap: () => setState(() => _tab = tab),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 160),
+                          curve: Curves.easeOutCubic,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: bgColor,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: borderColor),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            label,
+                            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                              color:
+                                  selected ? accent : _onSurface(context, 0.75),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                }
+
+                final tablesTabs = Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.06),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: _onSurface(context, 0.12)),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: tabPill(
+                          label: 'CurveTables',
+                          tab: _ModificationsTab.curveTables,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: tabPill(
+                          label: 'DataTables',
+                          tab: _ModificationsTab.dataTables,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+
+                final contentPanel = ListView(
+                  children: [
+                    if (!isWide) ...[
+                      const _SectionTitle(title: 'Straight Bloom'),
+                      straightBloomSwitch,
+                      const SizedBox(height: 20),
+                    ],
+                    tablesTabs,
+                    const SizedBox(height: 20),
+                    if (_tab == _ModificationsTab.curveTables) ...[
+                      if (!isWide) curveTablesSwitch,
+                      const SizedBox(height: 8),
+                      if (isWide && !_curveTablesEnabled)
+                        disabledCard(
+                          icon: Icons.table_rows_outlined,
+                          title: 'CurveTables Disabled',
+                          message:
+                              'Enable CurveTables on the left to manage hotfix curve entries.',
+                        ),
+                      if (_curveTablesEnabled) ...[
+                        const SizedBox(height: 12),
+                        _curveLoading
+                            ? const Center(child: CircularProgressIndicator())
+                            : Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Wrap(
                               spacing: 12,
                               runSpacing: 12,
                               children: visibleGroups.map((group) {
@@ -3220,7 +3485,7 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                                           milliseconds: 180,
                                         ),
                                         width: 140,
-                                        height: 110,
+                                        height: 130,
                                         padding: const EdgeInsets.all(10),
                                         decoration: BoxDecoration(
                                           borderRadius: BorderRadius.circular(
@@ -3381,20 +3646,6 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                                 _HoverScale(
                                   enabled: _curveTablesEnabled,
                                   child: OutlinedButton.icon(
-                                    onPressed: _importCurvesInModifications,
-                                    icon: const Icon(
-                                      Icons.file_upload_outlined,
-                                    ),
-                                    label: const Text('Import INI'),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: const Color(0xFF1E88E5),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                _HoverScale(
-                                  enabled: _curveTablesEnabled,
-                                  child: OutlinedButton.icon(
                                     onPressed: () async {
                                       final confirm =
                                           await DataService._confirmDialog(
@@ -3463,62 +3714,28 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                                     : null,
                               );
                             }),
-                          ],
-                        ),
-                ],
-                const SizedBox(height: 20),
-                const _SectionTitle(title: 'DataTables'),
-                SwitchListTile(
-                  value: _dataTablesEnabled,
-                  onChanged: (_) async {
-                    final newValue = !_dataTablesEnabled;
-                    await DataTableService.setUIEnabledState(newValue);
-                    setState(() => _dataTablesEnabled = newValue);
-
-                    // Auto-select first weapon when enabling
-                    if (newValue &&
-                        _weapons.isNotEmpty &&
-                        _selectedWeaponId == null) {
-                      final firstWeapon = _weapons.first;
-                      final hasVariants =
-                          firstWeapon.variants != null &&
-                          firstWeapon.variants!.isNotEmpty;
-                      String? variantWeaponId;
-                      if (hasVariants) {
-                        variantWeaponId = firstWeapon.variants!.first.weaponId;
-                      }
-                      final settings = await DataTableService.getWeaponSettings(
-                        firstWeapon,
-                        variantWeaponId: variantWeaponId,
-                      );
-                      setState(() {
-                        _selectedWeaponId = firstWeapon.id;
-                        _selectedVariantWeaponId = variantWeaponId;
-                        _selectedWeaponSettings = settings;
-                      });
-                    }
-                  },
-                  title: Text(
-                    _dataTablesEnabled
-                        ? 'DataTables Enabled'
-                        : 'DataTables Disabled',
-                  ),
-                  subtitle: const Text('Toggle weapon damage modifications'),
-                ),
-                const SizedBox(height: 8),
-                if (_dataTablesEnabled) ...[
-                  const SizedBox(height: 12),
-                  _dataTablesLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Weapons',
-                              style: Theme.of(context).textTheme.titleLarge,
+                              ],
                             ),
-                            const SizedBox(height: 12),
-                            Wrap(
+                    ],
+                    ],
+                    if (_tab == _ModificationsTab.dataTables) ...[
+                      if (!isWide) dataTablesSwitch,
+                      const SizedBox(height: 8),
+                      if (isWide && !_dataTablesEnabled)
+                        disabledCard(
+                          icon: Icons.tune_rounded,
+                          title: 'DataTables Disabled',
+                          message:
+                              'Enable DataTables on the left to manage weapon damage modifications.',
+                        ),
+                      if (_dataTablesEnabled) ...[
+                        const SizedBox(height: 12),
+                        _dataTablesLoading
+                            ? const Center(child: CircularProgressIndicator())
+                            : Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Wrap(
                               spacing: 12,
                               runSpacing: 12,
                               children: _weapons.map((weapon) {
@@ -3633,8 +3850,8 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                                                     hovered: hovered,
                                                     child: Image.file(
                                                       imageFile,
-                                                      width: 48,
-                                                      height: 48,
+                                                      width: 52,
+                                                      height: 52,
                                                       fit: BoxFit.contain,
                                                     ),
                                                   )
@@ -3659,7 +3876,7 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                                                       ).colorScheme.secondary,
                                                     ),
                                                   ),
-                                                const SizedBox(height: 6),
+                                                const SizedBox(height: 8),
                                                 Text(
                                                   weapon.name,
                                                   textAlign: TextAlign.center,
@@ -3678,70 +3895,6 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                                 );
                               }).toList(),
                             ),
-                            const SizedBox(height: 20),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: [
-                                  _HoverScale(
-                                    enabled: _dataTablesEnabled,
-                                    child: OutlinedButton.icon(
-                                      onPressed: _addCustomDataTable,
-                                      icon: const Icon(
-                                        Icons.add_circle_outline,
-                                      ),
-                                      label: const Text('Add Custom DataTable'),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: const Color(
-                                          0xFF1E88E5,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  _HoverScale(
-                                    enabled: _dataTablesEnabled,
-                                    child: OutlinedButton.icon(
-                                      onPressed: _importDataTablesINI,
-                                      icon: const Icon(
-                                        Icons.file_upload_outlined,
-                                      ),
-                                      label: const Text('Import INI'),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: const Color(
-                                          0xFF1E88E5,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  _HoverScale(
-                                    enabled: _dataTablesEnabled,
-                                    child: OutlinedButton.icon(
-                                      onPressed: () async {
-                                        final confirm =
-                                            await DataService._confirmDialog(
-                                              context,
-                                              'Clear all DataTables from DefaultGame.ini?',
-                                            );
-                                        if (!confirm) return;
-                                        await DataTableService.clearAllDataTables();
-                                        await _load();
-                                      },
-                                      icon: const Icon(
-                                        Icons.delete_sweep_outlined,
-                                      ),
-                                      label: const Text('Clear All DataTables'),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: const Color(
-                                          0xFF1E88E5,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
                             if (_selectedWeaponId != null &&
                                 _selectedWeaponSettings != null) ...[
                               const SizedBox(height: 20),
@@ -3750,7 +3903,23 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                           ],
                         ),
                 ],
+                    ],
               ],
+            );
+
+                if (!isWide) return contentPanel;
+
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(width: 340, child: togglesPanel),
+                    const SizedBox(width: 24),
+                    Container(width: 1, color: _onSurface(context, 0.08)),
+                    const SizedBox(width: 24),
+                    Expanded(child: contentPanel),
+                  ],
+                );
+              },
             ),
     );
   }
@@ -3785,7 +3954,63 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(weapon.name, style: Theme.of(context).textTheme.titleLarge),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              flex: 3,
+              child: Text(
+                weapon.name,
+                style: Theme.of(context).textTheme.titleLarge,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 7,
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _HoverScale(
+                      enabled: _dataTablesEnabled,
+                      child: OutlinedButton.icon(
+                        onPressed: _addCustomDataTable,
+                        icon: const Icon(Icons.add_circle_outline),
+                        label: const Text('Add Custom DataTable'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF1E88E5),
+                        ),
+                      ),
+                    ),
+                    _HoverScale(
+                      enabled: _dataTablesEnabled,
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          final confirm = await DataService._confirmDialog(
+                            context,
+                            'Clear all DataTables from DefaultGame.ini?',
+                          );
+                          if (!confirm) return;
+                          await DataTableService.clearAllDataTables();
+                          await _load();
+                        },
+                        icon: const Icon(Icons.delete_sweep_outlined),
+                        label: const Text('Clear All DataTables'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF1E88E5),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 12),
         if (hasVariants) ...[
           Padding(
