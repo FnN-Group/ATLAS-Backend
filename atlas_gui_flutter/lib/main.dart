@@ -18,8 +18,10 @@ import 'package:markdown/markdown.dart' as md;
 
 final ValueNotifier<ThemeMode> appThemeMode = ValueNotifier(ThemeMode.dark);
 final ValueNotifier<String> appBackgroundPath = ValueNotifier('');
-final ValueNotifier<double> appBackgroundBlur = ValueNotifier(18);
+final ValueNotifier<double> appBackgroundBlur = ValueNotifier(15);
+final ValueNotifier<double> appBackgroundParticlesOpacity = ValueNotifier(1.0);
 final ValueNotifier<bool> appDialogBlurEnabled = ValueNotifier(true);
+final ValueNotifier<bool> appStartupAnimationEnabled = ValueNotifier(true);
 
 const _fallbackAcrylicColor = Color(0x260A0E14);
 
@@ -110,7 +112,9 @@ class _AtlasAppState extends State<AtlasApp> {
     appThemeMode.value = config.useDarkMode ? ThemeMode.dark : ThemeMode.light;
     appBackgroundPath.value = config.backgroundImagePath;
     appBackgroundBlur.value = config.backgroundBlur;
+    appBackgroundParticlesOpacity.value = config.backgroundParticlesOpacity;
     appDialogBlurEnabled.value = config.dialogBlurEnabled;
+    appStartupAnimationEnabled.value = config.startupAnimationEnabled;
     _scheduleAcrylicUpdate();
   }
 
@@ -357,21 +361,68 @@ class _AtlasHomePageState extends State<AtlasHomePage>
   bool _loadingReleaseHistory = false;
   List<ReleaseInfo> _releaseHistory = const [];
   String _backendVersionLabel = '1.0.0';
+  bool _showStartupAnimation = true;
+  bool _revealHomeContent = true;
+  double _homePanelsScale = 1.0;
+  late final VoidCallback _startupAnimationListener;
+  final Completer<void> _startupAnimationGate = Completer<void>();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _controller = BackendController()..startPolling();
+    _showStartupAnimation = appStartupAnimationEnabled.value;
+    _revealHomeContent = !_showStartupAnimation;
+    _homePanelsScale = _showStartupAnimation ? 0.96 : 1.0;
+    if (!_showStartupAnimation) {
+      _startupAnimationGate.complete();
+    }
+    _startupAnimationListener = () {
+      if (!mounted) return;
+      if (!appStartupAnimationEnabled.value && _showStartupAnimation) {
+        setState(() {
+          _showStartupAnimation = false;
+          _revealHomeContent = true;
+          _homePanelsScale = 1.0;
+        });
+        if (!_startupAnimationGate.isCompleted) {
+          _startupAnimationGate.complete();
+        }
+      }
+    };
+    appStartupAnimationEnabled.addListener(_startupAnimationListener);
     unawaited(_initStartup());
     unawaited(_loadBackendVersion());
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _startupAnimationGate.future;
+      if (!mounted) return;
       await _maybeCheckForUpdatesOnLaunch();
+      if (!mounted) return;
       await _maybeShowUpdateNotesOnLaunch();
+      if (!mounted) return;
+      await UpdateBackupService.restoreIfNeeded(context);
     });
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => UpdateBackupService.restoreIfNeeded(context),
-    );
+  }
+
+  void _finishStartupAnimation() {
+    if (!mounted || !_showStartupAnimation) return;
+    setState(() {
+      _showStartupAnimation = false;
+      _revealHomeContent = true;
+      _homePanelsScale = 1.0;
+    });
+    if (!_startupAnimationGate.isCompleted) {
+      _startupAnimationGate.complete();
+    }
+  }
+
+  void _revealStartupContent() {
+    if (!mounted || _revealHomeContent) return;
+    setState(() {
+      _revealHomeContent = true;
+      _homePanelsScale = 1.0;
+    });
   }
 
   Future<void> _maybeCheckForUpdatesOnLaunch() async {
@@ -1132,6 +1183,7 @@ class _AtlasHomePageState extends State<AtlasHomePage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    appStartupAnimationEnabled.removeListener(_startupAnimationListener);
     unawaited(_controller.stopBackend());
     unawaited(_controller.forceKillBackendPort());
     _controller.dispose();
@@ -1231,55 +1283,292 @@ class _AtlasHomePageState extends State<AtlasHomePage>
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final showIntro = _showStartupAnimation;
+    final content = Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AnimatedBuilder(
+            animation: _controller,
+            builder: (_, __) => _TopBar(
+              textTheme: textTheme,
+              statusText: _controller.statusText,
+              statusColor: _controller.statusColor,
+              versionLabel: _backendVersionLabel,
+              onVersionPressed: _showVersionHistoryMenu,
+              onSettingsPressed: () => Navigator.of(
+                context,
+              ).push(_buildRoute(const SettingsScreen())),
+              onCheckUpdates: () => _checkForUpdates(silent: false),
+              onShowShareDialog: _showShareDialog,
+              height: 110,
+            ),
+          ),
+          const SizedBox(height: 28),
+          Expanded(
+            child: AnimatedScale(
+              scale: _homePanelsScale,
+              duration: const Duration(milliseconds: 420),
+              curve: Curves.easeOutCubic,
+              child: RepaintBoundary(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 3, child: _MenuGrid(items: _menuItems)),
+                    const SizedBox(width: 28),
+                    Expanded(
+                      flex: 2,
+                      child: AnimatedBuilder(
+                        animation: _controller,
+                        builder: (_, __) => _SidePanel(controller: _controller),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
     return WillPopScope(
       onWillPop: () async => _confirmExit(),
       child: Scaffold(
         body: Stack(
           children: [
             const AtlasBackground(),
-            Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  AnimatedBuilder(
-                    animation: _controller,
-                    builder: (_, __) => _TopBar(
-                      textTheme: textTheme,
-                      statusText: _controller.statusText,
-                      statusColor: _controller.statusColor,
-                      versionLabel: _backendVersionLabel,
-                      onVersionPressed: _showVersionHistoryMenu,
-                      onSettingsPressed: () => Navigator.of(
-                        context,
-                      ).push(_buildRoute(const SettingsScreen())),
-                      onCheckUpdates: () => _checkForUpdates(silent: false),
-                      onShowShareDialog: _showShareDialog,
-                      height: 110,
-                    ),
-                  ),
-                  const SizedBox(height: 28),
-                  Expanded(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(flex: 3, child: _MenuGrid(items: _menuItems)),
-                        const SizedBox(width: 28),
-                        Expanded(
-                          flex: 2,
-                          child: AnimatedBuilder(
-                            animation: _controller,
-                            builder: (_, __) =>
-                                _SidePanel(controller: _controller),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+            Visibility(
+              visible: _revealHomeContent,
+              maintainState: true,
+              child: IgnorePointer(
+                ignoring: showIntro,
+                child: content,
               ),
             ),
+            if (showIntro)
+              _AtlasStartupAnimationOverlay(
+                onFinished: _finishStartupAnimation,
+                onOutroStart: _revealStartupContent,
+              ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AtlasStartupAnimationOverlay extends StatefulWidget {
+  const _AtlasStartupAnimationOverlay({
+    required this.onFinished,
+    this.onOutroStart,
+  });
+
+  final VoidCallback onFinished;
+  final VoidCallback? onOutroStart;
+
+  @override
+  State<_AtlasStartupAnimationOverlay> createState() =>
+      _AtlasStartupAnimationOverlayState();
+}
+
+class _AtlasStartupAnimationOverlayState
+    extends State<_AtlasStartupAnimationOverlay>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _overlayOpacity;
+  late final Animation<double> _logoOpacity;
+  late final Animation<double> _logoOffsetY;
+  late final Animation<double> _logoBlur;
+  late final Animation<double> _textOpacity;
+  late final Animation<double> _textOffsetY;
+  late final Animation<double> _textBlur;
+  bool _didTriggerOutroStart = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 3),
+    );
+
+    _overlayOpacity = TweenSequence<double>([
+      TweenSequenceItem(tween: ConstantTween<double>(1.0), weight: 90),
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.0, end: 0.0).chain(
+          CurveTween(curve: Curves.easeInCubic),
+        ),
+        weight: 10,
+      ),
+    ]).animate(_controller);
+
+    _controller.addListener(() {
+      if (_didTriggerOutroStart) return;
+      // Reveal the menu slightly before the overlay starts fading out so we can
+      // fade out the scrim instead of alpha-fading the whole menu (which can jank
+      // on Windows).
+      if (_controller.value >= 0.9) {
+        _didTriggerOutroStart = true;
+        widget.onOutroStart?.call();
+      }
+    });
+
+    _logoOpacity = CurvedAnimation(
+      parent: _controller,
+      curve: const Interval(0.05, 0.35, curve: Curves.easeOutCubic),
+    );
+
+    _logoOffsetY = Tween<double>(begin: -140.0, end: 0.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.05, 0.45, curve: Curves.easeOutCubic),
+      ),
+    );
+
+    _logoBlur = Tween<double>(begin: 18.0, end: 0.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.05, 0.35, curve: Curves.easeOutCubic),
+      ),
+    );
+
+    _textOpacity = CurvedAnimation(
+      parent: _controller,
+      curve: const Interval(0.35, 0.6, curve: Curves.easeOut),
+    );
+
+    _textOffsetY = Tween<double>(begin: 48.0, end: 0.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.35, 0.85, curve: Curves.easeOutBack),
+      ),
+    );
+
+    _textBlur = Tween<double>(begin: 14.0, end: 0.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.35, 0.75, curve: Curves.easeOutCubic),
+      ),
+    );
+
+    _controller.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        widget.onFinished();
+      }
+    });
+
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : Colors.black;
+    final shadowColor =
+        isDark ? Colors.black.withOpacity(0.45) : Colors.black.withOpacity(0.2);
+
+    final textStyle = TextStyle(
+      fontSize: 54,
+      height: 1.0,
+      fontWeight: FontWeight.w600,
+      letterSpacing: 0.2,
+      color: textColor.withOpacity(0.95),
+      // Coolvetica isn't bundled (licensing). If installed on the system, Flutter
+      // will pick it up; otherwise we fall back to common UI fonts.
+      fontFamily: 'Coolvetica',
+      fontFamilyFallback: const ['Segoe UI', 'Arial', 'Roboto'],
+      shadows: [
+        Shadow(
+          color: shadowColor,
+          blurRadius: 18,
+          offset: const Offset(0, 6),
+        ),
+      ],
+    );
+
+    return Positioned.fill(
+      child: AbsorbPointer(
+        child: RepaintBoundary(
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (context, _) {
+              return Opacity(
+                opacity: _overlayOpacity.value,
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              (isDark ? Colors.black : Colors.white).withOpacity(
+                                isDark ? 0.22 : 0.16,
+                              ),
+                              (isDark ? Colors.black : Colors.white).withOpacity(
+                                isDark ? 0.34 : 0.26,
+                              ),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Transform.translate(
+                            offset: Offset(0, _logoOffsetY.value),
+                            child: Opacity(
+                              opacity: _logoOpacity.value,
+                              child: ImageFiltered(
+                                imageFilter: ImageFilter.blur(
+                                  sigmaX: _logoBlur.value,
+                                  sigmaY: _logoBlur.value,
+                                ),
+                                child: Image.asset(
+                                  'assets/images/atlas_logo.png',
+                                  width: 180,
+                                  height: 180,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 22),
+                          Transform.translate(
+                            offset: Offset(0, _textOffsetY.value),
+                            child: Opacity(
+                              opacity: _textOpacity.value,
+                              child: ImageFiltered(
+                                imageFilter: ImageFilter.blur(
+                                  sigmaX: _textBlur.value,
+                                  sigmaY: _textBlur.value,
+                                ),
+                                child: Text(
+                                  'Welcome to ATLAS',
+                                  textAlign: TextAlign.center,
+                                  style: textStyle,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
         ),
       ),
     );
@@ -2183,8 +2472,182 @@ class AtlasBackground extends StatelessWidget {
             ),
           ),
         ),
+        ValueListenableBuilder<double>(
+          valueListenable: appBackgroundParticlesOpacity,
+          builder: (context, opacity, _) {
+            final clamped = opacity.clamp(0.0, 2.0).toDouble();
+            if (clamped <= 0.0) {
+              return const SizedBox.shrink();
+            }
+            return Positioned.fill(
+              child: IgnorePointer(
+                child: _AtlasParticleField(opacity: clamped),
+              ),
+            );
+          },
+        ),
       ],
     );
+  }
+}
+
+class _AtlasParticleField extends StatefulWidget {
+  const _AtlasParticleField({super.key, required this.opacity});
+
+  final double opacity;
+
+  @override
+  State<_AtlasParticleField> createState() => _AtlasParticleFieldState();
+}
+
+class _AtlasParticleFieldState extends State<_AtlasParticleField>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final List<_AtlasParticle> _particles;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 120),
+    )..repeat();
+    _particles = _AtlasParticle.generate(seed: 90210, count: 120);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final opacity = widget.opacity.clamp(0.0, 2.0).toDouble();
+    return RepaintBoundary(
+      child: CustomPaint(
+        painter: _AtlasParticlePainter(
+          controller: _controller,
+          particles: _particles,
+          color: isDark ? Colors.white : Colors.black,
+          opacity: opacity,
+        ),
+        child: const SizedBox.expand(),
+      ),
+    );
+  }
+}
+
+class _AtlasParticle {
+  const _AtlasParticle({
+    required this.x,
+    required this.y,
+    required this.vx,
+    required this.vy,
+    required this.radius,
+    required this.alpha,
+    required this.twinkleSpeed,
+    required this.twinklePhase,
+    required this.glow,
+  });
+
+  final double x;
+  final double y;
+  final double vx;
+  final double vy;
+  final double radius;
+  final double alpha;
+  final double twinkleSpeed;
+  final double twinklePhase;
+  final bool glow;
+
+  static List<_AtlasParticle> generate({required int seed, required int count}) {
+    final rng = Random(seed);
+
+    double nextDoubleRange(double min, double max) =>
+        min + (max - min) * rng.nextDouble();
+
+    final particles = <_AtlasParticle>[];
+    for (var i = 0; i < count; i++) {
+      final x = rng.nextDouble();
+      final y = rng.nextDouble();
+
+      final sizeRoll = rng.nextDouble();
+      final radius =
+          sizeRoll < 0.12 ? nextDoubleRange(1.8, 2.8) : nextDoubleRange(0.8, 1.8);
+      final baseAlpha =
+          sizeRoll < 0.12 ? nextDoubleRange(0.08, 0.16) : nextDoubleRange(0.04, 0.12);
+
+      final speed = nextDoubleRange(0.002, 0.012) * (radius / 2.0);
+      final angle = nextDoubleRange(0, pi * 2);
+      final vx = cos(angle) * speed;
+      final vy = sin(angle) * speed;
+
+      final twinkleSpeed = nextDoubleRange(0.6, 1.6);
+      final twinklePhase = nextDoubleRange(0, pi * 2);
+
+      particles.add(
+        _AtlasParticle(
+          x: x,
+          y: y,
+          vx: vx,
+          vy: vy,
+          radius: radius,
+          alpha: baseAlpha,
+          twinkleSpeed: twinkleSpeed,
+          twinklePhase: twinklePhase,
+          glow: sizeRoll < 0.08,
+        ),
+      );
+    }
+    return particles;
+  }
+}
+
+class _AtlasParticlePainter extends CustomPainter {
+  _AtlasParticlePainter({
+    required this.controller,
+    required this.particles,
+    required this.color,
+    required this.opacity,
+  }) : super(repaint: controller);
+
+  final AnimationController controller;
+  final List<_AtlasParticle> particles;
+  final Color color;
+  final double opacity;
+
+  final Paint _paint = Paint()..isAntiAlias = true;
+  final Paint _glowPaint = Paint()
+    ..isAntiAlias = true
+    ..maskFilter = MaskFilter.blur(BlurStyle.normal, 3);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final t = (controller.lastElapsedDuration?.inMilliseconds ?? 0) / 1000.0;
+
+    for (final p in particles) {
+      final px = ((p.x + p.vx * t) % 1.0) * size.width;
+      final py = ((p.y + p.vy * t) % 1.0) * size.height;
+      final twinkle = 0.65 + 0.35 * sin(p.twinklePhase + t * p.twinkleSpeed);
+      final a = (p.alpha * twinkle * opacity).clamp(0.0, 1.0);
+
+      if (p.glow) {
+        _glowPaint.color = color.withOpacity(a * 0.6);
+        canvas.drawCircle(Offset(px, py), p.radius + 1.4, _glowPaint);
+      }
+
+      _paint.color = color.withOpacity(a);
+      canvas.drawCircle(Offset(px, py), p.radius, _paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _AtlasParticlePainter oldDelegate) {
+    return oldDelegate.color != color ||
+        oldDelegate.opacity != opacity ||
+        oldDelegate.particles != particles;
   }
 }
 
@@ -5798,7 +6261,9 @@ class _GameConfigurationScreenState extends State<GameConfigurationScreen> {
       useDarkMode: existing.useDarkMode,
       backgroundImagePath: existing.backgroundImagePath,
       backgroundBlur: existing.backgroundBlur,
+      backgroundParticlesOpacity: existing.backgroundParticlesOpacity,
       dialogBlurEnabled: existing.dialogBlurEnabled,
+      startupAnimationEnabled: existing.startupAnimationEnabled,
       lastShownUpdateNotesVersion: existing.lastShownUpdateNotesVersion,
     );
     await ConfigService.save(config);
@@ -8346,8 +8811,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _disableBackendUpdateCheck = false;
   bool _useDarkMode = true;
   String _backgroundImagePath = '';
-  double _backgroundBlur = 18;
+  double _backgroundBlur = 15;
+  double _backgroundParticlesOpacity = 1.0;
   bool _dialogBlurEnabled = true;
+  bool _startupAnimationEnabled = true;
   late final VoidCallback _backgroundPathListener;
   late final VoidCallback _backgroundBlurListener;
 
@@ -8383,7 +8850,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _useDarkMode = config.useDarkMode;
       _backgroundImagePath = config.backgroundImagePath;
       _backgroundBlur = config.backgroundBlur;
+      _backgroundParticlesOpacity = config.backgroundParticlesOpacity;
       _dialogBlurEnabled = config.dialogBlurEnabled;
+      _startupAnimationEnabled = config.startupAnimationEnabled;
       _loading = false;
     });
   }
@@ -8419,11 +8888,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await ConfigService.save(existing.copyWith(backgroundBlur: value));
   }
 
+  Future<void> _updateBackgroundParticlesOpacity(double value) async {
+    final clamped = value.clamp(0.0, 2.0).toDouble();
+    setState(() => _backgroundParticlesOpacity = clamped);
+    appBackgroundParticlesOpacity.value = clamped;
+    final existing = await ConfigService.load();
+    await ConfigService.save(
+      existing.copyWith(backgroundParticlesOpacity: clamped),
+    );
+  }
+
   Future<void> _updateDialogBlur(bool value) async {
     setState(() => _dialogBlurEnabled = value);
     appDialogBlurEnabled.value = value;
     final existing = await ConfigService.load();
     await ConfigService.save(existing.copyWith(dialogBlurEnabled: value));
+  }
+
+  Future<void> _updateStartupAnimationEnabled(bool value) async {
+    setState(() => _startupAnimationEnabled = value);
+    appStartupAnimationEnabled.value = value;
+    final existing = await ConfigService.load();
+    await ConfigService.save(existing.copyWith(startupAnimationEnabled: value));
   }
 
   Future<void> _updateStartOnLaunch(bool value) async {
@@ -8521,23 +9007,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             _SectionTitle(title: title),
             const SizedBox(height: 16),
-            SwitchListTile(
-              value: _useDarkMode,
-              onChanged: _updateTheme,
-              title: const Text('Dark mode'),
-              subtitle: const Text('Toggle between dark and light themes.'),
-            ),
-            const SizedBox(height: 8),
-            SwitchListTile(
-              value: _dialogBlurEnabled,
-              onChanged: _updateDialogBlur,
-              title: const Text('Popup background blur'),
-              subtitle: const Text('Blur the background behind popups.'),
-            ),
-            const SizedBox(height: 12),
-            ListTile(
-              title: const Text('Background image'),
-              subtitle: Text(
+             SwitchListTile(
+               value: _useDarkMode,
+               onChanged: _updateTheme,
+               title: const Text('Dark mode'),
+               subtitle: const Text('Toggle between dark and light themes.'),
+             ),
+             const SizedBox(height: 8),
+             SwitchListTile(
+                 value: _dialogBlurEnabled,
+                 onChanged: _updateDialogBlur,
+                 title: const Text('Popup background blur'),
+               subtitle: const Text('Blur the background behind popups.'),
+             ),
+             const SizedBox(height: 8),
+             SwitchListTile(
+               value: _startupAnimationEnabled,
+               onChanged: _updateStartupAnimationEnabled,
+               title: const Text('Startup animation'),
+               subtitle: const Text(
+                 'Play the intro animation when ATLAS launches.',
+               ),
+             ),
+             const SizedBox(height: 12),
+             ListTile(
+               title: const Text('Background image'),
+               subtitle: Text(
                 _backgroundSubtitle(),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -8567,11 +9062,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 12),
             Text('Background blur (${_backgroundBlur.toStringAsFixed(0)})'),
             const SizedBox(height: 6),
-            LayoutBuilder(
-              builder: (context, constraints) {
+             LayoutBuilder(
+               builder: (context, constraints) {
                 const min = 0.0;
                 const max = 30.0;
-                const defaultBlur = 18.0;
+                const defaultBlur = 15.0;
                 final trackWidth = constraints.maxWidth;
                 final normalized = (defaultBlur - min) / (max - min);
                 final dotX = trackWidth * normalized;
@@ -8586,6 +9081,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         max: max,
                         divisions: 30,
                         onChanged: _updateBackgroundBlur,
+                      ),
+                      Positioned(
+                        left: dotX - 4,
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Theme.of(context).colorScheme.secondary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Background particles (${(_backgroundParticlesOpacity * 100).round()}%)',
+            ),
+            const SizedBox(height: 6),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                const min = 0.0;
+                const max = 2.0;
+                const defaultOpacity = 1.0; // 100%
+                final trackWidth = constraints.maxWidth;
+                final normalized = (defaultOpacity - min) / (max - min);
+                final dotX = trackWidth * normalized;
+                return SizedBox(
+                  height: 36,
+                  child: Stack(
+                    alignment: Alignment.centerLeft,
+                    children: [
+                      Slider(
+                        value: _backgroundParticlesOpacity,
+                        min: min,
+                        max: max,
+                        divisions: 20,
+                        label: '${(_backgroundParticlesOpacity * 100).round()}%',
+                        onChanged: _updateBackgroundParticlesOpacity,
                       ),
                       Positioned(
                         left: dotX - 4,
@@ -11008,7 +11545,9 @@ class ConfigSettings {
     required this.useDarkMode,
     required this.backgroundImagePath,
     required this.backgroundBlur,
+    required this.backgroundParticlesOpacity,
     required this.dialogBlurEnabled,
+    required this.startupAnimationEnabled,
     required this.lastShownUpdateNotesVersion,
   });
 
@@ -11021,7 +11560,9 @@ class ConfigSettings {
   final bool useDarkMode;
   final String backgroundImagePath;
   final double backgroundBlur;
+  final double backgroundParticlesOpacity;
   final bool dialogBlurEnabled;
+  final bool startupAnimationEnabled;
   final String lastShownUpdateNotesVersion;
 
   ConfigSettings copyWith({
@@ -11034,7 +11575,9 @@ class ConfigSettings {
     bool? useDarkMode,
     String? backgroundImagePath,
     double? backgroundBlur,
+    double? backgroundParticlesOpacity,
     bool? dialogBlurEnabled,
+    bool? startupAnimationEnabled,
     String? lastShownUpdateNotesVersion,
   }) {
     return ConfigSettings(
@@ -11048,7 +11591,11 @@ class ConfigSettings {
       useDarkMode: useDarkMode ?? this.useDarkMode,
       backgroundImagePath: backgroundImagePath ?? this.backgroundImagePath,
       backgroundBlur: backgroundBlur ?? this.backgroundBlur,
+      backgroundParticlesOpacity:
+          backgroundParticlesOpacity ?? this.backgroundParticlesOpacity,
       dialogBlurEnabled: dialogBlurEnabled ?? this.dialogBlurEnabled,
+      startupAnimationEnabled:
+          startupAnimationEnabled ?? this.startupAnimationEnabled,
       lastShownUpdateNotesVersion:
           lastShownUpdateNotesVersion ?? this.lastShownUpdateNotesVersion,
     );
@@ -11070,13 +11617,21 @@ class ConfigService {
         disableBackendUpdateCheck: false,
         useDarkMode: true,
         backgroundImagePath: '',
-        backgroundBlur: 18,
+        backgroundBlur: 15,
+        backgroundParticlesOpacity: 1.0,
         dialogBlurEnabled: true,
+        startupAnimationEnabled: true,
         lastShownUpdateNotesVersion: '',
       );
     }
     final lastShownUpdateNotesVersion =
         gui['LastShownUpdateNotesVersion'] ?? '';
+    final legacyParticlesEnabled =
+        (map['BackgroundParticlesEnabled'] ?? 'true').toLowerCase() == 'true';
+    final parsedParticlesOpacity =
+        double.tryParse(map['BackgroundParticlesOpacity'] ?? '');
+    final resolvedParticlesOpacity =
+        parsedParticlesOpacity ?? (legacyParticlesEnabled ? 1.0 : 0.0);
     return ConfigSettings(
       rufusStage: int.tryParse(map['RufusStage'] ?? '') ?? 1,
       waterLevel: int.tryParse(map['WaterLevel'] ?? '') ?? 1,
@@ -11088,9 +11643,12 @@ class ConfigService {
           (map['DisableBackendUpdateCheck'] ?? '').toLowerCase() == 'true',
       useDarkMode: (map['UseDarkMode'] ?? 'true').toLowerCase() == 'true',
       backgroundImagePath: map['BackgroundImagePath'] ?? '',
-      backgroundBlur: double.tryParse(map['BackgroundBlur'] ?? '') ?? 18,
+      backgroundBlur: double.tryParse(map['BackgroundBlur'] ?? '') ?? 15,
+      backgroundParticlesOpacity: resolvedParticlesOpacity,
       dialogBlurEnabled:
           (map['DialogBlurEnabled'] ?? 'true').toLowerCase() == 'true',
+      startupAnimationEnabled:
+          (map['StartupAnimationEnabled'] ?? 'true').toLowerCase() == 'true',
       lastShownUpdateNotesVersion: lastShownUpdateNotesVersion,
     );
   }
@@ -11108,7 +11666,12 @@ class ConfigService {
       ..writeln('UseDarkMode=${settings.useDarkMode}')
       ..writeln('BackgroundImagePath=${settings.backgroundImagePath}')
       ..writeln('BackgroundBlur=${settings.backgroundBlur}')
+      ..writeln(
+        'BackgroundParticlesEnabled=${settings.backgroundParticlesOpacity > 0}',
+      )
+      ..writeln('BackgroundParticlesOpacity=${settings.backgroundParticlesOpacity}')
       ..writeln('DialogBlurEnabled=${settings.dialogBlurEnabled}')
+      ..writeln('StartupAnimationEnabled=${settings.startupAnimationEnabled}')
       ..writeln(
         'LastShownUpdateNotesVersion=${settings.lastShownUpdateNotesVersion}',
       );
@@ -12021,10 +12584,15 @@ class DataService {
     }
     final current = await ConfigService.load();
     await ConfigService.save(
-      current.copyWith(backgroundImagePath: '', backgroundBlur: 18),
+      current.copyWith(
+        backgroundImagePath: '',
+        backgroundBlur: 15,
+        backgroundParticlesOpacity: 1.0,
+      ),
     );
     appBackgroundPath.value = '';
-    appBackgroundBlur.value = 18;
+    appBackgroundBlur.value = 15;
+    appBackgroundParticlesOpacity.value = 1.0;
 
     if (context.mounted) {
       ScaffoldMessenger.of(
