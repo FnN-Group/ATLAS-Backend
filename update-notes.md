@@ -17,6 +17,6 @@ Markdown Quick Key
 - Redesign for Modifications menu
 - New Start-Up Animation
 - Added Particles in Background
-- Backend runtime Timer next to logs
+- Backend runtime timer next to logs
 
 [Full release notes](https://github.com/cipherfps/ATLAS-Backend/releases)
