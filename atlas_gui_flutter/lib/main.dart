@@ -3315,7 +3315,12 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     await _importCurvesFromIniContent(importContent);
   }
 
-  Future<int> _importCurvesFromIniContent(String importContent) async {
+  Future<int> _importCurvesFromIniContent(
+    String importContent, {
+    bool showSummary = true,
+    void Function(Map<String, List<String>> grouped, List<_ImportCurveDraft> missing)?
+        onSummary,
+  }) async {
     final regex = RegExp(
       '^\\+CurveTable=(.+?);RowUpdate;(.+?);(\\d+);(.+)\$',
       multiLine: true,
@@ -3376,7 +3381,10 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
 
     await _load();
     if (!mounted) return matches.length;
-    await _showCurveImportSummary(context, grouped, missing: missing);
+    onSummary?.call(grouped, missing);
+    if (showSummary) {
+      await _showCurveImportSummary(context, grouped, missing: missing);
+    }
     return matches.length;
   }
 
@@ -3593,11 +3601,14 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
   Future<int> _importDataTablesFromIniContent(
     String importContent, {
     bool showNoEntriesSnackBar = true,
+    bool showImportedSnackBar = true,
   }) async {
-    // Match +DataTable= lines
-    final regex = RegExp(r'^\+DataTable=(.+)$', multiLine: true);
-    final matches = regex.allMatches(importContent).toList();
-    if (matches.isEmpty) {
+    // Only import DataTable entries inside the "# DataTables" block, and stop
+    // once we reach "# Fixes" (users don't want fix entries imported as normal
+    // DataTables toggles). If the file doesn't contain those markers, fall
+    // back to importing all +DataTable= lines.
+    final lines = _extractDataTableLinesFromIniContent(importContent);
+    if (lines.isEmpty) {
       if (showNoEntriesSnackBar) {
         if (!mounted) return 0;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -3607,15 +3618,54 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
       return 0;
     }
 
-    final lines = matches.map((m) => m.group(0)!).toList();
     await DataTableService.importDataTableLines(lines);
     await _load();
 
     if (!mounted) return lines.length;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Imported ${lines.length} DataTable entries')),
-    );
+    if (showImportedSnackBar) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Imported ${lines.length} DataTable entries')),
+      );
+    }
     return lines.length;
+  }
+
+  List<String> _extractDataTableLinesFromIniContent(String importContent) {
+    final rawLines = importContent.split(RegExp(r'\r?\n'));
+    final dataTablesHeader = RegExp(
+      r'^\s*#\s*data\s*tables\b',
+      caseSensitive: false,
+    );
+    final fixesHeader = RegExp(r'^\s*#\s*fixes\b', caseSensitive: false);
+    final dataTableLine = RegExp(r'^\s*\+DataTable=.+$');
+
+    var start = 0;
+    for (var i = 0; i < rawLines.length; i++) {
+      if (dataTablesHeader.hasMatch(rawLines[i])) {
+        start = i + 1;
+        break;
+      }
+    }
+
+    var end = rawLines.length;
+    for (var i = start; i < rawLines.length; i++) {
+      if (fixesHeader.hasMatch(rawLines[i])) {
+        end = i;
+        break;
+      }
+    }
+
+    final seen = <String>{};
+    final extracted = <String>[];
+    for (var i = start; i < end; i++) {
+      final line = rawLines[i].trim();
+      if (line.isEmpty) continue;
+      if (!dataTableLine.hasMatch(line)) continue;
+      if (seen.add(line)) {
+        extracted.add(line);
+      }
+    }
+    return extracted;
   }
 
   Future<void> _importIniInModifications() async {
@@ -3635,35 +3685,50 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     final attemptDataTables = _dataTablesEnabled;
     int curveLines = 0;
     int dataTableLines = 0;
+    Map<String, List<String>> curveGrouped = const {};
+    List<_ImportCurveDraft> curveMissing = const [];
 
     if (attemptCurves) {
-      curveLines = await _importCurvesFromIniContent(importContent);
+      curveLines = await _importCurvesFromIniContent(
+        importContent,
+        showSummary: false,
+        onSummary: (grouped, missing) {
+          curveGrouped = grouped;
+          curveMissing = missing;
+        },
+      );
     }
     if (attemptDataTables) {
       dataTableLines = await _importDataTablesFromIniContent(
         importContent,
-        // Avoid "no DataTables" noise when the same file imported CurveTables.
-        showNoEntriesSnackBar: !attemptCurves,
+        showNoEntriesSnackBar: false,
+        showImportedSnackBar: false,
       );
     }
 
     if (!mounted) return;
 
-    if (attemptCurves && attemptDataTables) {
-      if (curveLines == 0 && dataTableLines == 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No CurveTable or DataTable entries found in file'),
-          ),
-        );
-      }
-    } else if (attemptCurves && !attemptDataTables) {
-      if (curveLines == 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No CurveTable entries found in file')),
-        );
-      }
+    if (curveLines == 0 && dataTableLines == 0) {
+      final message = (attemptCurves && attemptDataTables)
+          ? 'No CurveTable or DataTable entries found in file'
+          : attemptCurves
+              ? 'No CurveTable entries found in file'
+              : 'No DataTable entries found in file';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+      return;
     }
+
+    await _showModificationsIniImportSummary(
+      context,
+      attemptedCurves: attemptCurves,
+      attemptedDataTables: attemptDataTables,
+      curveGrouped: curveGrouped,
+      curveMissing: curveMissing,
+      curveLines: curveLines,
+      dataTableLines: dataTableLines,
+    );
   }
 
   @override
@@ -13162,36 +13227,7 @@ Future<void> _showCurveImportSummary(
   required List<_ImportCurveDraft> missing,
 }) async {
   if (grouped.isEmpty) return;
-  final missingKeys = missing
-      .map((entry) => '${entry.pathPart}|||${entry.key}')
-      .toSet();
-  final labels = <String, Map<String, dynamic>>{};
-  for (final entry in grouped.entries) {
-    final parts = entry.key.split('|||');
-    final key = parts.length > 1 ? parts[1] : entry.key;
-    final label = _humanizeCurveKey(key);
-    final count = entry.value.length;
-    final isNew = missingKeys.contains(entry.key);
-    final existing = labels[label];
-    if (existing == null) {
-      labels[label] = {'count': 1, 'lines': count, 'isNew': isNew};
-    } else {
-      labels[label] = {
-        'count': (existing['count'] as int) + 1,
-        'lines': (existing['lines'] as int) + count,
-        'isNew': (existing['isNew'] as bool) || isNew,
-      };
-    }
-  }
-  final lines = labels.entries.map((entry) {
-    final label = entry.key;
-    final count = entry.value['count'] as int;
-    final totalLines = entry.value['lines'] as int;
-    final isNew = entry.value['isNew'] as bool;
-    final countSuffix = count > 1 ? ' ×$count' : '';
-    final linesSuffix = totalLines > count ? ' ($totalLines lines)' : '';
-    return '${isNew ? "New: " : ""}$label$countSuffix$linesSuffix';
-  }).toList();
+  final lines = _buildCurveImportSummaryLines(grouped, missing);
 
   await _showBlurDialog<void>(
     context: context,
@@ -13229,6 +13265,237 @@ Future<void> _showCurveImportSummary(
         ),
       ],
     ),
+  );
+}
+
+List<String> _buildCurveImportSummaryLines(
+  Map<String, List<String>> grouped,
+  List<_ImportCurveDraft> missing,
+) {
+  if (grouped.isEmpty) return const [];
+  final missingKeys = missing
+      .map((entry) => '${entry.pathPart}|||${entry.key}')
+      .toSet();
+  final labels = <String, Map<String, dynamic>>{};
+  for (final entry in grouped.entries) {
+    final parts = entry.key.split('|||');
+    final key = parts.length > 1 ? parts[1] : entry.key;
+    final label = _humanizeCurveKey(key);
+    final count = entry.value.length;
+    final isNew = missingKeys.contains(entry.key);
+    final existing = labels[label];
+    if (existing == null) {
+      labels[label] = {'count': 1, 'lines': count, 'isNew': isNew};
+    } else {
+      labels[label] = {
+        'count': (existing['count'] as int) + 1,
+        'lines': (existing['lines'] as int) + count,
+        'isNew': (existing['isNew'] as bool) || isNew,
+      };
+    }
+  }
+  return labels.entries.map((entry) {
+    final label = entry.key;
+    final count = entry.value['count'] as int;
+    final totalLines = entry.value['lines'] as int;
+    final isNew = entry.value['isNew'] as bool;
+    final countSuffix = count > 1 ? ' ×$count' : '';
+    final linesSuffix = totalLines > count ? ' ($totalLines lines)' : '';
+    return '${isNew ? "New: " : ""}$label$countSuffix$linesSuffix';
+  }).toList();
+}
+
+Future<void> _showModificationsIniImportSummary(
+  BuildContext context, {
+  required bool attemptedCurves,
+  required bool attemptedDataTables,
+  required Map<String, List<String>> curveGrouped,
+  required List<_ImportCurveDraft> curveMissing,
+  required int curveLines,
+  required int dataTableLines,
+}) async {
+  final curveSummary = _buildCurveImportSummaryLines(curveGrouped, curveMissing);
+
+  await _showBlurDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      Widget buildCard({
+        required IconData icon,
+        required String title,
+        required Widget child,
+      }) {
+        return Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.10),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: _onSurface(dialogContext, 0.12)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, size: 18, color: _onSurface(dialogContext, 0.65)),
+                  const SizedBox(width: 8),
+                  Text(
+                    title,
+                    style: Theme.of(dialogContext).textTheme.titleMedium,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              child,
+            ],
+          ),
+        );
+      }
+
+      final curveSummaryScrollController = ScrollController();
+
+      final curvesCard = buildCard(
+        icon: Icons.show_chart_rounded,
+        title: 'CurveTables',
+        child: !attemptedCurves
+            ? Text(
+                'Disabled in Modifications.',
+                style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
+                      color: _onSurface(dialogContext, 0.6),
+                    ),
+              )
+            : curveLines == 0
+                ? Text(
+                    'No CurveTable entries found.',
+                    style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
+                          color: _onSurface(dialogContext, 0.6),
+                        ),
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${curveGrouped.length} CurveTable${curveGrouped.length == 1 ? '' : 's'} imported ($curveLines lines).',
+                      ),
+                      if (curveMissing.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text('New entries: ${curveMissing.length}'),
+                      ],
+                      if (curveSummary.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxHeight: 200),
+                            child: Scrollbar(
+                              controller: curveSummaryScrollController,
+                              thumbVisibility: true,
+                              thickness: 6,
+                              radius: const Radius.circular(12),
+                              child: SingleChildScrollView(
+                                controller: curveSummaryScrollController,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    for (final line in curveSummary)
+                                      Text(
+                                        '• $line',
+                                        style: Theme.of(dialogContext)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: _onSurface(
+                                                dialogContext,
+                                                0.82,
+                                              ),
+                                            ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+      );
+
+      final dataTablesCard = buildCard(
+        icon: Icons.grid_view_rounded,
+        title: 'DataTables',
+        child: !attemptedDataTables
+            ? Text(
+                'Disabled in Modifications.',
+                style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
+                      color: _onSurface(dialogContext, 0.6),
+                    ),
+              )
+            : dataTableLines == 0
+                ? Text(
+                    'No DataTable entries found.',
+                    style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
+                          color: _onSurface(dialogContext, 0.6),
+                        ),
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '$dataTableLines DataTable ${dataTableLines == 1 ? 'entry' : 'entries'} imported.',
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'You can view and edit these in the DataTables tab.',
+                        style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
+                              color: _onSurface(dialogContext, 0.72),
+                            ),
+                      ),
+                    ],
+                  ),
+      );
+
+      return AlertDialog(
+        title: const Text('DefaultGame.ini imported'),
+        content: SizedBox(
+          width: 720,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth >= 680;
+              if (isWide) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: curvesCard),
+                    const SizedBox(width: 12),
+                    Expanded(child: dataTablesCard),
+                  ],
+                );
+              }
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  curvesCard,
+                  const SizedBox(height: 12),
+                  dataTablesCard,
+                ],
+              );
+            },
+          ),
+        ),
+        actions: [
+          _HoverScale(
+            child: ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('OK'),
+            ),
+          ),
+        ],
+      );
+    },
   );
 }
 
