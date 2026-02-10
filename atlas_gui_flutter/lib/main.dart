@@ -1745,9 +1745,16 @@ class _SidePanel extends StatelessWidget {
             const SizedBox(height: 16),
             Row(
               children: [
-                Text(
-                  'Live Logs',
-                  style: Theme.of(context).textTheme.titleLarge,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      'Live Logs',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    _LiveLogsRuntimeTimer(controller: controller),
+                  ],
                 ),
                 const Spacer(),
                 TextButton.icon(
@@ -1798,6 +1805,68 @@ class _SidePanel extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _LiveLogsRuntimeTimer extends StatefulWidget {
+  const _LiveLogsRuntimeTimer({required this.controller});
+
+  final BackendController controller;
+
+  @override
+  State<_LiveLogsRuntimeTimer> createState() => _LiveLogsRuntimeTimerState();
+}
+
+class _LiveLogsRuntimeTimerState extends State<_LiveLogsRuntimeTimer> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    // Keep the update scoped to this small widget instead of rebuilding
+    // the whole UI every second.
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final startedAt = widget.controller.backendStartedAt;
+    final show = startedAt != null;
+    final elapsed = show ? DateTime.now().difference(startedAt) : Duration.zero;
+    final text = show ? _formatElapsed(elapsed) : '';
+
+    final label = Text(
+      text,
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+        color: _onSurface(context, 0.35),
+        fontFeatures: const [FontFeature.tabularFigures()],
+        letterSpacing: 0.2,
+      ),
+    );
+
+    if (!show) return label; // Keeps a baseline for Row alignment.
+
+    return Padding(padding: const EdgeInsets.only(left: 10), child: label);
+  }
+
+  String _formatElapsed(Duration elapsed) {
+    var totalSeconds = elapsed.inSeconds;
+    if (totalSeconds < 0) totalSeconds = 0;
+
+    final hours = totalSeconds ~/ 3600;
+    final minutes = (totalSeconds % 3600) ~/ 60;
+    final seconds = totalSeconds % 60;
+
+    return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 }
 
@@ -13664,9 +13733,11 @@ class BackendController extends ChangeNotifier {
   String _statusText = 'Offline';
   Color _statusColor = Colors.redAccent;
   final LogStore _logStore = LogStore.instance;
+  DateTime? _backendStartedAt;
 
   String get statusText => _statusText;
   Color get statusColor => _statusColor;
+  DateTime? get backendStartedAt => _backendStartedAt;
   List<String> get recentLogs => _logStore.recentLogs;
   List<String> get allLogs => _logStore.allLogs;
   String get activeProfilesLabel => '28';
@@ -13687,6 +13758,7 @@ class BackendController extends ChangeNotifier {
     if (!ok) return;
     _addLog('Backend detected on launch. Stopping until Start is pressed.');
     await _killBackendOnPort(3551);
+    _backendStartedAt = null;
     isRunning = false;
     _setStatus('Offline', Colors.redAccent);
     notifyListeners();
@@ -13700,6 +13772,7 @@ class BackendController extends ChangeNotifier {
     }
     isStarting = true;
     _logStore.clear();
+    _backendStartedAt = null;
     _setStatus('Starting...', Colors.orangeAccent);
     _addLog('Starting backend...');
     notifyListeners();
@@ -13745,6 +13818,7 @@ class BackendController extends ChangeNotifier {
         environment: env,
         mode: ProcessStartMode.detachedWithStdio,
       );
+      _backendStartedAt = DateTime.now();
       isRunning = false;
       isStarting = false;
       _setStatus('Starting...', Colors.orangeAccent);
@@ -13759,10 +13833,12 @@ class BackendController extends ChangeNotifier {
         _addLog('Backend exited with code $code');
         isRunning = false;
         isStarting = false;
+        _backendStartedAt = null;
         _setStatus('Offline', Colors.redAccent);
         notifyListeners();
       });
     } catch (error) {
+      _backendStartedAt = null;
       if (_process != null) {
         // Suppress detached process warning in GUI logs.
         isRunning = false;
@@ -13817,6 +13893,7 @@ class BackendController extends ChangeNotifier {
     await _killBackendOnPort(3551);
     isStopping = false;
     isRunning = false;
+    _backendStartedAt = null;
     _setStatus('Offline', Colors.redAccent);
     notifyListeners();
   }
@@ -13875,10 +13952,12 @@ class BackendController extends ChangeNotifier {
     final ok = await _pingBackend();
     if (ok && !isRunning) {
       isRunning = true;
+      _backendStartedAt ??= DateTime.now();
       _setStatus('Running', Colors.greenAccent);
       notifyListeners();
     } else if (!ok && isRunning && !isStarting) {
       isRunning = false;
+      _backendStartedAt = null;
       _setStatus('Offline', Colors.redAccent);
       notifyListeners();
     }
