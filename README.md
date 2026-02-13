@@ -6,9 +6,9 @@
 - [Ralzify](https://github.com/Ralzify) ATLAS uses the CurveTable and Straight Bloom code from [FortBackend](https://github.com/Ralzify/FortBackend)
 - [Lawin](https://github.com/Lawin0129) For some references and code
 
-## ATLAS
+## ATLAS Backend
 
-ATLAS is a Fortnite backend for all versions of fortnite designed for trickshotters!
+ATLAS is a Fortnite backend for all versions of fortnite designed for ease-of-use!
 This backend has features such as the following:
 
 ### 1. Clean GUI (and CLI)
