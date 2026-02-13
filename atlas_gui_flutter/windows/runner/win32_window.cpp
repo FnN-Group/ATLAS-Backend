@@ -217,6 +217,9 @@ bool Win32Window::Create(const std::wstring& title,
                                          static_cast<LONG>(origin.y)});
   HMONITOR monitor = MonitorFromPoint(target_point, MONITOR_DEFAULTTONEAREST);
   UINT dpi = FlutterDesktopGetDpiForMonitor(monitor);
+  if (dpi == 0) {
+    dpi = 96;
+  }
   double scale_factor = dpi / 96.0;
 
   const int window_width = Scale(size.width, scale_factor);
