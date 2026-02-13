@@ -3,7 +3,7 @@ param(
   [string]$Version = "",
   [string]$BunVersion = "1.3.5",
   [switch]$SkipFlutterBuild,
-  [switch]$SkipInnoCompile
+  [switch]$SkipMsi
 )
 
 $ErrorActionPreference = "Stop"
@@ -11,41 +11,6 @@ $ErrorActionPreference = "Stop"
 function Write-Step {
   param([string]$Message)
   Write-Host "[ATLAS Backend Installer] $Message" -ForegroundColor Cyan
-}
-
-function Find-Iscc {
-  $isccCommand = Get-Command iscc -ErrorAction SilentlyContinue
-  if ($isccCommand) {
-    return $isccCommand.Source
-  }
-
-  $candidates = @(
-    (Join-Path $env:LOCALAPPDATA "Programs\Inno\ISCC.exe"),
-    (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"),
-    (Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe"),
-    (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 5\ISCC.exe"),
-    (Join-Path $env:ProgramFiles "Inno Setup 5\ISCC.exe")
-  ) | Where-Object { $_ -and (Test-Path $_) }
-
-  if ($candidates.Count -gt 0) {
-    return @($candidates)[0]
-  }
-
-  return $null
-}
-
-function Get-StagedExecutableName {
-  param([string]$SourceDir)
-  $exe = Get-ChildItem -Path $SourceDir -Filter *.exe -File |
-    Where-Object { $_.Name -notmatch '^unins[0-9]*\.exe$' } |
-    Sort-Object Length -Descending |
-    Select-Object -First 1
-
-  if (-not $exe) {
-    throw "No executable found in $SourceDir"
-  }
-
-  return $exe.Name
 }
 
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
@@ -61,11 +26,16 @@ if ($flutterCmd) {
 $guiDir = Join-Path $root "atlas_gui_flutter"
 $distDir = Join-Path $root "dist"
 $buildRoot = Join-Path $distDir "ATLAS"
-$issFile = Join-Path $PSScriptRoot "ATLAS-Backend.iss"
+$wxsFile = Join-Path $PSScriptRoot "ATLAS.wxs"
+$licenseFile = Join-Path $PSScriptRoot "LICENSE.rtf"
 $iconPath = Join-Path $root "atlas_gui_flutter\windows\runner\resources\app_icon.ico"
 
-if (-not (Test-Path $issFile)) {
-  throw "Missing Inno Setup script: $issFile"
+if (-not (Test-Path $wxsFile)) {
+  throw "Missing WiX source file: $wxsFile"
+}
+
+if (-not (Test-Path $licenseFile)) {
+  throw "Missing license file: $licenseFile"
 }
 
 if (-not (Test-Path $distDir)) {
@@ -191,44 +161,76 @@ if (-not (Test-Path $bunExe)) {
 
 Write-Step "Staged build output at $buildRoot"
 
-if ($SkipInnoCompile) {
-  Write-Step "Skipping Inno compilation"
+if ($SkipMsi) {
+  Write-Step "Skipping MSI build"
   exit 0
 }
 
-$isccPath = Find-Iscc
-if (-not $isccPath) {
-  throw @"
-Inno Setup compiler (ISCC.exe) was not found.
-Install Inno Setup 6 from https://jrsoftware.org/isinfo.php and rerun:
-  .\installer\build_installer.ps1
-"@
+$wixExe = $null
+$wixCmd = Get-Command "wix" -ErrorAction SilentlyContinue
+if ($wixCmd) {
+  $wixExe = $wixCmd.Source
 }
 
-$executableName = Get-StagedExecutableName -SourceDir $buildRoot
-$outputBaseFilename = "ATLAS-Backend-Setup-$Version"
-Write-Step "Compiling Inno Setup installer: $outputBaseFilename.exe"
+if (-not $wixExe) {
+  $wixFromEnv = $null
+  if ($env:WIX) {
+    if (Test-Path $env:WIX -PathType Leaf) {
+      $wixFromEnv = $env:WIX
+    } elseif (Test-Path $env:WIX -PathType Container) {
+      $wixFromEnv = Join-Path $env:WIX "wix.exe"
+    }
+  }
 
-$isccArgs = @(
-  "/DMyAppVersion=$Version",
-  "/DSourceDir=$buildRoot",
-  "/DExecutableName=$executableName",
-  "/DOutputDir=$distDir",
-  "/DOutputBaseFilename=$outputBaseFilename"
-)
+  $candidatePaths = @(
+    $wixFromEnv,
+    (Join-Path $env:ProgramFiles "WiX Toolset v4\bin\wix.exe"),
+    (Join-Path $env:ProgramFiles "WiX Toolset v4.0\bin\wix.exe"),
+    (Join-Path $env:ProgramFiles "WiX Toolset v5\bin\wix.exe"),
+    (Join-Path $env:ProgramFiles "WiX Toolset v5.0\bin\wix.exe"),
+    (Join-Path $env:ProgramFiles "WiX Toolset v6\bin\wix.exe"),
+    (Join-Path $env:ProgramFiles "WiX Toolset v6.0\bin\wix.exe"),
+    (Join-Path $env:ProgramFiles "WiX Toolset\bin\wix.exe"),
+    (Join-Path $env:USERPROFILE ".dotnet\tools\wix.exe")
+  )
 
-if (Test-Path $iconPath) {
-  $isccArgs += "/DSetupIconFile=$iconPath"
+  foreach ($candidate in $candidatePaths) {
+    if ($candidate -and (Test-Path $candidate -PathType Leaf)) {
+      $wixExe = $candidate
+      break
+    }
+  }
 }
 
-$isccArgs += $issFile
+if (-not $wixExe) {
+  $wingetRoot = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages"
+  if (Test-Path $wingetRoot) {
+    $found = Get-ChildItem -Path $wingetRoot -Filter wix.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($found) {
+      $wixExe = $found.FullName
+    }
+  }
+}
 
-& $isccPath @isccArgs
+if (-not $wixExe) {
+  throw "WiX Toolset not found. Ensure 'wix' is on PATH or set WIX to the install folder."
+}
+
+$msiOut = Join-Path $distDir ("ATLAS-Backend-{0}.msi" -f $Version)
+Write-Step "Building MSI: $msiOut"
+
+& $wixExe build $wxsFile `
+  -d BuildRoot="$buildRoot" `
+  -d ProductVersion="$Version" `
+  -d LicenseFile="$licenseFile" `
+  -d IconPath="$iconPath" `
+  -ext WixToolset.UI.wixext `
+  -o "$msiOut"
+
 if ($LASTEXITCODE -ne 0) {
-  throw "ISCC failed with exit code $LASTEXITCODE"
+  throw "wix build failed with exit code $LASTEXITCODE"
 }
 
-$setupExe = Join-Path $distDir "$outputBaseFilename.exe"
-if (Test-Path $setupExe) {
-  Write-Step "EXE installer created: $setupExe"
+if (Test-Path $msiOut) {
+  Write-Step "MSI created: $msiOut"
 }

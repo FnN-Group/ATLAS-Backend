@@ -310,7 +310,7 @@ Future<T?> _showBlurDialog<T>({
     barrierDismissible: barrierDismissible,
     barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
     barrierColor: Colors.transparent,
-    transitionDuration: const Duration(milliseconds: 240),
+    transitionDuration: const Duration(milliseconds: 340),
     pageBuilder: (dialogContext, animation, secondaryAnimation) {
       final baseTheme = Theme.of(dialogContext);
       final dialogTheme = baseTheme.copyWith(
@@ -351,6 +351,7 @@ Future<T?> _showBlurDialog<T>({
       final curved = CurvedAnimation(
         parent: animation,
         curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
       );
       final blurEnabled = appDialogBlurEnabled.value;
       return Stack(
@@ -373,7 +374,7 @@ Future<T?> _showBlurDialog<T>({
           FadeTransition(
             opacity: curved,
             child: ScaleTransition(
-              scale: Tween<double>(begin: 0.985, end: 1.0).animate(curved),
+              scale: Tween<double>(begin: 0.975, end: 1.0).animate(curved),
               child: child,
             ),
           ),
@@ -1255,8 +1256,19 @@ class _AtlasHomePageState extends State<AtlasHomePage>
   @override
   Future<AppExitResponse> didRequestAppExit() async {
     if (!mounted) return AppExitResponse.exit;
-    final confirm = await _confirmExit();
-    return confirm ? AppExitResponse.exit : AppExitResponse.cancel;
+    if (_exitInProgress) return AppExitResponse.cancel;
+
+    // Cancel the platform close request first, then show the confirmation dialog
+    // on the next event-loop tick so the dialog transition can animate smoothly.
+    Future<void>(() async {
+      if (!mounted) return;
+      final confirm = await _confirmExit();
+      if (confirm) {
+        exit(0);
+      }
+    });
+
+    return AppExitResponse.cancel;
   }
 
   static const List<MenuItemData> _menuItems = [
@@ -1494,13 +1506,22 @@ class _AtlasStartupAnimationOverlayState
   @override
   Widget build(BuildContext context) {
     final dark = _isDarkTheme(context);
-    final startupLogoPath = joinPath([
-      getInstallationRoot(),
-      'public',
-      'images',
-      'ATLAS-Backend-Logo.png',
-    ]);
-    final startupLogoFile = File(startupLogoPath);
+    final startupLogoFigureless = File(
+      joinPath([
+        getInstallationRoot(),
+        'public',
+        'images',
+        'ATLAS-Backend-Logo-Figureless.png',
+      ]),
+    );
+    final startupLogoDefault = File(
+      joinPath([
+        getInstallationRoot(),
+        'public',
+        'images',
+        'ATLAS-Backend-Logo.png',
+      ]),
+    );
     final textStyle = TextStyle(
       fontSize: 54,
       height: 1.0,
@@ -1560,19 +1581,26 @@ class _AtlasStartupAnimationOverlayState
                             offset: Offset(0, _logoOffsetY.value),
                             child: Opacity(
                               opacity: _logoOpacity.value,
-                              child: startupLogoFile.existsSync()
+                              child: startupLogoFigureless.existsSync()
                                   ? Image.file(
-                                      startupLogoFile,
+                                      startupLogoFigureless,
                                       width: 180,
                                       height: 180,
                                       fit: BoxFit.contain,
                                     )
-                                  : Image.asset(
-                                      'assets/images/atlas_logo.png',
-                                      width: 180,
-                                      height: 180,
-                                      fit: BoxFit.contain,
-                                    ),
+                                  : startupLogoDefault.existsSync()
+                                      ? Image.file(
+                                          startupLogoDefault,
+                                          width: 180,
+                                          height: 180,
+                                          fit: BoxFit.contain,
+                                        )
+                                      : Image.asset(
+                                          'assets/images/atlas_logo.png',
+                                          width: 180,
+                                          height: 180,
+                                          fit: BoxFit.contain,
+                                        ),
                             ),
                           ),
                           const SizedBox(height: 22),
@@ -1632,27 +1660,46 @@ class _TopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bannerPath = joinPath([
-      getInstallationRoot(),
-      'public',
-      'images',
-      'ATLAS-Backend-Banner-Transparent.png',
-    ]);
-    final bannerFile = File(bannerPath);
+    final bannerFigureless = File(
+      joinPath([
+        getInstallationRoot(),
+        'public',
+        'images',
+        'ATLAS-Backend-Banner-Transparent-Figureless.png',
+      ]),
+    );
+    final bannerDefault = File(
+      joinPath([
+        getInstallationRoot(),
+        'public',
+        'images',
+        'ATLAS-Backend-Banner-Transparent.png',
+      ]),
+    );
     return SizedBox(
       height: height,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          GestureDetector(
-            onTap: () => _showAboutDialog(context, versionLabel: versionLabel),
-            child: bannerFile.existsSync()
-                ? Image.file(bannerFile, height: 100, fit: BoxFit.contain)
-                : Row(
-                    children: [
-                      Image.asset(
-                        'assets/images/atlas_logo.png',
-                        width: 100,
+            GestureDetector(
+              onTap: () => _showAboutDialog(context, versionLabel: versionLabel),
+              child: bannerFigureless.existsSync()
+                  ? Image.file(
+                      bannerFigureless,
+                      height: 100,
+                      fit: BoxFit.contain,
+                    )
+                  : bannerDefault.existsSync()
+                      ? Image.file(
+                          bannerDefault,
+                          height: 100,
+                          fit: BoxFit.contain,
+                        )
+                      : Row(
+                      children: [
+                        Image.asset(
+                          'assets/images/atlas_logo.png',
+                          width: 100,
                         height: 100,
                         fit: BoxFit.contain,
                       ),
@@ -2019,7 +2066,8 @@ class _SidePanel extends StatelessWidget {
                   (controller.isRunning ||
                       controller.isStarting ||
                       controller.isStopping ||
-                      controller.isRestarting)
+                      controller.isRestarting ||
+                      controller.hasProcess)
                   ? null
                   : controller.startBackend,
             ),
@@ -2044,10 +2092,9 @@ class _SidePanel extends StatelessWidget {
               icon: Icons.stop_circle_outlined,
               color: const Color(0xFFFF6A8C),
               onPressed:
-                  (!controller.isRunning ||
-                      controller.isStarting ||
-                      controller.isStopping ||
-                      controller.isRestarting)
+                  (controller.isStopping ||
+                      controller.isRestarting ||
+                      (!controller.isRunning && !controller.hasProcess))
                   ? null
                   : controller.stopBackend,
             ),
@@ -3021,44 +3068,6 @@ Future<void> _showAboutDialog(
             ),
             child: Stack(
               children: [
-                Positioned(
-                  top: -110,
-                  left: -60,
-                  child: IgnorePointer(
-                    child: Container(
-                      width: 240,
-                      height: 240,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: RadialGradient(
-                          colors: [
-                            const Color(0xFF64D7FF).withOpacity(0.20),
-                            Colors.transparent,
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  top: -100,
-                  right: -50,
-                  child: IgnorePointer(
-                    child: Container(
-                      width: 220,
-                      height: 220,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: RadialGradient(
-                          colors: [
-                            secondary.withOpacity(0.16),
-                            Colors.transparent,
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(22, 20, 22, 16),
                   child: Column(
@@ -12015,7 +12024,8 @@ class UpdateService {
       }
     }
 
-    return preferredExe ?? fallbackExe ?? msi;
+    // Prefer MSI if both installer types are published on a release.
+    return msi ?? preferredExe ?? fallbackExe;
   }
 
   static Future<Map<String, dynamic>?> _fetchRemotePackage() async {
@@ -12079,7 +12089,7 @@ class UpdateService {
     final uri = Uri.parse(url);
     var fileName = uri.pathSegments.isEmpty ? '' : uri.pathSegments.last;
     if (fileName.trim().isEmpty) {
-      fileName = 'ATLAS-Backend-Setup.exe';
+      fileName = 'ATLAS-Backend-Installer.msi';
     }
     final installerFile = File(joinPath([tempDir.path, fileName]));
     final client = HttpClient();
@@ -14842,6 +14852,7 @@ class BackendController extends ChangeNotifier {
   DateTime? get backendStartedAt => _backendStartedAt;
   List<String> get recentLogs => _logStore.recentLogs;
   List<String> get allLogs => _logStore.allLogs;
+  bool get hasProcess => _process != null;
   String get activeProfilesLabel => '28';
   String get exportsLabel => '1,024 files';
   String get lastSyncLabel => '2 minutes ago';
@@ -14867,10 +14878,22 @@ class BackendController extends ChangeNotifier {
   }
 
   Future<void> startBackend() async {
-    if (isStarting || isRestarting) return;
-    if (isRunning && _process != null) return;
-    if (!isRunning && _process != null) {
-      _process = null;
+    if (isStarting || isRestarting || isStopping) return;
+    if (isRunning) {
+      _addLog('Backend is already running.');
+      return;
+    }
+    if (_process != null) {
+      _addLog('Backend is already starting.');
+      return;
+    }
+    if (await _pingBackend(timeout: const Duration(milliseconds: 350))) {
+      isRunning = true;
+      _backendStartedAt ??= DateTime.now();
+      _setStatus('Running', Colors.greenAccent);
+      _addLog('Backend already running.');
+      notifyListeners();
+      return;
     }
     isStarting = true;
     _logStore.clear();
@@ -14921,8 +14944,6 @@ class BackendController extends ChangeNotifier {
         mode: ProcessStartMode.detachedWithStdio,
       );
       _backendStartedAt = DateTime.now();
-      isRunning = false;
-      isStarting = false;
       _setStatus('Starting...', Colors.orangeAccent);
       notifyListeners();
       try {
@@ -14933,12 +14954,24 @@ class BackendController extends ChangeNotifier {
       }
       _process?.exitCode.then((code) {
         _addLog('Backend exited with code $code');
+        _process = null;
         isRunning = false;
         isStarting = false;
         _backendStartedAt = null;
         _setStatus('Offline', Colors.redAccent);
         notifyListeners();
       });
+
+      // Avoid the perceived "startup lag" caused by the 3s poll cadence.
+      // Ping aggressively for a short window so the UI flips to Running asap.
+      final ready = await _waitForBackendReady();
+      if (ready) {
+        isRunning = true;
+        isStarting = false;
+        _backendStartedAt ??= DateTime.now();
+        _setStatus('Running', Colors.greenAccent);
+        notifyListeners();
+      }
     } catch (error) {
       _backendStartedAt = null;
       if (_process != null) {
@@ -14955,6 +14988,19 @@ class BackendController extends ChangeNotifier {
         notifyListeners();
       }
     }
+  }
+
+  Future<bool> _waitForBackendReady({
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      if (await _pingBackend(timeout: const Duration(milliseconds: 350))) {
+        return true;
+      }
+      await Future.delayed(const Duration(milliseconds: 150));
+    }
+    return false;
   }
 
   Future<void> stopBackend() async {
@@ -15052,11 +15098,21 @@ class BackendController extends ChangeNotifier {
 
   Future<void> _checkBackend() async {
     final ok = await _pingBackend();
-    if (ok && !isRunning) {
-      isRunning = true;
-      _backendStartedAt ??= DateTime.now();
-      _setStatus('Running', Colors.greenAccent);
-      notifyListeners();
+    if (ok) {
+      var changed = false;
+      if (!isRunning) {
+        isRunning = true;
+        _backendStartedAt ??= DateTime.now();
+        _setStatus('Running', Colors.greenAccent);
+        changed = true;
+      }
+      if (isStarting) {
+        isStarting = false;
+        changed = true;
+      }
+      if (changed) {
+        notifyListeners();
+      }
     } else if (!ok && isRunning && !isStarting) {
       isRunning = false;
       _backendStartedAt = null;
@@ -15065,15 +15121,13 @@ class BackendController extends ChangeNotifier {
     }
   }
 
-  Future<bool> _pingBackend() async {
+  Future<bool> _pingBackend({Duration timeout = const Duration(seconds: 2)}) async {
     try {
       final client = HttpClient();
       final request = await client.getUrl(
         Uri.parse('http://127.0.0.1:3551/unknown'),
       );
-      final response = await request.close().timeout(
-        const Duration(seconds: 2),
-      );
+      final response = await request.close().timeout(timeout);
       client.close();
       return response.statusCode >= 200 && response.statusCode < 500;
     } catch (_) {
