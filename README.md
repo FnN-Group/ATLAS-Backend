@@ -49,9 +49,9 @@ If you want to contribute just fork this repository and make a pull request!
 
 ### First Time Setup (For CLI Version)
 
-1. **Run the installer MSI file** (This will install Bun if needed and dependencies):
+1. **Run the installer Setup EXE file** (recommended):
    ```bat
-   ATLAS-X.X.X.msi
+   ATLAS-Backend-Setup-X.X.X.exe
    ```
 
 2. **Launch ATLAS as it is now a dedicated app**:

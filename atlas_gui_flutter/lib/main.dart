@@ -33,7 +33,7 @@ Future<void> main() async {
 
   // Check if another instance is already running
   if (!await _acquireInstanceLock()) {
-    print('Another instance of ATLAS GUI is already running.');
+    print('Another instance of ATLAS Backend is already running.');
     exit(1);
   }
 
@@ -140,7 +140,7 @@ class _AtlasAppState extends State<AtlasApp> {
       valueListenable: appThemeMode,
       builder: (_, mode, __) => MaterialApp(
         debugShowCheckedModeBanner: false,
-        title: 'ATLAS',
+        title: 'ATLAS Backend',
         themeMode: mode,
         scrollBehavior: const _AtlasScrollBehavior(),
         theme: ThemeData(
@@ -310,35 +310,73 @@ Future<T?> _showBlurDialog<T>({
     barrierDismissible: barrierDismissible,
     barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
     barrierColor: Colors.transparent,
-    transitionDuration: const Duration(milliseconds: 600),
-    pageBuilder: (context, animation, secondaryAnimation) {
-      return SafeArea(child: Center(child: builder(context)));
-    },
-    transitionBuilder: (context, animation, secondaryAnimation, child) {
-      final curved = CurvedAnimation(
-        parent: animation,
-        curve: Curves.easeInOutSine,
-      );
-      final blurEnabled = appDialogBlurEnabled.value;
-      final t = curved.value;
-      final blurSigma = blurEnabled ? 2.6 * t : 0.0;
-      final overlayOpacity = blurEnabled ? 0.10 * t : 0.0;
-      final content = FadeTransition(
-        opacity: curved,
-        child: ScaleTransition(
-          scale: Tween<double>(begin: 0.985, end: 1).animate(curved),
-          child: child,
+    transitionDuration: const Duration(milliseconds: 240),
+    pageBuilder: (dialogContext, animation, secondaryAnimation) {
+      final baseTheme = Theme.of(dialogContext);
+      final dialogTheme = baseTheme.copyWith(
+        dialogTheme: DialogThemeData(
+          backgroundColor: _dialogSurfaceColor(dialogContext),
+          elevation: 0,
+          shadowColor: _dialogShadowColor(dialogContext),
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+            side: BorderSide(color: _onSurface(dialogContext, 0.1)),
+          ),
+          titleTextStyle: baseTheme.textTheme.headlineSmall?.copyWith(
+            color: _onSurface(dialogContext, 0.96),
+            fontWeight: FontWeight.w700,
+          ),
+          contentTextStyle: baseTheme.textTheme.bodyMedium?.copyWith(
+            color: _onSurface(dialogContext, 0.9),
+          ),
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(
+            foregroundColor: baseTheme.colorScheme.secondary,
+            textStyle: const TextStyle(fontWeight: FontWeight.w600),
+          ),
         ),
       );
+      return SafeArea(
+        child: Center(
+          child: Theme(
+            data: dialogTheme,
+            child: Builder(builder: (themeContext) => builder(themeContext)),
+          ),
+        ),
+      );
+    },
+    transitionBuilder: (dialogContext, animation, secondaryAnimation, child) {
+      final curved = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+      );
+      final blurEnabled = appDialogBlurEnabled.value;
       return Stack(
         children: [
           Positioned.fill(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-              child: Container(color: Colors.black.withOpacity(overlayOpacity)),
+            child: blurEnabled
+                ? BackdropFilter(
+                    filter: ImageFilter.blur(
+                      sigmaX: 3.2 * curved.value,
+                      sigmaY: 3.2 * curved.value,
+                    ),
+                    child: Container(
+                      color: _dialogBarrierColor(dialogContext, curved.value),
+                    ),
+                  )
+                : Container(
+                    color: _dialogBarrierColor(dialogContext, curved.value),
+                  ),
+          ),
+          FadeTransition(
+            opacity: curved,
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 0.985, end: 1.0).animate(curved),
+              child: child,
             ),
           ),
-          content,
         ],
       );
     },
@@ -353,7 +391,7 @@ class AtlasHomePage extends StatefulWidget {
 }
 
 class _AtlasHomePageState extends State<AtlasHomePage>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   late final BackendController _controller;
   bool _exitInProgress = false;
   bool _checkingUpdate = false;
@@ -363,7 +401,9 @@ class _AtlasHomePageState extends State<AtlasHomePage>
   String _backendVersionLabel = '1.0.0';
   bool _showStartupAnimation = true;
   bool _revealHomeContent = true;
-  double _homePanelsScale = 1.0;
+  late final AnimationController _shellEntranceController;
+  late final Animation<double> _shellEntranceFade;
+  late final Animation<double> _shellEntranceScale;
   late final VoidCallback _startupAnimationListener;
   final Completer<void> _startupAnimationGate = Completer<void>();
 
@@ -372,10 +412,24 @@ class _AtlasHomePageState extends State<AtlasHomePage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _controller = BackendController()..startPolling();
+    _shellEntranceController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 720),
+    );
+    _shellEntranceFade = CurvedAnimation(
+      parent: _shellEntranceController,
+      curve: const Interval(0.0, 0.92, curve: Curves.easeOutCubic),
+    );
+    _shellEntranceScale = Tween<double>(begin: 0.9, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _shellEntranceController,
+        curve: Curves.easeOutCubic,
+      ),
+    );
     _showStartupAnimation = appStartupAnimationEnabled.value;
     _revealHomeContent = !_showStartupAnimation;
-    _homePanelsScale = _showStartupAnimation ? 0.96 : 1.0;
     if (!_showStartupAnimation) {
+      _shellEntranceController.value = 1.0;
       _startupAnimationGate.complete();
     }
     _startupAnimationListener = () {
@@ -384,8 +438,8 @@ class _AtlasHomePageState extends State<AtlasHomePage>
         setState(() {
           _showStartupAnimation = false;
           _revealHomeContent = true;
-          _homePanelsScale = 1.0;
         });
+        _shellEntranceController.value = 1.0;
         if (!_startupAnimationGate.isCompleted) {
           _startupAnimationGate.complete();
         }
@@ -410,19 +464,11 @@ class _AtlasHomePageState extends State<AtlasHomePage>
     setState(() {
       _showStartupAnimation = false;
       _revealHomeContent = true;
-      _homePanelsScale = 1.0;
     });
+    _shellEntranceController.forward(from: 0);
     if (!_startupAnimationGate.isCompleted) {
       _startupAnimationGate.complete();
     }
-  }
-
-  void _revealStartupContent() {
-    if (!mounted || _revealHomeContent) return;
-    setState(() {
-      _revealHomeContent = true;
-      _homePanelsScale = 1.0;
-    });
   }
 
   Future<void> _maybeCheckForUpdatesOnLaunch() async {
@@ -1184,6 +1230,7 @@ class _AtlasHomePageState extends State<AtlasHomePage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     appStartupAnimationEnabled.removeListener(_startupAnimationListener);
+    _shellEntranceController.dispose();
     unawaited(_controller.stopBackend());
     unawaited(_controller.forceKillBackendPort());
     _controller.dispose();
@@ -1307,25 +1354,20 @@ class _AtlasHomePageState extends State<AtlasHomePage>
           ),
           const SizedBox(height: 28),
           Expanded(
-            child: AnimatedScale(
-              scale: _homePanelsScale,
-              duration: const Duration(milliseconds: 420),
-              curve: Curves.easeOutCubic,
-              child: RepaintBoundary(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(flex: 3, child: _MenuGrid(items: _menuItems)),
-                    const SizedBox(width: 28),
-                    Expanded(
-                      flex: 2,
-                      child: AnimatedBuilder(
-                        animation: _controller,
-                        builder: (_, __) => _SidePanel(controller: _controller),
-                      ),
+            child: RepaintBoundary(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(flex: 3, child: _MenuGrid(items: _menuItems)),
+                  const SizedBox(width: 28),
+                  Expanded(
+                    flex: 2,
+                    child: AnimatedBuilder(
+                      animation: _controller,
+                      builder: (_, __) => _SidePanel(controller: _controller),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -1337,19 +1379,23 @@ class _AtlasHomePageState extends State<AtlasHomePage>
       child: Scaffold(
         body: Stack(
           children: [
-            const AtlasBackground(),
-            Visibility(
-              visible: _revealHomeContent,
-              maintainState: true,
-              child: IgnorePointer(
-                ignoring: showIntro,
-                child: content,
+            AtlasBackground(showParticles: !showIntro),
+            if (_revealHomeContent)
+              Positioned.fill(
+                child: FadeTransition(
+                  opacity: _shellEntranceFade,
+                  child: ScaleTransition(
+                    scale: _shellEntranceScale,
+                    child: IgnorePointer(
+                      ignoring: showIntro,
+                      child: content,
+                    ),
+                  ),
+                ),
               ),
-            ),
             if (showIntro)
               _AtlasStartupAnimationOverlay(
                 onFinished: _finishStartupAnimation,
-                onOutroStart: _revealStartupContent,
               ),
           ],
         ),
@@ -1359,13 +1405,9 @@ class _AtlasHomePageState extends State<AtlasHomePage>
 }
 
 class _AtlasStartupAnimationOverlay extends StatefulWidget {
-  const _AtlasStartupAnimationOverlay({
-    required this.onFinished,
-    this.onOutroStart,
-  });
+  const _AtlasStartupAnimationOverlay({required this.onFinished});
 
   final VoidCallback onFinished;
-  final VoidCallback? onOutroStart;
 
   @override
   State<_AtlasStartupAnimationOverlay> createState() =>
@@ -1379,11 +1421,9 @@ class _AtlasStartupAnimationOverlayState
   late final Animation<double> _overlayOpacity;
   late final Animation<double> _logoOpacity;
   late final Animation<double> _logoOffsetY;
-  late final Animation<double> _logoBlur;
   late final Animation<double> _textOpacity;
   late final Animation<double> _textOffsetY;
   late final Animation<double> _textBlur;
-  bool _didTriggerOutroStart = false;
 
   @override
   void initState() {
@@ -1396,23 +1436,13 @@ class _AtlasStartupAnimationOverlayState
     _overlayOpacity = TweenSequence<double>([
       TweenSequenceItem(tween: ConstantTween<double>(1.0), weight: 90),
       TweenSequenceItem(
-        tween: Tween<double>(begin: 1.0, end: 0.0).chain(
-          CurveTween(curve: Curves.easeInCubic),
-        ),
+        tween: Tween<double>(
+          begin: 1.0,
+          end: 0.0,
+        ).chain(CurveTween(curve: Curves.easeInCubic)),
         weight: 10,
       ),
     ]).animate(_controller);
-
-    _controller.addListener(() {
-      if (_didTriggerOutroStart) return;
-      // Reveal the menu slightly before the overlay starts fading out so we can
-      // fade out the scrim instead of alpha-fading the whole menu (which can jank
-      // on Windows).
-      if (_controller.value >= 0.9) {
-        _didTriggerOutroStart = true;
-        widget.onOutroStart?.call();
-      }
-    });
 
     _logoOpacity = CurvedAnimation(
       parent: _controller,
@@ -1423,13 +1453,6 @@ class _AtlasStartupAnimationOverlayState
       CurvedAnimation(
         parent: _controller,
         curve: const Interval(0.05, 0.45, curve: Curves.easeOutCubic),
-      ),
-    );
-
-    _logoBlur = Tween<double>(begin: 18.0, end: 0.0).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(0.05, 0.35, curve: Curves.easeOutCubic),
       ),
     );
 
@@ -1470,24 +1493,27 @@ class _AtlasStartupAnimationOverlayState
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : Colors.black;
-    final shadowColor =
-        isDark ? Colors.black.withOpacity(0.45) : Colors.black.withOpacity(0.2);
-
+    final dark = _isDarkTheme(context);
+    final startupLogoPath = joinPath([
+      getInstallationRoot(),
+      'public',
+      'images',
+      'ATLAS-Backend-Logo.png',
+    ]);
+    final startupLogoFile = File(startupLogoPath);
     final textStyle = TextStyle(
       fontSize: 54,
       height: 1.0,
       fontWeight: FontWeight.w600,
       letterSpacing: 0.2,
-      color: textColor.withOpacity(0.95),
-      // Coolvetica isn't bundled (licensing). If installed on the system, Flutter
-      // will pick it up; otherwise we fall back to common UI fonts.
+      color: dark ? Colors.white.withOpacity(0.95) : _onSurface(context, 0.96),
       fontFamily: 'Coolvetica',
       fontFamilyFallback: const ['Segoe UI', 'Arial', 'Roboto'],
       shadows: [
         Shadow(
-          color: shadowColor,
+          color: dark
+              ? Colors.black.withOpacity(0.45)
+              : Colors.black.withOpacity(0.14),
           blurRadius: 18,
           offset: const Offset(0, 6),
         ),
@@ -1509,11 +1535,15 @@ class _AtlasStartupAnimationOverlayState
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
-                              (isDark ? Colors.black : Colors.white).withOpacity(
-                                isDark ? 0.22 : 0.16,
+                              _adaptiveScrimColor(
+                                context,
+                                darkAlpha: 0.22,
+                                lightAlpha: 0.08,
                               ),
-                              (isDark ? Colors.black : Colors.white).withOpacity(
-                                isDark ? 0.34 : 0.26,
+                              _adaptiveScrimColor(
+                                context,
+                                darkAlpha: 0.34,
+                                lightAlpha: 0.12,
                               ),
                             ],
                             begin: Alignment.topLeft,
@@ -1530,18 +1560,19 @@ class _AtlasStartupAnimationOverlayState
                             offset: Offset(0, _logoOffsetY.value),
                             child: Opacity(
                               opacity: _logoOpacity.value,
-                              child: ImageFiltered(
-                                imageFilter: ImageFilter.blur(
-                                  sigmaX: _logoBlur.value,
-                                  sigmaY: _logoBlur.value,
-                                ),
-                                child: Image.asset(
-                                  'assets/images/atlas_logo.png',
-                                  width: 180,
-                                  height: 180,
-                                  fit: BoxFit.contain,
-                                ),
-                              ),
+                              child: startupLogoFile.existsSync()
+                                  ? Image.file(
+                                      startupLogoFile,
+                                      width: 180,
+                                      height: 180,
+                                      fit: BoxFit.contain,
+                                    )
+                                  : Image.asset(
+                                      'assets/images/atlas_logo.png',
+                                      width: 180,
+                                      height: 180,
+                                      fit: BoxFit.contain,
+                                    ),
                             ),
                           ),
                           const SizedBox(height: 22),
@@ -1555,7 +1586,7 @@ class _AtlasStartupAnimationOverlayState
                                   sigmaY: _textBlur.value,
                                 ),
                                 child: Text(
-                                  'Welcome to ATLAS',
+                                  'Launching ATLAS Backend',
                                   textAlign: TextAlign.center,
                                   style: textStyle,
                                 ),
@@ -1614,7 +1645,7 @@ class _TopBar extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           GestureDetector(
-            onTap: () => _showAboutDialog(context),
+            onTap: () => _showAboutDialog(context, versionLabel: versionLabel),
             child: bannerFile.existsSync()
                 ? Image.file(bannerFile, height: 100, fit: BoxFit.contain)
                 : Row(
@@ -1630,7 +1661,10 @@ class _TopBar extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('ATLAS', style: textTheme.headlineMedium),
+                          Text(
+                            'ATLAS Backend',
+                            style: textTheme.headlineMedium,
+                          ),
                           const SizedBox(height: 4),
                           Text(
                             'Backend control center',
@@ -2246,7 +2280,7 @@ class FeatureScreen extends StatelessWidget {
     return Scaffold(
       body: Stack(
         children: [
-          const AtlasBackground(),
+            const AtlasBackground(showParticles: false),
           Padding(
             padding: const EdgeInsets.all(32),
             child: Column(
@@ -2391,11 +2425,14 @@ class GlassPanel extends StatelessWidget {
 }
 
 class AtlasBackground extends StatelessWidget {
-  const AtlasBackground({super.key});
+  const AtlasBackground({super.key, this.showParticles = true});
+
+  final bool showParticles;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final routeIsCurrent = ModalRoute.of(context)?.isCurrent ?? true;
     final imagePath = joinPath([
       getBackendRoot(),
       'public',
@@ -2476,13 +2513,19 @@ class AtlasBackground extends StatelessWidget {
         ValueListenableBuilder<double>(
           valueListenable: appBackgroundParticlesOpacity,
           builder: (context, opacity, _) {
+            if (!showParticles) {
+              return const SizedBox.shrink();
+            }
             final clamped = opacity.clamp(0.0, 2.0).toDouble();
             if (clamped <= 0.0) {
               return const SizedBox.shrink();
             }
             return Positioned.fill(
               child: IgnorePointer(
-                child: _AtlasParticleField(opacity: clamped),
+                child: TickerMode(
+                  enabled: routeIsCurrent,
+                  child: _AtlasParticleField(opacity: clamped),
+                ),
               ),
             );
           },
@@ -2810,6 +2853,40 @@ Color _onSurface(BuildContext context, double opacity) {
   return Theme.of(context).colorScheme.onSurface.withOpacity(opacity);
 }
 
+bool _isDarkTheme(BuildContext context) {
+  return Theme.of(context).brightness == Brightness.dark;
+}
+
+Color _dialogSurfaceColor(BuildContext context) {
+  final dark = _isDarkTheme(context);
+  if (dark) {
+    return const Color(0xFF081225).withOpacity(0.96);
+  }
+  return const Color(0xFFF6FAFF).withOpacity(0.96);
+}
+
+Color _dialogShadowColor(BuildContext context) {
+  final dark = _isDarkTheme(context);
+  return Colors.black.withOpacity(dark ? 0.40 : 0.18);
+}
+
+Color _dialogBarrierColor(BuildContext context, double transitionValue) {
+  final dark = _isDarkTheme(context);
+  final base = dark ? Colors.black : Colors.white;
+  final alpha = (dark ? 0.34 : 0.22) * transitionValue;
+  return base.withOpacity(alpha);
+}
+
+Color _adaptiveScrimColor(
+  BuildContext context, {
+  required double darkAlpha,
+  required double lightAlpha,
+}) {
+  final dark = _isDarkTheme(context);
+  final base = dark ? Colors.black : Colors.white;
+  return base.withOpacity(dark ? darkAlpha : lightAlpha);
+}
+
 Future<void> _applyAcrylicForBackground(String path) async {
   if (!Platform.isWindows) return;
   final color = await _computeAcrylicTint(path);
@@ -2880,78 +2957,206 @@ Color _darken(Color color, double amount) {
   return hsl.withLightness(lightness).toColor();
 }
 
-Future<void> _showAboutDialog(BuildContext context) async {
-  const url = 'https://guns.lol/cipherfps';
+Future<void> _showAboutDialog(
+  BuildContext context, {
+  required String versionLabel,
+}) async {
   const supportUrl = 'https://discord.gg/GqgakxU6bm';
   const githubUrl = 'https://github.com/cipherfps/ATLAS-Backend';
+  final formattedVersion = _formatVersion(versionLabel);
   await _showBlurDialog<void>(
     context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('About'),
-      content: RichText(
-        text: TextSpan(
-          style: Theme.of(context).textTheme.bodyMedium,
+    builder: (dialogContext) {
+      final secondary = Theme.of(dialogContext).colorScheme.secondary;
+
+      Widget linkRow({
+        required String label,
+        required String url,
+      }) {
+        return Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 4,
+          runSpacing: 4,
           children: [
-            TextSpan(
-              text: 'Made by ',
+            Text(
+              '$label:',
               style: TextStyle(
-                color: Theme.of(context).textTheme.bodyMedium?.color,
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            TextSpan(
-              text: 'cipher\n',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.secondary,
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                decoration: TextDecoration.underline,
-              ),
-              recognizer: TapGestureRecognizer()
-                ..onTap = () {
-                  _openUrl(url);
-                },
-            ),
-            const TextSpan(text: 'GitHub: '),
-            TextSpan(
-              text: _stripScheme(githubUrl),
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.secondary,
+                color: _onSurface(dialogContext, 0.86),
                 fontWeight: FontWeight.w600,
-                decoration: TextDecoration.underline,
               ),
-              recognizer: TapGestureRecognizer()
-                ..onTap = () {
-                  _openUrl(githubUrl);
-                },
             ),
-            const TextSpan(text: '\n'),
-            const TextSpan(text: 'Support: '),
-            TextSpan(
-              text: _stripScheme(supportUrl),
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.secondary,
-                fontWeight: FontWeight.w600,
-                decoration: TextDecoration.underline,
+            InkWell(
+              onTap: () => _openUrl(url),
+              borderRadius: BorderRadius.circular(6),
+              child: Text(
+                _stripScheme(url),
+                style: TextStyle(
+                  color: secondary,
+                  fontWeight: FontWeight.w600,
+                  decoration: TextDecoration.underline,
+                  decorationColor: secondary,
+                ),
               ),
-              recognizer: TapGestureRecognizer()
-                ..onTap = () {
-                  _openUrl(supportUrl);
-                },
             ),
           ],
-        ),
-      ),
-      actions: [
-        _HoverScale(
-          child: TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+        );
+      }
+
+      return Material(
+        type: MaterialType.transparency,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Container(
+            decoration: BoxDecoration(
+              color: _dialogSurfaceColor(dialogContext),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: _onSurface(dialogContext, 0.1)),
+              boxShadow: [
+                BoxShadow(
+                  color: _dialogShadowColor(dialogContext),
+                  blurRadius: 30,
+                  offset: const Offset(0, 16),
+                ),
+              ],
+            ),
+            child: Stack(
+              children: [
+                Positioned(
+                  top: -110,
+                  left: -60,
+                  child: IgnorePointer(
+                    child: Container(
+                      width: 240,
+                      height: 240,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [
+                            const Color(0xFF64D7FF).withOpacity(0.20),
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: -100,
+                  right: -50,
+                  child: IgnorePointer(
+                    child: Container(
+                      width: 220,
+                      height: 220,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [
+                            secondary.withOpacity(0.16),
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 20, 22, 16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: _adaptiveScrimColor(
+                                dialogContext,
+                                darkAlpha: 0.24,
+                                lightAlpha: 0.14,
+                              ),
+                              border: Border.all(
+                                color: _onSurface(dialogContext, 0.12),
+                              ),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(5),
+                              child: Image.asset(
+                                'assets/images/atlas_logo.png',
+                                fit: BoxFit.contain,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            'About',
+                            style: TextStyle(
+                              fontSize: 34,
+                              fontWeight: FontWeight.w700,
+                              color: _onSurface(dialogContext, 0.96),
+                            ),
+                          ),
+                          const Spacer(),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(999),
+                              color: secondary.withOpacity(0.2),
+                              border: Border.all(
+                                color: secondary.withOpacity(0.55),
+                              ),
+                            ),
+                            child: Text(
+                              formattedVersion,
+                              style: TextStyle(
+                                color: _onSurface(dialogContext, 0.96),
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Made by cipher',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          color: _onSurface(dialogContext, 0.96),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      linkRow(label: 'GitHub', url: githubUrl),
+                      const SizedBox(height: 6),
+                      linkRow(label: 'Support', url: supportUrl),
+                      const SizedBox(height: 14),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          _HoverScale(
+                            child: TextButton(
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop(),
+                              child: const Text('Close'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-      ],
-    ),
+      );
+    },
   );
 }
 
@@ -3116,19 +3321,25 @@ Future<void> _openUrl(String url) async {
 
 PageRouteBuilder<void> _buildRoute(Widget page) {
   return PageRouteBuilder<void>(
-    transitionDuration: const Duration(milliseconds: 350),
+    transitionDuration: const Duration(milliseconds: 220),
+    reverseTransitionDuration: const Duration(milliseconds: 220),
     pageBuilder: (_, __, ___) => page,
-    transitionsBuilder: (_, animation, __, child) {
+    transitionsBuilder: (context, animation, __, child) {
+      if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) {
+        return child;
+      }
       final curve = CurvedAnimation(
         parent: animation,
-        curve: Curves.easeInOutCubic,
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
       );
+      final slide = Tween<Offset>(
+        begin: Offset.zero,
+        end: Offset.zero,
+      ).animate(curve);
       return FadeTransition(
         opacity: curve,
-        child: ScaleTransition(
-          scale: Tween<double>(begin: 0.98, end: 1).animate(curve),
-          child: child,
-        ),
+        child: SlideTransition(position: slide, child: child),
       );
     },
   );
@@ -5398,39 +5609,39 @@ class _ArenaScreenState extends State<ArenaScreen> {
 
   void _showFullLeaderboard(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final blurEnabled = appDialogBlurEnabled.value;
-    showDialog(
-      context: context,
-      barrierColor: Colors.black.withOpacity(0.3),
-      builder: (context) => blurEnabled
-          ? BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-              child: _buildLeaderboardDialog(context, isDark),
-            )
-          : _buildLeaderboardDialog(context, isDark),
+    unawaited(
+      _showBlurDialog<void>(
+        context: context,
+        builder: (dialogContext) =>
+            _buildLeaderboardDialog(dialogContext, isDark),
+      ),
     );
   }
 
   Widget _buildLeaderboardDialog(BuildContext context, bool isDark) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          width: 500,
-          height: 600,
-          decoration: BoxDecoration(
-            color: isDark
-                ? Colors.grey.shade900.withOpacity(0.7)
-                : Colors.white.withOpacity(0.7),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isDark
-                  ? Colors.white.withOpacity(0.1)
-                  : Colors.black.withOpacity(0.1),
+    return Material(
+      type: MaterialType.transparency,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          clipBehavior: Clip.antiAlias,
+          child: Container(
+            width: 500,
+            height: 600,
+            decoration: BoxDecoration(
+              color: _dialogSurfaceColor(context),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: _onSurface(context, 0.1)),
+              boxShadow: [
+                BoxShadow(
+                  color: _dialogShadowColor(context),
+                  blurRadius: 30,
+                  offset: const Offset(0, 16),
+                ),
+              ],
             ),
-          ),
-          child: Column(
+            child: Column(
             children: [
               Padding(
                 padding: const EdgeInsets.all(16),
@@ -5575,6 +5786,7 @@ class _ArenaScreenState extends State<ArenaScreen> {
                 ),
               ),
             ],
+            ),
           ),
         ),
       ),
@@ -7219,129 +7431,61 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     bool deleteProfile = profileFolderExists;
     bool deleteClientSettings = clientSettingsFolderExists;
 
-    final blurEnabled = appDialogBlurEnabled.value;
-
-    final result = await showDialog<Map<String, bool>>(
+    final result = await _showBlurDialog<Map<String, bool>>(
       context: context,
-      barrierColor: Colors.black.withOpacity(0.3),
-      builder: (context) => blurEnabled
-          ? BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-              child: StatefulBuilder(
-                builder: (context, setState) => AlertDialog(
-                  title: Text('Delete profile "$profileId"?'),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Select what to delete:'),
-                      const SizedBox(height: 12),
-                      CheckboxListTile(
-                        value: deleteProfile,
-                        onChanged: profileFolderExists
-                            ? (value) =>
-                                  setState(() => deleteProfile = value ?? true)
-                            : null,
-                        title: const Text('User Profile'),
-                        subtitle: const Text(
-                          'profile_athena.json and related profile data',
-                        ),
-                        controlAffinity: ListTileControlAffinity.leading,
-                      ),
-                      CheckboxListTile(
-                        value: deleteClientSettings,
-                        onChanged: clientSettingsFolderExists
-                            ? (value) => setState(
-                                () => deleteClientSettings = value ?? true,
-                              )
-                            : null,
-                        title: const Text('ClientSettings'),
-                        subtitle: const Text('Game settings and preferences'),
-                        controlAffinity: ListTileControlAffinity.leading,
-                      ),
-                    ],
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
-                    ),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.redAccent,
-                      ),
-                      onPressed: (deleteProfile || deleteClientSettings)
-                          ? () => Navigator.pop(context, {
-                              'profile': deleteProfile,
-                              'settings': deleteClientSettings,
-                            })
-                          : null,
-                      child: const Text(
-                        'Delete',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                    ),
-                  ],
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (stateContext, setState) => AlertDialog(
+          title: Text('Delete profile "$profileId"?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Select what to delete:'),
+              const SizedBox(height: 12),
+              CheckboxListTile(
+                value: deleteProfile,
+                onChanged: profileFolderExists
+                    ? (value) => setState(() => deleteProfile = value ?? true)
+                    : null,
+                title: const Text('User Profile'),
+                subtitle: const Text(
+                  'profile_athena.json and related profile data',
                 ),
+                controlAffinity: ListTileControlAffinity.leading,
               ),
-            )
-          : StatefulBuilder(
-              builder: (context, setState) => AlertDialog(
-                title: Text('Delete profile "$profileId"?'),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Select what to delete:'),
-                    const SizedBox(height: 12),
-                    CheckboxListTile(
-                      value: deleteProfile,
-                      onChanged: profileFolderExists
-                          ? (value) =>
-                                setState(() => deleteProfile = value ?? true)
-                          : null,
-                      title: const Text('User Profile'),
-                      subtitle: const Text(
-                        'profile_athena.json and related profile data',
-                      ),
-                      controlAffinity: ListTileControlAffinity.leading,
-                    ),
-                    CheckboxListTile(
-                      value: deleteClientSettings,
-                      onChanged: clientSettingsFolderExists
-                          ? (value) => setState(
-                              () => deleteClientSettings = value ?? true,
-                            )
-                          : null,
-                      title: const Text('ClientSettings'),
-                      subtitle: const Text('Game settings and preferences'),
-                      controlAffinity: ListTileControlAffinity.leading,
-                    ),
-                  ],
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel'),
-                  ),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.redAccent,
-                    ),
-                    onPressed: (deleteProfile || deleteClientSettings)
-                        ? () => Navigator.pop(context, {
-                            'profile': deleteProfile,
-                            'settings': deleteClientSettings,
-                          })
-                        : null,
-                    child: const Text(
-                      'Delete',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ),
-                ],
+              CheckboxListTile(
+                value: deleteClientSettings,
+                onChanged: clientSettingsFolderExists
+                    ? (value) =>
+                          setState(() => deleteClientSettings = value ?? true)
+                    : null,
+                title: const Text('ClientSettings'),
+                subtitle: const Text('Game settings and preferences'),
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(stateContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+              onPressed: (deleteProfile || deleteClientSettings)
+                  ? () => Navigator.of(stateContext).pop({
+                      'profile': deleteProfile,
+                      'settings': deleteClientSettings,
+                    })
+                  : null,
+              child: const Text(
+                'Delete',
+                style: TextStyle(color: Colors.white),
               ),
             ),
+          ],
+        ),
+      ),
     );
 
     if (result == null) return;
@@ -7369,122 +7513,58 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     bool deleteProfiles = true;
     bool deleteClientSettings = true;
 
-    final blurEnabled = appDialogBlurEnabled.value;
-
-    final result = await showDialog<Map<String, bool>>(
+    final result = await _showBlurDialog<Map<String, bool>>(
       context: context,
-      barrierColor: Colors.black.withOpacity(0.3),
-      builder: (context) => blurEnabled
-          ? BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-              child: StatefulBuilder(
-                builder: (context, setState) => AlertDialog(
-                  title: const Text('Delete ALL profiles?'),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Select what to delete for all users:'),
-                      const SizedBox(height: 12),
-                      CheckboxListTile(
-                        value: deleteProfiles,
-                        onChanged: (value) =>
-                            setState(() => deleteProfiles = value ?? true),
-                        title: const Text('User Profiles'),
-                        subtitle: const Text(
-                          'All profile_athena.json files and related data',
-                        ),
-                        controlAffinity: ListTileControlAffinity.leading,
-                      ),
-                      CheckboxListTile(
-                        value: deleteClientSettings,
-                        onChanged: (value) => setState(
-                          () => deleteClientSettings = value ?? true,
-                        ),
-                        title: const Text('ClientSettings'),
-                        subtitle: const Text(
-                          'All game settings and preferences',
-                        ),
-                        controlAffinity: ListTileControlAffinity.leading,
-                      ),
-                    ],
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
-                    ),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.redAccent,
-                      ),
-                      onPressed: (deleteProfiles || deleteClientSettings)
-                          ? () => Navigator.pop(context, {
-                              'profiles': deleteProfiles,
-                              'settings': deleteClientSettings,
-                            })
-                          : null,
-                      child: const Text(
-                        'Delete All',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                    ),
-                  ],
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (stateContext, setState) => AlertDialog(
+          title: const Text('Delete ALL profiles?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Select what to delete for all users:'),
+              const SizedBox(height: 12),
+              CheckboxListTile(
+                value: deleteProfiles,
+                onChanged: (value) =>
+                    setState(() => deleteProfiles = value ?? true),
+                title: const Text('User Profiles'),
+                subtitle: const Text(
+                  'All profile_athena.json files and related data',
                 ),
+                controlAffinity: ListTileControlAffinity.leading,
               ),
-            )
-          : StatefulBuilder(
-              builder: (context, setState) => AlertDialog(
-                title: const Text('Delete ALL profiles?'),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Select what to delete for all users:'),
-                    const SizedBox(height: 12),
-                    CheckboxListTile(
-                      value: deleteProfiles,
-                      onChanged: (value) =>
-                          setState(() => deleteProfiles = value ?? true),
-                      title: const Text('User Profiles'),
-                      subtitle: const Text(
-                        'All profile_athena.json files and related data',
-                      ),
-                      controlAffinity: ListTileControlAffinity.leading,
-                    ),
-                    CheckboxListTile(
-                      value: deleteClientSettings,
-                      onChanged: (value) =>
-                          setState(() => deleteClientSettings = value ?? true),
-                      title: const Text('ClientSettings'),
-                      subtitle: const Text('All game settings and preferences'),
-                      controlAffinity: ListTileControlAffinity.leading,
-                    ),
-                  ],
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel'),
-                  ),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.redAccent,
-                    ),
-                    onPressed: (deleteProfiles || deleteClientSettings)
-                        ? () => Navigator.pop(context, {
-                            'profiles': deleteProfiles,
-                            'settings': deleteClientSettings,
-                          })
-                        : null,
-                    child: const Text(
-                      'Delete All',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ),
-                ],
+              CheckboxListTile(
+                value: deleteClientSettings,
+                onChanged: (value) =>
+                    setState(() => deleteClientSettings = value ?? true),
+                title: const Text('ClientSettings'),
+                subtitle: const Text('All game settings and preferences'),
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(stateContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+              onPressed: (deleteProfiles || deleteClientSettings)
+                  ? () => Navigator.of(stateContext).pop({
+                      'profiles': deleteProfiles,
+                      'settings': deleteClientSettings,
+                    })
+                  : null,
+              child: const Text(
+                'Delete All',
+                style: TextStyle(color: Colors.white),
               ),
             ),
+          ],
+        ),
+      ),
     );
 
     if (result == null) return;
@@ -7601,119 +7681,58 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       return;
     }
 
-    final blurEnabled = appDialogBlurEnabled.value;
-
-    final result = await showDialog<Map<String, bool>>(
+    final result = await _showBlurDialog<Map<String, bool>>(
       context: context,
-      barrierColor: Colors.black.withOpacity(0.3),
-      builder: (context) => blurEnabled
-          ? BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-              child: StatefulBuilder(
-                builder: (context, setState) => AlertDialog(
-                  title: Text('Export settings for "$accountId"'),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Select what to export:'),
-                      const SizedBox(height: 12),
-                      CheckboxListTile(
-                        value: exportProfile,
-                        onChanged: profileFolderExists
-                            ? (value) =>
-                                  setState(() => exportProfile = value ?? true)
-                            : null,
-                        title: const Text('User Profile'),
-                        subtitle: const Text(
-                          'profile_athena.json and related profile data',
-                        ),
-                        controlAffinity: ListTileControlAffinity.leading,
-                      ),
-                      CheckboxListTile(
-                        value: exportClientSettings,
-                        onChanged: clientSettingsFolderExists
-                            ? (value) => setState(
-                                () => exportClientSettings = value ?? true,
-                              )
-                            : null,
-                        title: const Text('ClientSettings'),
-                        subtitle: const Text('Game settings and preferences'),
-                        controlAffinity: ListTileControlAffinity.leading,
-                      ),
-                    ],
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
-                    ),
-                    ElevatedButton.icon(
-                      onPressed: (exportProfile || exportClientSettings)
-                          ? () => Navigator.pop(context, {
-                              'profile': exportProfile,
-                              'settings': exportClientSettings,
-                            })
-                          : null,
-                      icon: const Icon(Icons.download_rounded),
-                      label: const Text('Export'),
-                    ),
-                  ],
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (stateContext, setState) => AlertDialog(
+          title: Text('Export settings for "$accountId"'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Select what to export:'),
+              const SizedBox(height: 12),
+              CheckboxListTile(
+                value: exportProfile,
+                onChanged: profileFolderExists
+                    ? (value) => setState(() => exportProfile = value ?? true)
+                    : null,
+                title: const Text('User Profile'),
+                subtitle: const Text(
+                  'profile_athena.json and related profile data',
                 ),
+                controlAffinity: ListTileControlAffinity.leading,
               ),
-            )
-          : StatefulBuilder(
-              builder: (context, setState) => AlertDialog(
-                title: Text('Export settings for "$accountId"'),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Select what to export:'),
-                    const SizedBox(height: 12),
-                    CheckboxListTile(
-                      value: exportProfile,
-                      onChanged: profileFolderExists
-                          ? (value) =>
-                                setState(() => exportProfile = value ?? true)
-                          : null,
-                      title: const Text('User Profile'),
-                      subtitle: const Text(
-                        'profile_athena.json and related profile data',
-                      ),
-                      controlAffinity: ListTileControlAffinity.leading,
-                    ),
-                    CheckboxListTile(
-                      value: exportClientSettings,
-                      onChanged: clientSettingsFolderExists
-                          ? (value) => setState(
-                              () => exportClientSettings = value ?? true,
-                            )
-                          : null,
-                      title: const Text('ClientSettings'),
-                      subtitle: const Text('Game settings and preferences'),
-                      controlAffinity: ListTileControlAffinity.leading,
-                    ),
-                  ],
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel'),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: (exportProfile || exportClientSettings)
-                        ? () => Navigator.pop(context, {
-                            'profile': exportProfile,
-                            'settings': exportClientSettings,
-                          })
-                        : null,
-                    icon: const Icon(Icons.download_rounded),
-                    label: const Text('Export'),
-                  ),
-                ],
+              CheckboxListTile(
+                value: exportClientSettings,
+                onChanged: clientSettingsFolderExists
+                    ? (value) =>
+                          setState(() => exportClientSettings = value ?? true)
+                    : null,
+                title: const Text('ClientSettings'),
+                subtitle: const Text('Game settings and preferences'),
+                controlAffinity: ListTileControlAffinity.leading,
               ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(stateContext).pop(),
+              child: const Text('Cancel'),
             ),
+            ElevatedButton.icon(
+              onPressed: (exportProfile || exportClientSettings)
+                  ? () => Navigator.of(stateContext).pop({
+                      'profile': exportProfile,
+                      'settings': exportClientSettings,
+                    })
+                  : null,
+              icon: const Icon(Icons.download_rounded),
+              label: const Text('Export'),
+            ),
+          ],
+        ),
+      ),
     );
 
     if (result == null) return;
@@ -8695,7 +8714,7 @@ class _BaseScreen extends StatelessWidget {
     return Scaffold(
       body: Stack(
         children: [
-          const AtlasBackground(),
+          const AtlasBackground(showParticles: false),
           Padding(
             padding: const EdgeInsets.all(32),
             child: Column(
@@ -9092,7 +9111,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                onChanged: _updateStartupAnimationEnabled,
                title: const Text('Startup animation'),
                subtitle: const Text(
-                 'Play the intro animation when ATLAS launches.',
+                 'Play the intro animation when ATLAS Backend launches.',
                ),
              ),
              const SizedBox(height: 12),
@@ -11839,8 +11858,8 @@ class UpdateService {
     final currentVersion = detectedVersion.isEmpty ? '0.0.0' : detectedVersion;
     final release = await _fetchLatestReleaseInfo();
     if (release != null && _isNewerVersion(release.version, currentVersion)) {
-      final downloadUrl = release.msiUrl ?? _mainZipUrl;
-      final isInstaller = release.msiUrl != null;
+      final downloadUrl = release.installerUrl ?? _mainZipUrl;
+      final isInstaller = release.installerUrl != null;
       return UpdateInfo(
         currentVersion: currentVersion,
         latestVersion: release.version,
@@ -11888,20 +11907,8 @@ class UpdateService {
         final tag = entry['tag_name']?.toString().trim();
         if (tag == null || tag.isEmpty) continue;
 
-        final assets = entry['assets'];
-        if (assets is! List) continue;
-        String? msiUrl;
-        for (final asset in assets) {
-          if (asset is! Map<String, dynamic>) continue;
-          final name = asset['name']?.toString().toLowerCase() ?? '';
-          final url = asset['browser_download_url']?.toString();
-          if (url == null) continue;
-          if (name.endsWith('.msi') && name.contains('atlas')) {
-            msiUrl = url;
-            break;
-          }
-        }
-        if (msiUrl == null) continue;
+        final installerUrl = _findReleaseInstallerUrl(entry['assets']);
+        if (installerUrl == null) continue;
 
         DateTime? published;
         final publishedRaw = entry['published_at']?.toString();
@@ -11912,7 +11919,7 @@ class UpdateService {
         releases.add(
           ReleaseInfo(
             version: tag,
-            downloadUrl: msiUrl,
+            downloadUrl: installerUrl,
             publishedAt: published,
             notes: entry['body']?.toString(),
           ),
@@ -11938,11 +11945,20 @@ class UpdateService {
     ValueNotifier<double>? progress,
   ) async {
     if (info.isInstaller) {
-      final msiFile = await _downloadInstaller(info.downloadUrl, progress);
-      await Process.start('msiexec', [
-        '/i',
-        msiFile.path,
-      ], mode: ProcessStartMode.detached);
+      final installerFile = await _downloadInstaller(info.downloadUrl, progress);
+      final lowerPath = installerFile.path.toLowerCase();
+      if (lowerPath.endsWith('.msi')) {
+        await Process.start('msiexec', [
+          '/i',
+          installerFile.path,
+        ], mode: ProcessStartMode.detached);
+      } else {
+        await Process.start(
+          installerFile.path,
+          const [],
+          mode: ProcessStartMode.detached,
+        );
+      }
       exit(0);
     } else {
       final zipFile = await _downloadZip(info.downloadUrl, progress);
@@ -11950,7 +11966,7 @@ class UpdateService {
     }
   }
 
-  static Future<({String version, String? msiUrl, String? notes})?>
+  static Future<({String version, String? installerUrl, String? notes})?>
   _fetchLatestReleaseInfo() async {
     final client = HttpClient();
     try {
@@ -11962,26 +11978,44 @@ class UpdateService {
       final json = jsonDecode(body) as Map<String, dynamic>;
       final tag = json['tag_name']?.toString().trim();
       if (tag == null || tag.isEmpty) return null;
-      final assets = json['assets'];
-      String? msiUrl;
-      if (assets is List) {
-        for (final asset in assets) {
-          if (asset is! Map<String, dynamic>) continue;
-          final name = asset['name']?.toString().toLowerCase() ?? '';
-          final url = asset['browser_download_url']?.toString();
-          if (url == null) continue;
-          if (name.endsWith('.msi') && name.contains('atlas')) {
-            msiUrl = url;
-            break;
-          }
-        }
-      }
-      return (version: tag, msiUrl: msiUrl, notes: json['body']?.toString());
+      final installerUrl = _findReleaseInstallerUrl(json['assets']);
+      return (
+        version: tag,
+        installerUrl: installerUrl,
+        notes: json['body']?.toString(),
+      );
     } catch (_) {
       return null;
     } finally {
       client.close();
     }
+  }
+
+  static String? _findReleaseInstallerUrl(dynamic assetsRaw) {
+    if (assetsRaw is! List) return null;
+
+    String? preferredExe;
+    String? fallbackExe;
+    String? msi;
+
+    for (final asset in assetsRaw) {
+      if (asset is! Map<String, dynamic>) continue;
+      final name = asset['name']?.toString().toLowerCase() ?? '';
+      final url = asset['browser_download_url']?.toString();
+      if (url == null || name.isEmpty || !name.contains('atlas')) continue;
+
+      if (name.endsWith('.exe')) {
+        if (name.contains('setup') || name.contains('installer')) {
+          preferredExe ??= url;
+        } else {
+          fallbackExe ??= url;
+        }
+      } else if (name.endsWith('.msi')) {
+        msi ??= url;
+      }
+    }
+
+    return preferredExe ?? fallbackExe ?? msi;
   }
 
   static Future<Map<String, dynamic>?> _fetchRemotePackage() async {
@@ -12042,7 +12076,12 @@ class UpdateService {
     ValueNotifier<double>? progress,
   ) async {
     final tempDir = await Directory.systemTemp.createTemp('atlas_update_');
-    final msiFile = File(joinPath([tempDir.path, 'ATLAS-Update.msi']));
+    final uri = Uri.parse(url);
+    var fileName = uri.pathSegments.isEmpty ? '' : uri.pathSegments.last;
+    if (fileName.trim().isEmpty) {
+      fileName = 'ATLAS-Backend-Setup.exe';
+    }
+    final installerFile = File(joinPath([tempDir.path, fileName]));
     final client = HttpClient();
     try {
       final request = await client.getUrl(Uri.parse(url));
@@ -12052,7 +12091,7 @@ class UpdateService {
         throw Exception('Download failed: HTTP ${response.statusCode}');
       }
       final total = response.contentLength;
-      final sink = msiFile.openWrite();
+      final sink = installerFile.openWrite();
       var received = 0;
       await for (final chunk in response) {
         sink.add(chunk);
@@ -12065,7 +12104,7 @@ class UpdateService {
       if (progress != null) {
         progress.value = 1;
       }
-      return msiFile;
+      return installerFile;
     } finally {
       client.close();
     }
@@ -14795,6 +14834,8 @@ class BackendController extends ChangeNotifier {
   Color _statusColor = Colors.redAccent;
   final LogStore _logStore = LogStore.instance;
   DateTime? _backendStartedAt;
+  Timer? _logNotifyTimer;
+  bool _logNotifyQueued = false;
 
   String get statusText => _statusText;
   Color get statusColor => _statusColor;
@@ -15113,7 +15154,16 @@ class BackendController extends ChangeNotifier {
     for (final line in lines) {
       _logStore.addLog('$timestamp $line');
     }
-    notifyListeners();
+    _queueLogRefresh();
+  }
+
+  void _queueLogRefresh() {
+    if (_logNotifyQueued) return;
+    _logNotifyQueued = true;
+    _logNotifyTimer = Timer(const Duration(milliseconds: 120), () {
+      _logNotifyQueued = false;
+      notifyListeners();
+    });
   }
 
   Future<void> forceKillBackendPort() async {
@@ -15123,6 +15173,7 @@ class BackendController extends ChangeNotifier {
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _logNotifyTimer?.cancel();
     super.dispose();
   }
 }

@@ -2,7 +2,7 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
   <Bundle
-    Name="ATLAS"
+    Name="ATLAS Backend"
     Manufacturer="cipherfps"
     Version="$(var.ProductVersion)"
     UpgradeCode="8c7fecab-4ce9-43a5-9bb4-3bce5af7fb7f">

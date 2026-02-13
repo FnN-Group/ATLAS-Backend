@@ -1,29 +1,71 @@
+[CmdletBinding()]
 param(
   [string]$Version = "",
   [string]$BunVersion = "1.3.5",
   [switch]$SkipFlutterBuild,
-  [switch]$SkipMsi
+  [switch]$SkipInnoCompile
 )
 
 $ErrorActionPreference = "Stop"
 
+function Write-Step {
+  param([string]$Message)
+  Write-Host "[ATLAS Backend Installer] $Message" -ForegroundColor Cyan
+}
+
+function Find-Iscc {
+  $isccCommand = Get-Command iscc -ErrorAction SilentlyContinue
+  if ($isccCommand) {
+    return $isccCommand.Source
+  }
+
+  $candidates = @(
+    (Join-Path $env:LOCALAPPDATA "Programs\Inno\ISCC.exe"),
+    (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"),
+    (Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe"),
+    (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 5\ISCC.exe"),
+    (Join-Path $env:ProgramFiles "Inno Setup 5\ISCC.exe")
+  ) | Where-Object { $_ -and (Test-Path $_) }
+
+  if ($candidates.Count -gt 0) {
+    return @($candidates)[0]
+  }
+
+  return $null
+}
+
+function Get-StagedExecutableName {
+  param([string]$SourceDir)
+  $exe = Get-ChildItem -Path $SourceDir -Filter *.exe -File |
+    Where-Object { $_.Name -notmatch '^unins[0-9]*\.exe$' } |
+    Sort-Object Length -Descending |
+    Select-Object -First 1
+
+  if (-not $exe) {
+    throw "No executable found in $SourceDir"
+  }
+
+  return $exe.Name
+}
+
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
-# Try to find Flutter in PATH first
+
+# Prefer flutter from PATH; fallback to repo-bundled SDK.
 $flutterCmd = Get-Command flutter -ErrorAction SilentlyContinue
 if ($flutterCmd) {
   $flutter = $flutterCmd.Source
 } else {
-  $flutter = Join-Path $root "flutter\\bin\\flutter.bat"
+  $flutter = Join-Path $root "flutter\bin\flutter.bat"
 }
+
 $guiDir = Join-Path $root "atlas_gui_flutter"
 $distDir = Join-Path $root "dist"
 $buildRoot = Join-Path $distDir "ATLAS"
-$wxsFile = Join-Path $PSScriptRoot "ATLAS.wxs"
-$licenseFile = Join-Path $PSScriptRoot "LICENSE.rtf"
-$iconPath = Join-Path $root "atlas_gui_flutter\\windows\\runner\\resources\\app_icon.ico"
+$issFile = Join-Path $PSScriptRoot "ATLAS-Backend.iss"
+$iconPath = Join-Path $root "atlas_gui_flutter\windows\runner\resources\app_icon.ico"
 
-if (-not (Test-Path $wxsFile)) {
-  throw "Missing WiX source file: $wxsFile"
+if (-not (Test-Path $issFile)) {
+  throw "Missing Inno Setup script: $issFile"
 }
 
 if (-not (Test-Path $distDir)) {
@@ -44,13 +86,18 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
   $Version = "1.0.0"
 }
 
+Write-Step "Resolved version: $Version"
+
 if (-not $SkipFlutterBuild) {
   if (-not (Test-Path $flutter)) {
     throw "Flutter not found at $flutter"
   }
+  Write-Step "Running flutter build windows --release"
   Push-Location $guiDir
   & $flutter build windows --release
   Pop-Location
+} else {
+  Write-Step "Skipping Flutter build (using existing Release output)"
 }
 
 if (Test-Path $buildRoot) {
@@ -58,7 +105,7 @@ if (Test-Path $buildRoot) {
 }
 New-Item -ItemType Directory -Path $buildRoot | Out-Null
 
-$releaseDir = Join-Path $guiDir "build\\windows\\x64\\runner\\Release"
+$releaseDir = Join-Path $guiDir "build\windows\x64\runner\Release"
 if (-not (Test-Path $releaseDir)) {
   throw "Release build not found: $releaseDir"
 }
@@ -73,7 +120,6 @@ $backendItems = @(
   "static",
   "public",
   "responses",
-  "exports",
   "node_modules"
 )
 
@@ -84,8 +130,7 @@ foreach ($item in $backendItems) {
   }
 }
 
-# Remove any user-generated data that may exist in the repo from the staged build output.
-# These folders are runtime state and should never ship in the MSI (fresh installs must be clean).
+# Remove runtime state from staged output.
 $stagedStaticDir = Join-Path $buildRoot "static"
 $stagedProfilesDir = Join-Path $stagedStaticDir "profiles"
 $stagedClientSettingsDir = Join-Path $stagedStaticDir "ClientSettings"
@@ -96,42 +141,39 @@ if (Test-Path $stagedProfilesDir) {
       Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
       return
     }
-
-    # Keep only template files (profile_*.json) at the root; delete anything else (stray files from dev runs).
     if ($_.Name -match '^profile_.*\.json$') {
       return
     }
-
     Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
   }
 }
 
-# ClientSettings is per-account runtime state. Keep a "config" folder if present; remove everything else.
+# Keep only "config" under ClientSettings.
 if (Test-Path $stagedClientSettingsDir) {
   Get-ChildItem -LiteralPath $stagedClientSettingsDir -Force | ForEach-Object {
     if ($_.PSIsContainer -and $_.Name.ToLowerInvariant() -eq "config") {
       return
     }
-
     Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
   }
 }
 
-# Hotfix backups are local artifacts and should never ship in the MSI.
+# Remove hotfix backups from packaged output.
 $stagedHotfixesDir = Join-Path $stagedStaticDir "hotfixes"
 if (Test-Path $stagedHotfixesDir) {
   Get-ChildItem -LiteralPath $stagedHotfixesDir -Recurse -File -Filter "*.bak" -ErrorAction SilentlyContinue |
     Remove-Item -Force -ErrorAction SilentlyContinue
 }
 
-$bunDir = Join-Path $buildRoot "tools\\bun"
+# Ensure bundled Bun is available.
+$bunDir = Join-Path $buildRoot "tools\bun"
 $bunExe = Join-Path $bunDir "bun.exe"
 if (-not (Test-Path $bunExe)) {
   New-Item -ItemType Directory -Path $bunDir -Force | Out-Null
   $bunZip = Join-Path $distDir ("bun-{0}-windows-x64.zip" -f $BunVersion)
   if (-not (Test-Path $bunZip)) {
     $bunUrl = "https://github.com/oven-sh/bun/releases/download/bun-v$BunVersion/bun-windows-x64.zip"
-    Write-Host "Downloading Bun $BunVersion..."
+    Write-Step "Downloading Bun $BunVersion"
     Invoke-WebRequest -Uri $bunUrl -OutFile $bunZip
   }
   $bunTemp = Join-Path $distDir "bun_tmp"
@@ -147,84 +189,46 @@ if (-not (Test-Path $bunExe)) {
   Remove-Item $bunTemp -Recurse -Force
 }
 
-if ($SkipMsi) {
-  Write-Host "Staged files at $buildRoot"
+Write-Step "Staged build output at $buildRoot"
+
+if ($SkipInnoCompile) {
+  Write-Step "Skipping Inno compilation"
   exit 0
 }
 
-$wixExe = $null
-$wixCmd = Get-Command "wix" -ErrorAction SilentlyContinue
-if ($wixCmd) {
-  $wixExe = $wixCmd.Source
+$isccPath = Find-Iscc
+if (-not $isccPath) {
+  throw @"
+Inno Setup compiler (ISCC.exe) was not found.
+Install Inno Setup 6 from https://jrsoftware.org/isinfo.php and rerun:
+  .\installer\build_installer.ps1
+"@
 }
 
-if (-not $wixExe) {
-$candidatePaths = @(
-    $env:WIX,
-    ($(if ($env:WIX) { Join-Path $env:WIX "wix.exe" } else { $null })),
-    (Join-Path $env:ProgramFiles "WiX Toolset v4\bin\wix.exe"),
-    (Join-Path $env:ProgramFiles "WiX Toolset v4.0\bin\wix.exe"),
-    (Join-Path $env:ProgramFiles "WiX Toolset v5\bin\wix.exe"),
-    (Join-Path $env:ProgramFiles "WiX Toolset v5.0\bin\wix.exe"),
-    (Join-Path $env:ProgramFiles "WiX Toolset v6\bin\wix.exe"),
-    (Join-Path $env:ProgramFiles "WiX Toolset v6.0\bin\wix.exe"),
-    (Join-Path $env:ProgramFiles "WiX Toolset\bin\wix.exe"),
-    (Join-Path $env:USERPROFILE ".dotnet\tools\wix.exe")
-  )
+$executableName = Get-StagedExecutableName -SourceDir $buildRoot
+$outputBaseFilename = "ATLAS-Backend-Setup-$Version"
+Write-Step "Compiling Inno Setup installer: $outputBaseFilename.exe"
 
-  foreach ($candidate in $candidatePaths) {
-    if ($candidate -and (Test-Path $candidate)) {
-      $wixExe = $candidate
-      break
-    }
-  }
-}
-
-if (-not $wixExe) {
-  $wingetRoot = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages"
-  if (Test-Path $wingetRoot) {
-    $found = Get-ChildItem -Path $wingetRoot -Filter wix.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($found) {
-      $wixExe = $found.FullName
-    }
-  }
-}
-
-if (-not $wixExe) {
-  throw "WiX Toolset not found. Ensure 'wix' is on PATH or set WIX to the install folder."
-}
-
-$msiOut = Join-Path $distDir ("ATLAS-{0}.msi" -f $Version)
-& $wixExe build $wxsFile `
-  -d BuildRoot="$buildRoot" `
-  -d ProductVersion="$Version" `
-  -d LicenseFile="$licenseFile" `
-  -d IconPath="$iconPath" `
-  -ext WixToolset.UI.wixext `
-  -o "$msiOut"
-
-Write-Host "MSI created: $msiOut"
-
-$cleanupPaths = @(
-  "ATLAS-setup-plain.cmd",
-  "ATLAS-setup.cmd",
-  "ATLAS-setup.ps1",
-  "ATLAS-setup.sed",
-  "ATLAS-Setup.exe",
-  "ATLAS-Setup-fixed.exe",
-  "ATLAS-Setup-gui.exe",
-  "ATLAS-Setup-gui2.exe",
-  "ATLAS-Setup-gui3.exe",
-  "ATLAS-Setup-gui4.exe",
-  "ATLAS-Setup-gui5.exe",
-  "ATLAS-Setup-gui6.exe",
-  "prep_config_msi.cmd",
-  "bundle_src"
+$isccArgs = @(
+  "/DMyAppVersion=$Version",
+  "/DSourceDir=$buildRoot",
+  "/DExecutableName=$executableName",
+  "/DOutputDir=$distDir",
+  "/DOutputBaseFilename=$outputBaseFilename"
 )
 
-foreach ($item in $cleanupPaths) {
-  $target = Join-Path $distDir $item
-  if (Test-Path $target) {
-    Remove-Item -Path $target -Recurse -Force -ErrorAction SilentlyContinue
-  }
+if (Test-Path $iconPath) {
+  $isccArgs += "/DSetupIconFile=$iconPath"
+}
+
+$isccArgs += $issFile
+
+& $isccPath @isccArgs
+if ($LASTEXITCODE -ne 0) {
+  throw "ISCC failed with exit code $LASTEXITCODE"
+}
+
+$setupExe = Join-Path $distDir "$outputBaseFilename.exe"
+if (Test-Path $setupExe) {
+  Write-Step "EXE installer created: $setupExe"
 }

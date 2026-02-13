@@ -14,9 +14,10 @@ Markdown Quick Key
 ---
 
 # Improvements
-- Small tweak to animations
+- Changed pop up style to match new launcher [ATLAS Link](https://github.com/cipherfps/ATLAS-Link)
 
 # Fixes
-- Import INI fix
+- Animations between menus
+- Performance issues
 
 [Full release notes](https://github.com/cipherfps/ATLAS-Backend/releases)

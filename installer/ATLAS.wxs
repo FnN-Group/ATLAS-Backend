@@ -2,7 +2,7 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <Package
-    Name="ATLAS"
+    Name="ATLAS Backend"
     Manufacturer="cipherfps"
     Version="$(var.ProductVersion)"
     UpgradeCode="8c7fecab-4ce9-43a5-9bb4-3bce5af7fb7f"
@@ -26,7 +26,7 @@
     </StandardDirectory>
 
     <StandardDirectory Id="ProgramMenuFolder">
-      <Directory Id="AppProgramMenuFolder" Name="ATLAS" />
+      <Directory Id="AppProgramMenuFolder" Name="ATLAS Backend" />
     </StandardDirectory>
 
     <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
@@ -36,13 +36,13 @@
     <Component Id="StartMenuShortcut" Guid="3e18f4e5-3f6b-4c1e-9b4e-9bf7fc3eec6b" Directory="AppProgramMenuFolder">
       <Shortcut
         Id="AtlasShortcut"
-        Name="ATLAS"
+        Name="ATLAS Backend"
         Target="[INSTALLFOLDER]ATLAS.exe"
         WorkingDirectory="INSTALLFOLDER"
         Icon="AtlasIcon" />
       <Shortcut
         Id="AtlasUninstallShortcut"
-        Name="Uninstall ATLAS"
+        Name="Uninstall ATLAS Backend"
         Target="[SystemFolder]msiexec.exe"
         Arguments="/x [ProductCode] DISABLEROLLBACK=1 MSIFASTINSTALL=7 TEMP=&quot;[LocalAppDataFolder]Temp&quot; TMP=&quot;[LocalAppDataFolder]Temp&quot;"
         WorkingDirectory="SystemFolder"
@@ -54,13 +54,13 @@
     <Component Id="DriveRootShortcuts" Guid="b9f7b3e7-3f2e-4e7a-a2f9-4c68780b8a5c" Directory="INSTALLROOT">
       <Shortcut
         Id="AtlasRootShortcut"
-        Name="ATLAS"
+        Name="ATLAS Backend"
         Target="[INSTALLFOLDER]ATLAS.exe"
         WorkingDirectory="INSTALLFOLDER"
         Icon="AtlasIcon" />
       <Shortcut
         Id="AtlasRootUninstallShortcut"
-        Name="Uninstall ATLAS"
+        Name="Uninstall ATLAS Backend"
         Target="[SystemFolder]msiexec.exe"
         Arguments="/x [ProductCode] DISABLEROLLBACK=1 MSIFASTINSTALL=7 TEMP=&quot;[LocalAppDataFolder]Temp&quot; TMP=&quot;[LocalAppDataFolder]Temp&quot;"
         WorkingDirectory="SystemFolder"
@@ -76,7 +76,7 @@
       <RegistryValue Root="HKCU" Key="Software\cipherfps\ATLAS" Name="appdata_cleanup" Type="integer" Value="1" KeyPath="yes" />
     </Component>
 
-    <Feature Id="MainFeature" Title="ATLAS" Level="1">
+    <Feature Id="MainFeature" Title="ATLAS Backend" Level="1">
       <ComponentGroupRef Id="AppFiles" />
       <ComponentRef Id="StartMenuShortcut" />
       <ComponentRef Id="DriveRootShortcuts" />
@@ -98,13 +98,13 @@
     <CustomAction
       Id="CreateDesktopShortcut"
       Directory="SystemFolder"
-      ExeCommand="powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command &quot;$wsh = New-Object -ComObject WScript.Shell; $shortcut = $wsh.CreateShortcut('[DesktopFolder]ATLAS.lnk'); $shortcut.TargetPath = '[INSTALLFOLDER]ATLAS.exe'; $shortcut.WorkingDirectory = '[INSTALLFOLDER]'; $shortcut.IconLocation = '[INSTALLFOLDER]ATLAS.exe,0'; $shortcut.Save()&quot;"
+      ExeCommand="powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command &quot;$wsh = New-Object -ComObject WScript.Shell; $shortcut = $wsh.CreateShortcut('[DesktopFolder]ATLAS Backend.lnk'); $shortcut.TargetPath = '[INSTALLFOLDER]ATLAS.exe'; $shortcut.WorkingDirectory = '[INSTALLFOLDER]'; $shortcut.IconLocation = '[INSTALLFOLDER]ATLAS.exe,0'; $shortcut.Save()&quot;"
       Return="ignore"
       Impersonate="yes" />
     <CustomAction
       Id="RemoveDesktopShortcut"
       Directory="DesktopFolder"
-      ExeCommand="cmd.exe /C if exist &quot;[DesktopFolder]ATLAS.lnk&quot; del /Q &quot;[DesktopFolder]ATLAS.lnk&quot;"
+      ExeCommand="cmd.exe /C if exist &quot;[DesktopFolder]ATLAS Backend.lnk&quot; del /Q &quot;[DesktopFolder]ATLAS Backend.lnk&quot;"
       Return="ignore"
       Impersonate="yes" />
 
