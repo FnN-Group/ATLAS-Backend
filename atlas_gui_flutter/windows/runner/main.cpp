@@ -13,9 +13,13 @@ namespace {
 
 constexpr wchar_t kBackendWindowBoundsRegKey[] =
     L"Software\\ATLAS-Backend\\ATLAS-Backend-Flutter";
-constexpr wchar_t kLinkWindowBoundsRegKey[] =
-    L"Software\\ATLAS-Link\\ATLAS-Link-Flutter";
 constexpr wchar_t kWindowBoundsRegValue[] = L"WindowBounds";
+// Runner window position is persisted by Win32Window in win32_window.cpp.
+// Keep this in sync so our first-launch sizing picks the same monitor that the
+// runner will choose for DPI scaling.
+constexpr wchar_t kRunnerWindowPlacementRegKey[] = L"Software\\ATLAS";
+constexpr wchar_t kRunnerWindowPositionRegValue[] = L"WindowPosition";
+constexpr wchar_t kRunnerLegacyWindowPlacementRegValue[] = L"WindowPlacement";
 
 struct SavedWindowBounds {
   LONG x;
@@ -23,6 +27,8 @@ struct SavedWindowBounds {
   LONG width;
   LONG height;
 };
+
+Win32Window::Size DefaultWindowSizeForMonitor(HMONITOR monitor);
 
 double GetScaleFactorForMonitor(HMONITOR monitor) {
   const UINT dpi = FlutterDesktopGetDpiForMonitor(monitor);
@@ -122,12 +128,132 @@ bool LoadWindowBoundsFromKey(const wchar_t* reg_key, SavedWindowBounds* bounds) 
 }
 
 bool LoadWindowBounds(SavedWindowBounds* bounds) {
-  // Prefer ATLAS Backend's own bounds. If unavailable, adopt ATLAS Link's
-  // saved bounds once so both apps launch at a matching size by default.
-  if (LoadWindowBoundsFromKey(kBackendWindowBoundsRegKey, bounds)) {
+  // Only restore this application's own window bounds. Pulling bounds from
+  // other apps makes the first-launch size depend on whether another ATLAS app
+  // was installed and how it was last resized.
+  return LoadWindowBoundsFromKey(kBackendWindowBoundsRegKey, bounds);
+}
+
+void ClearWindowBounds() {
+  HKEY key = nullptr;
+  const LSTATUS open_status = RegOpenKeyExW(
+      HKEY_CURRENT_USER, kBackendWindowBoundsRegKey, 0, KEY_SET_VALUE, &key);
+  if (open_status != ERROR_SUCCESS || key == nullptr) {
+    return;
+  }
+  RegDeleteValueW(key, kWindowBoundsRegValue);
+  RegCloseKey(key);
+}
+
+bool LoadRunnerPersistedWindowPosition(POINT* position_out) {
+  if (!position_out) {
+    return false;
+  }
+
+  POINT position{};
+  DWORD data_size = sizeof(position);
+  const LSTATUS result =
+      RegGetValueW(HKEY_CURRENT_USER, kRunnerWindowPlacementRegKey,
+                   kRunnerWindowPositionRegValue, RRF_RT_REG_BINARY, nullptr,
+                   &position, &data_size);
+  if (result != ERROR_SUCCESS || data_size != sizeof(position)) {
+    WINDOWPLACEMENT legacy{};
+    DWORD legacy_size = sizeof(legacy);
+    const LSTATUS legacy_result =
+        RegGetValueW(HKEY_CURRENT_USER, kRunnerWindowPlacementRegKey,
+                     kRunnerLegacyWindowPlacementRegValue, RRF_RT_REG_BINARY,
+                     nullptr, &legacy, &legacy_size);
+    if (legacy_result != ERROR_SUCCESS || legacy_size != sizeof(legacy)) {
+      return false;
+    }
+    position = POINT{legacy.rcNormalPosition.left, legacy.rcNormalPosition.top};
+  }
+
+  if (MonitorFromPoint(position, MONITOR_DEFAULTTONULL) == nullptr) {
+    return false;
+  }
+
+  *position_out = position;
+  return true;
+}
+
+bool ShouldDiscardWindowBounds(HMONITOR monitor,
+                               const RECT& work_area,
+                               const SavedWindowBounds& loaded_bounds,
+                               const SavedWindowBounds& clamped_bounds) {
+  if (monitor == nullptr) {
     return true;
   }
-  return LoadWindowBoundsFromKey(kLinkWindowBoundsRegKey, bounds);
+
+  // If the saved origin no longer points to a valid monitor (e.g. monitor
+  // configuration changed), prefer resetting to defaults.
+  const POINT restore_point{loaded_bounds.x, loaded_bounds.y};
+  if (MonitorFromPoint(restore_point, MONITOR_DEFAULTTONULL) == nullptr) {
+    return true;
+  }
+
+  const LONG work_width = work_area.right - work_area.left;
+  const LONG work_height = work_area.bottom - work_area.top;
+  if (work_width <= 0 || work_height <= 0) {
+    return true;
+  }
+
+  const auto abs_long = [](LONG value) -> LONG {
+    return value < 0 ? -value : value;
+  };
+
+  // If we had to clamp the bounds heavily (meaning they no longer fit on the
+  // current work area), treat them as stale/corrupt and reset.
+  const LONG dx = abs_long(loaded_bounds.x - clamped_bounds.x);
+  const LONG dy = abs_long(loaded_bounds.y - clamped_bounds.y);
+  const LONG dw = abs_long(loaded_bounds.width - clamped_bounds.width);
+  const LONG dh = abs_long(loaded_bounds.height - clamped_bounds.height);
+  if (dx > work_width / 2 || dy > work_height / 2 || dw > work_width / 3 ||
+      dh > work_height / 3) {
+    return true;
+  }
+
+  // Guard against extreme aspect ratios that can happen with corrupted data.
+  const LONG safe_height = std::max<LONG>(1, clamped_bounds.height);
+  const double aspect =
+      static_cast<double>(clamped_bounds.width) / static_cast<double>(safe_height);
+  if (aspect < 0.45 || aspect > 3.2) {
+    return true;
+  }
+
+  const double scale_factor = GetScaleFactorForMonitor(monitor);
+  const unsigned int logical_width =
+      PhysicalToLogicalUnsigned(clamped_bounds.width, scale_factor);
+  const unsigned int logical_height =
+      PhysicalToLogicalUnsigned(clamped_bounds.height, scale_factor);
+
+  // If the bounds look like the legacy first-launch default size, clear them so
+  // updates can migrate users to the new adaptive default sizing.
+  constexpr unsigned int kLegacyDefaultWidth = 1250;
+  constexpr unsigned int kLegacyDefaultHeight = 1080;
+  constexpr unsigned int kLegacyTolerance = 10;
+  if (logical_width + kLegacyTolerance >= kLegacyDefaultWidth &&
+      logical_width <= kLegacyDefaultWidth + kLegacyTolerance &&
+      logical_height + kLegacyTolerance >= kLegacyDefaultHeight &&
+      logical_height <= kLegacyDefaultHeight + kLegacyTolerance) {
+    return true;
+  }
+
+  // Discard bounds that are dramatically smaller than what the monitor can
+  // comfortably show. This catches "weird tiny window" cases from stale/corrupt
+  // registry data without fighting normal user resizing.
+  const Win32Window::Size default_size = DefaultWindowSizeForMonitor(monitor);
+  constexpr double kMinFractionOfDefault = 0.50;
+  if (logical_width <
+          static_cast<unsigned int>(std::floor(default_size.width *
+                                               kMinFractionOfDefault)) ||
+      logical_height <
+          static_cast<unsigned int>(std::floor(default_size.height *
+                                               kMinFractionOfDefault))) {
+    return true;
+  }
+
+  return false;
 }
 
 void SaveWindowBounds(HWND hwnd) {
@@ -166,6 +292,55 @@ void SaveWindowBounds(HWND hwnd) {
   RegSetValueExW(key, kWindowBoundsRegValue, 0, REG_BINARY,
                  reinterpret_cast<const BYTE*>(&bounds), sizeof(bounds));
   RegCloseKey(key);
+}
+
+Win32Window::Size DefaultWindowSizeForMonitor(HMONITOR monitor) {
+  RECT work_area{};
+  if (!GetWorkAreaForMonitor(monitor, &work_area)) {
+    return Win32Window::Size(1250, 800);
+  }
+
+  const double scale_factor = GetScaleFactorForMonitor(monitor);
+  const double available_width =
+      (work_area.right - work_area.left) / scale_factor;
+  const double available_height =
+      (work_area.bottom - work_area.top) / scale_factor;
+
+  // Keep a small margin so the window doesn't exactly hug the work area.
+  constexpr double kPadding = 32.0;
+  const double max_width =
+      std::max(1.0, std::floor(available_width - kPadding));
+  const double max_height =
+      std::max(1.0, std::floor(available_height - kPadding));
+
+  // Choose a consistent first-launch size across machines by scaling from the
+  // monitor work area rather than hardcoding a fixed pixel size.
+  constexpr double kFillWidth = 0.92;
+  constexpr double kFillHeight = 0.88;
+  constexpr double kComfortMinWidth = 1200.0;
+  constexpr double kComfortMinHeight = 740.0;
+
+  double width = std::floor(max_width * kFillWidth);
+  double height = std::floor(max_height * kFillHeight);
+
+  const double min_width = std::min(kComfortMinWidth, max_width);
+  const double min_height = std::min(kComfortMinHeight, max_height);
+  if (width < min_width) width = min_width;
+  if (height < min_height) height = min_height;
+
+  unsigned int width_u =
+      static_cast<unsigned int>(std::max(1.0, std::min(width, max_width)));
+  unsigned int height_u =
+      static_cast<unsigned int>(std::max(1.0, std::min(height, max_height)));
+
+  if (width_u < 640 && max_width >= 640) {
+    width_u = 640;
+  }
+  if (height_u < 480 && max_height >= 480) {
+    height_u = 480;
+  }
+
+  return Win32Window::Size(width_u, height_u);
 }
 
 Win32Window::Size FitSizeToWorkArea(HMONITOR monitor,
@@ -250,33 +425,45 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
   FlutterWindow window(project);
-  POINT cursor_position{};
-  HMONITOR monitor = MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
-  if (GetCursorPos(&cursor_position)) {
-    monitor = MonitorFromPoint(cursor_position, MONITOR_DEFAULTTONEAREST);
+  // Match Win32Window's monitor selection so the default logical size is
+  // scaled for the same display the runner will use.
+  POINT target_point{0, 0};
+  if (!LoadRunnerPersistedWindowPosition(&target_point)) {
+    POINT cursor_position{};
+    if (GetCursorPos(&cursor_position)) {
+      target_point = cursor_position;
+    }
   }
+  HMONITOR monitor = MonitorFromPoint(target_point, MONITOR_DEFAULTTONEAREST);
 
-  Win32Window::Size size(1250, 1080);
-  size = FitSizeToWorkArea(monitor, size);
-  Win32Window::Point origin = CenteredOrigin(monitor, size);
+  const HMONITOR initial_monitor = monitor;
+  Win32Window::Size size = DefaultWindowSizeForMonitor(initial_monitor);
+  Win32Window::Point origin = CenteredOrigin(initial_monitor, size);
   SavedWindowBounds restored_bounds{};
   if (LoadWindowBounds(&restored_bounds)) {
     POINT restore_point{restored_bounds.x, restored_bounds.y};
-    monitor = MonitorFromPoint(restore_point, MONITOR_DEFAULTTONEAREST);
+    const SavedWindowBounds loaded_bounds = restored_bounds;
+    const HMONITOR restored_monitor =
+        MonitorFromPoint(restore_point, MONITOR_DEFAULTTONEAREST);
 
     RECT work_area{};
-    if (GetWorkAreaForMonitor(monitor, &work_area)) {
+    if (GetWorkAreaForMonitor(restored_monitor, &work_area)) {
       ClampPhysicalBoundsToWorkArea(work_area, &restored_bounds);
+      if (ShouldDiscardWindowBounds(restored_monitor, work_area, loaded_bounds,
+                                   restored_bounds)) {
+        ClearWindowBounds();
+      } else {
+        monitor = restored_monitor;
+        const double scale_factor = GetScaleFactorForMonitor(monitor);
+        origin = Win32Window::Point(
+            PhysicalToLogical(restored_bounds.x, scale_factor),
+            PhysicalToLogical(restored_bounds.y, scale_factor));
+        size = Win32Window::Size(
+            PhysicalToLogicalUnsigned(restored_bounds.width, scale_factor),
+            PhysicalToLogicalUnsigned(restored_bounds.height, scale_factor));
+        size = FitSizeToWorkArea(monitor, size);
+      }
     }
-
-    const double scale_factor = GetScaleFactorForMonitor(monitor);
-    origin =
-        Win32Window::Point(PhysicalToLogical(restored_bounds.x, scale_factor),
-                           PhysicalToLogical(restored_bounds.y, scale_factor));
-    size = Win32Window::Size(
-        PhysicalToLogicalUnsigned(restored_bounds.width, scale_factor),
-        PhysicalToLogicalUnsigned(restored_bounds.height, scale_factor));
-    size = FitSizeToWorkArea(monitor, size);
   }
 
   if (!window.Create(L"ATLAS Backend", origin, size)) {
