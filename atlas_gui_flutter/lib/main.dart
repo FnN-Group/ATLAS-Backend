@@ -28,6 +28,10 @@ const _fallbackAcrylicColor = Color(0x260A0E14);
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  final imageCache = PaintingBinding.instance.imageCache;
+  imageCache.clear();
+  imageCache.clearLiveImages();
+
   // Initialize app data directory structure if running from installed location
   await _initializeAppDataDirectory();
 

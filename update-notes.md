@@ -14,6 +14,6 @@ Markdown Quick Key
 ---
 
 # Fixes
-- Fixed mismatched window size
+- Fixed images and icons
 
 [Full release notes](https://github.com/cipherfps/ATLAS-Backend/releases)
