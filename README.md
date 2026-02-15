@@ -1,4 +1,4 @@
-<img width="1920" height="1080" alt="ATLAS Backend Banner Transparent" src="https://github.com/user-attachments/assets/23883b15-d35d-427b-93ac-d50e3aa2ea72" />
+<img width="1920" height="1080" alt="ATLAS-Backend-Banner-Transparent-Figureless" src="https://github.com/user-attachments/assets/44669ae6-f2f0-414e-908a-74053f233aa6" />
 
 ## Credits
 
