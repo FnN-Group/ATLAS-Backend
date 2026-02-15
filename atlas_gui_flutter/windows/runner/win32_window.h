@@ -35,6 +35,15 @@ class Win32Window {
   // as appropriate for the default monitor. The window is invisible until
   // |Show| is called. Returns true if the window was created successfully.
   bool Create(const std::wstring& title, const Point& origin, const Size& size);
+  // Creates a Win32 window on the passed in monitor.
+  //
+  // This is used by the runner to position/size the window reliably on
+  // multi-monitor + mixed-DPI setups by scaling the passed logical coordinates
+  // (96 DPI) to the monitor's DPI.
+  bool Create(const std::wstring& title,
+              const Point& origin,
+              const Size& size,
+              HMONITOR monitor);
 
   // Show the current window. Returns true if the window was successfully shown.
   bool Show();

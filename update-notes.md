@@ -13,11 +13,7 @@ Markdown Quick Key
 
 ---
 
-# Improvements
-- Changed pop up style to match new launcher [ATLAS Link](https://github.com/cipherfps/ATLAS-Link)
-
 # Fixes
-- Animations between menus
-- Performance issues
+- Fixed mismatched window size
 
 [Full release notes](https://github.com/cipherfps/ATLAS-Backend/releases)
