@@ -670,7 +670,12 @@ class _AtlasHomePageState extends State<AtlasHomePage>
                   Expanded(
                     child: RichText(
                       text: TextSpan(
-                        style: TextStyle(fontSize: 12.8, color: onSurfaceMuted),
+                        style: TextStyle(
+                          fontSize: 15,
+                          color: onSurface.withOpacity(0.9),
+                          fontWeight: FontWeight.w600,
+                          height: 1.22,
+                        ),
                         children: spans,
                       ),
                     ),
@@ -699,8 +704,8 @@ class _AtlasHomePageState extends State<AtlasHomePage>
                     isLoading ? 'Detecting...' : vpnIp,
                     style: TextStyle(
                       fontFamily: 'Courier',
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
+                      fontSize: hasError ? 15 : 19,
+                      fontWeight: FontWeight.w700,
                       color: onSurface,
                     ),
                   ),
@@ -9740,12 +9745,9 @@ class ProfileService {
       );
     }
     presets.sort((a, b) {
-      final aBottomPinned = _isBottomPinnedPresetFolder(a.folder);
-      final bBottomPinned = _isBottomPinnedPresetFolder(b.folder);
-      if (aBottomPinned != bBottomPinned) {
-        return aBottomPinned ? 1 : -1;
-      }
-      return a.name.compareTo(b.name);
+      final aVersion = _parseVersion(a.versionTag);
+      final bVersion = _parseVersion(b.versionTag);
+      return bVersion.compareTo(aVersion); // Descending order (highest first)
     });
     return presets;
   }
@@ -9762,10 +9764,25 @@ class ProfileService {
         return ('Reboot X Tozo', 'v12.41');
       case 'reboot x retrac profile':
         return ('Reboot X Retrac', 'v14.40');
+      case 'reboot x twine profile':
+        return ('Reboot X Twine', 'v14.40');
       case 'latest profile':
         return ('Latest', 'v39+');
       default:
         return (folderName, null);
+    }
+  }
+
+  static double _parseVersion(String? versionTag) {
+    if (versionTag == null || versionTag.isEmpty) return 0.0;
+    
+    final cleanVersion = versionTag.replaceAll('v', '').replaceAll('+', '');
+    if (cleanVersion.isEmpty) return 0.0;
+    
+    try {
+      return double.parse(cleanVersion);
+    } catch (e) {
+      return 0.0;
     }
   }
 
