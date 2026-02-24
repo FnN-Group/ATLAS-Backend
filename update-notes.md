@@ -14,9 +14,9 @@ Markdown Quick Key
 ---
 
 # Improvements
-- Changed Toast notifcations to match Link
+- Updated Default Profile, if you are having issues clear your profile_athena.json
 
-# To-Do Later
+# To-Do/Fix Later
 - Adding Solaris & Twine Profile Presets
 
 [Full release notes](https://github.com/cipherfps/ATLAS-Backend/releases)

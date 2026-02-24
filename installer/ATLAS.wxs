@@ -83,8 +83,7 @@
     </Component>
 
     <Component Id="RemoveUserAppData" Guid="191eadc5-d399-499c-80b2-a513999a5e58" Directory="AtlasAppDataFolder">
-      <RemoveFile Id="RemoveGuiIni" Name="gui.ini" On="uninstall" />
-      <RemoveFolder Id="RemoveAtlasAppDataFolder" Directory="AtlasAppDataFolder" On="uninstall" />
+      <!-- Preserve gui.ini and AppData preferences across upgrades/uninstalls. -->
       <RegistryValue Root="HKCU" Key="Software\cipherfps\ATLAS" Name="appdata_cleanup" Type="integer" Value="1" KeyPath="yes" />
     </Component>
 

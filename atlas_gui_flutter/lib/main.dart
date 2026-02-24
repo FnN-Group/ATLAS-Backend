@@ -714,11 +714,11 @@ class _AtlasHomePageState extends State<AtlasHomePage>
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _startupAnimationGate.future;
       if (!mounted) return;
+      await UpdateBackupService.restoreIfNeeded(context);
+      if (!mounted) return;
       await _maybeCheckForUpdatesOnLaunch();
       if (!mounted) return;
       await _maybeShowUpdateNotesOnLaunch();
-      if (!mounted) return;
-      await UpdateBackupService.restoreIfNeeded(context);
     });
   }
 
@@ -12784,6 +12784,15 @@ class UpdateBackupService {
     // Don't backup Profile Presets - they are templates
     // (athenaprofiles/Profile Presets is skipped automatically)
 
+    final guiConfigFile = File(ConfigService._guiConfigPath());
+    if (guiConfigFile.existsSync()) {
+      final guiBackupFile = File(
+        joinPath([backupRoot.path, 'appdata', 'gui.ini']),
+      );
+      await guiBackupFile.parent.create(recursive: true);
+      await guiConfigFile.copy(guiBackupFile.path);
+    }
+
     final manifest = {
       'version': _normalizeVersion(await _readBackendVersion()),
       'createdAt': DateTime.now().toIso8601String(),
@@ -12860,6 +12869,26 @@ class UpdateBackupService {
 
     // Note: Profile Presets (athenaprofiles/Profile Presets) are not backed up or restored
     // They are templates and should not be modified
+
+    final guiBackupFile = File(
+      joinPath([backupRoot.path, 'appdata', 'gui.ini']),
+    );
+    if (guiBackupFile.existsSync()) {
+      final guiConfigFile = File(ConfigService._guiConfigPath());
+      await guiConfigFile.parent.create(recursive: true);
+      await guiBackupFile.copy(guiConfigFile.path);
+    }
+
+    final restoredConfig = await ConfigService.load();
+    appThemeMode.value = restoredConfig.useDarkMode
+        ? ThemeMode.dark
+        : ThemeMode.light;
+    appBackgroundPath.value = restoredConfig.backgroundImagePath;
+    appBackgroundBlur.value = restoredConfig.backgroundBlur;
+    appBackgroundParticlesOpacity.value =
+        restoredConfig.backgroundParticlesOpacity;
+    appDialogBlurEnabled.value = restoredConfig.dialogBlurEnabled;
+    appStartupAnimationEnabled.value = restoredConfig.startupAnimationEnabled;
 
     await backupRoot.delete(recursive: true);
 
