@@ -1,10 +1,10 @@
 {
-  "_id": "LawinServer",
+  "_id": "ATLAS",
   "created": "0001-01-01T00:00:00.000Z",
   "updated": "0001-01-01T00:00:00.000Z",
   "rvn": 172,
   "wipeNumber": 1,
-  "accountId": "LawinServer",
+  "accountId": "ATLAS",
   "profileId": "athena",
   "version": "no_version",
   "items": {
@@ -97,9 +97,9 @@
           }
         },
         "use_count": 0,
-        "banner_icon_template": "StandardBanner1",
-        "banner_color_template": "DefaultColor1",
-        "locker_name": "LawinServer",
+        "banner_icon_template": "InfluencerBanner2",
+        "banner_color_template": "DefaultColor15",
+        "locker_name": "ATLAS",
         "item_seen": false,
         "favorite": false
       },
@@ -109,7 +109,7 @@
       "templateId": "CosmeticLoadout:LoadoutSchema_Character",
       "attributes": {
         "slots": [],
-        "display_name": "LawinServer"
+        "display_name": "ATLAS"
       },
       "quantity": 1
     },
@@ -117,7 +117,7 @@
       "templateId": "CosmeticLoadout:LoadoutSchema_Emotes",
       "attributes": {
         "slots": [],
-        "display_name": "LawinServer"
+        "display_name": "ATLAS"
       },
       "quantity": 1
     },
@@ -138,7 +138,7 @@
             "equipped_item": "AthenaMusicPack:musicpack_119_ch1_defaultmusic"
           }
         ],
-        "display_name": "LawinServer"
+        "display_name": "ATLAS"
       },
       "quantity": 1
     },
@@ -146,7 +146,7 @@
       "templateId": "CosmeticLoadout:LoadoutSchema_Wraps",
       "attributes": {
         "slots": [],
-        "display_name": "LawinServer"
+        "display_name": "ATLAS"
       },
       "quantity": 1
     },
@@ -154,7 +154,7 @@
       "templateId": "CosmeticLoadout:LoadoutSchema_Vehicle",
       "attributes": {
         "slots": [],
-        "display_name": "LawinServer"
+        "display_name": "ATLAS"
       },
       "quantity": 1
     },
