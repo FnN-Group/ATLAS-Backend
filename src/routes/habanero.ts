@@ -2,7 +2,7 @@ import app from "..";
 import getVersion from "../utils/handlers/getVersion";
 import fs from "node:fs";
 import path from "node:path";
-import ini from "ini";
+import { readConfig } from "../config/config";
 
 export default function () {
   app.get("/api/v1/games/fortnite/trackprogress/:accountId", async (c) => {
@@ -21,9 +21,7 @@ export default function () {
     let promotionProgress = 0;
     
     try {
-      const config = ini.parse(
-        fs.readFileSync(path.join(__dirname, "..", "config", "config.ini"), "utf-8")
-      );
+      const config = readConfig();
       const saveArenaPoints = config.SaveArenaPoints === "true" || config.SaveArenaPoints === true;
       
       if (saveArenaPoints) {

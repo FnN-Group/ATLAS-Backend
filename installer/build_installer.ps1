@@ -100,6 +100,12 @@ foreach ($item in $backendItems) {
   }
 }
 
+# Never ship local runtime config with installer packages.
+$stagedConfigIni = Join-Path $buildRoot "src\config\config.ini"
+if (Test-Path $stagedConfigIni) {
+  Remove-Item -Path $stagedConfigIni -Force
+}
+
 # Remove runtime state from staged output.
 $stagedStaticDir = Join-Path $buildRoot "static"
 $stagedProfilesDir = Join-Path $stagedStaticDir "profiles"

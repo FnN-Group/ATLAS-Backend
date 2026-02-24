@@ -7,14 +7,16 @@ import Logger from "./utils/logger/logger";
 import { cors } from "hono/cors";
 import prompts from "prompts";
 import fs from "node:fs";
-import ini from "ini";
 import { startMatchmakingWebSocket } from "./utils/matchmaking/websocket";
+import { ensureConfigFile, getConfigPath, readConfig, writeConfig } from "./config/config";
 
 const resolvedPortEnv = process.env.ATLAS_PORT ?? process.env.PORT ?? "3551";
 const parsedPort = Number(resolvedPortEnv);
 const PORT = Number.isFinite(parsedPort) && parsedPort > 0 ? parsedPort : 3551;
 export const app = new Hono({ strict: false });
 export default app;
+
+ensureConfigFile();
 
 // Version: 1.0.1 - Update notification system is now working!
 
@@ -1307,8 +1309,8 @@ async function gameConfigurationMenu() {
       }
       
       // Read current config
-      const configPath = path.join(__dirname, 'config', 'config.ini');
-      const config = ini.parse(fs.readFileSync(configPath, 'utf-8'));
+      const configPath = getConfigPath();
+      const config = readConfig(configPath);
       const rufusStage = config.RufusStage || '1';
       const waterLevel = config.WaterLevel || '1';
       const shouldUseWaterStorm = config.UseWaterStorm === 'True' || config.UseWaterStorm === true;
@@ -1356,7 +1358,7 @@ async function gameConfigurationMenu() {
         
         if (stageResponse.stage) {
           config.RufusStage = stageResponse.stage;
-          fs.writeFileSync(configPath, ini.stringify(config));
+          writeConfig(config, configPath);
           lastStatusMessage = `\x1b[32m✓ Rufus Week Stage set to ${stageResponse.stage}!\x1b[0m`;
         }
       } else if (choice === '2') {
@@ -1373,7 +1375,7 @@ async function gameConfigurationMenu() {
         
         if (levelResponse.level) {
           config.WaterLevel = levelResponse.level;
-          fs.writeFileSync(configPath, ini.stringify(config));
+          writeConfig(config, configPath);
           lastStatusMessage = `\x1b[32m✓ Water Level set to ${levelResponse.level}!\x1b[0m`;
         }
       }
@@ -1382,7 +1384,7 @@ async function gameConfigurationMenu() {
         const currentValue = config.UseWaterStorm === 'True' || config.UseWaterStorm === true;
         const newValue = currentValue ? 'False' : 'True';
         config.UseWaterStorm = newValue;
-        fs.writeFileSync(configPath, ini.stringify(config));
+        writeConfig(config, configPath);
         const statusText = newValue === 'True' ? '\x1b[32mON\x1b[0m' : '\x1b[31mOFF\x1b[0m';
         lastStatusMessage = `\x1b[32m✓ Water Storm toggled ${statusText}!\x1b[0m`;
       }
@@ -1419,8 +1421,8 @@ async function otherSettingsMenu() {
       }
       
       // Read current config
-      const configPath = path.join(__dirname, 'config', 'config.ini');
-      const config = ini.parse(fs.readFileSync(configPath, 'utf-8'));
+      const configPath = getConfigPath();
+      const config = readConfig(configPath);
       const arenaPointsEnabled = config.SaveArenaPoints === 'true' || config.SaveArenaPoints === true;
       const arenaStatus = arenaPointsEnabled ? '\x1b[32m[ON]\x1b[0m' : '\x1b[31m[OFF]\x1b[0m';
       
@@ -1459,7 +1461,7 @@ async function otherSettingsMenu() {
           // Toggle Arena Point Saving
           const newValue = !arenaPointsEnabled;
           config.SaveArenaPoints = newValue.toString();
-          fs.writeFileSync(configPath, ini.stringify(config));
+          writeConfig(config, configPath);
           lastStatusMessage = `\x1b[32m✓ Arena Point Saving ${newValue ? 'enabled' : 'disabled'}! ${newValue ? 'Players will keep their arena points.' : 'Players will start at 0 arena points.'}\x1b[0m`;
           break;
         case '2':

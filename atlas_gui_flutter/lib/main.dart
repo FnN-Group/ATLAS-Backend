@@ -202,6 +202,9 @@ class _AtlasAppState extends State<AtlasApp> {
             bodyLarge: TextStyle(fontSize: 16, height: 1.4),
             bodyMedium: TextStyle(fontSize: 14, height: 1.4),
           ),
+          snackBarTheme: const SnackBarThemeData(
+            behavior: SnackBarBehavior.floating,
+          ),
         ),
         darkTheme: ThemeData(
           brightness: Brightness.dark,
@@ -258,6 +261,9 @@ class _AtlasAppState extends State<AtlasApp> {
             bodyLarge: TextStyle(fontSize: 16, height: 1.4),
             bodyMedium: TextStyle(fontSize: 14, height: 1.4),
           ),
+          snackBarTheme: const SnackBarThemeData(
+            behavior: SnackBarBehavior.floating,
+          ),
         ),
         home: const AtlasHomePage(),
       ),
@@ -301,6 +307,258 @@ class _SmoothScrollPhysics extends ScrollPhysics {
   @override
   double applyPhysicsToUserOffset(ScrollMetrics position, double offset) {
     return super.applyPhysicsToUserOffset(position, offset * multiplier);
+  }
+}
+
+final _atlasToastManager = _AtlasToastManager();
+
+void showAtlasSnackBar(BuildContext context, SnackBar snackBar) {
+  final message = _snackBarMessage(snackBar);
+  if (message == null || message.trim().isEmpty) return;
+  _atlasToastManager.show(context, message);
+}
+
+String? _snackBarMessage(SnackBar snackBar) {
+  final content = snackBar.content;
+  if (content is! Text) return null;
+  final plain = content.data;
+  if (plain != null) return plain;
+  final span = content.textSpan;
+  if (span != null) return span.toPlainText();
+  return null;
+}
+
+class _AtlasToastManager {
+  OverlayEntry? _toastOverlayEntry;
+  final GlobalKey<_ToastOverlayHostState> _toastHostKey =
+      GlobalKey<_ToastOverlayHostState>();
+
+  void show(BuildContext context, String message) {
+    final trimmed = message.trim();
+    if (trimmed.isEmpty) return;
+
+    if (!_ensureToastOverlayReady(context)) return;
+    _toastHostKey.currentState?.show(trimmed);
+  }
+
+  bool _ensureToastOverlayReady(BuildContext context) {
+    if (_toastOverlayEntry != null) return true;
+
+    final overlay = Overlay.maybeOf(context, rootOverlay: true);
+    if (overlay == null) return false;
+
+    _toastOverlayEntry = OverlayEntry(
+      builder: (overlayContext) {
+        final safePadding = MediaQuery.of(overlayContext).padding;
+        return Positioned(
+          right: 18 + safePadding.right,
+          bottom: 18 + safePadding.bottom,
+          child: Material(
+            color: Colors.transparent,
+            child: _ToastOverlayHost(
+              key: _toastHostKey,
+              onEmpty: () {
+                _toastOverlayEntry?.remove();
+                _toastOverlayEntry = null;
+              },
+            ),
+          ),
+        );
+      },
+    );
+    overlay.insert(_toastOverlayEntry!);
+    return true;
+  }
+}
+
+class _ToastOverlayHost extends StatefulWidget {
+  const _ToastOverlayHost({super.key, required this.onEmpty});
+
+  final VoidCallback onEmpty;
+
+  @override
+  State<_ToastOverlayHost> createState() => _ToastOverlayHostState();
+}
+
+class _ToastOverlayHostState extends State<_ToastOverlayHost> {
+  static const _toastDuration = Duration(seconds: 3);
+  final GlobalKey<_AnimatedToastCardState> _cardKey =
+      GlobalKey<_AnimatedToastCardState>();
+  Timer? _timer;
+  String _message = '';
+
+  void show(String message) {
+    if (!mounted) return;
+    final trimmed = message.trim();
+    if (trimmed.isEmpty) return;
+
+    _timer?.cancel();
+    _message = trimmed;
+
+    setState(() {});
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _cardKey.currentState?.show(_message);
+    });
+
+    _timer = Timer(_toastDuration, () {
+      if (!mounted) return;
+      _cardKey.currentState?.dismiss();
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: _AnimatedToastCard(
+        key: _cardKey,
+        initialMessage: _message,
+        onDismissed: widget.onEmpty,
+      ),
+    );
+  }
+}
+
+class _AnimatedToastCard extends StatefulWidget {
+  const _AnimatedToastCard({
+    super.key,
+    required this.initialMessage,
+    required this.onDismissed,
+  });
+
+  final String initialMessage;
+  final VoidCallback onDismissed;
+
+  @override
+  State<_AnimatedToastCard> createState() => _AnimatedToastCardState();
+}
+
+class _AnimatedToastCardState extends State<_AnimatedToastCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _fade;
+  late final Animation<Offset> _slide;
+  bool _dismissing = false;
+  String _message = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 220),
+      reverseDuration: const Duration(milliseconds: 180),
+    );
+    final curve = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
+    final reverseCurve = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOut,
+      reverseCurve: Curves.easeIn,
+    );
+    _fade = Tween<double>(begin: 0, end: 1).animate(reverseCurve);
+    _slide = Tween<Offset>(
+      begin: const Offset(0, 0.18),
+      end: Offset.zero,
+    ).animate(curve);
+    _message = widget.initialMessage;
+    if (_message.trim().isNotEmpty) {
+      _controller.forward();
+    }
+  }
+
+  void show(String message) {
+    if (!mounted) return;
+    final trimmed = message.trim();
+    if (trimmed.isEmpty) return;
+
+    setState(() {
+      _message = trimmed;
+    });
+
+    final wasHidden = _controller.value <= 0.001;
+    _dismissing = false;
+
+    _controller.stop();
+    if (wasHidden) {
+      _controller
+        ..value = 0
+        ..forward();
+    } else {
+      _controller.value = 1;
+    }
+  }
+
+  Future<void> dismiss() async {
+    if (!mounted || _dismissing) return;
+    _dismissing = true;
+    try {
+      await _controller.reverse();
+    } finally {
+      if (mounted) widget.onDismissed();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final onSurface = _onSurface(context, 0.92);
+    const radius = 18.0;
+
+    return FadeTransition(
+      opacity: _fade,
+      child: SlideTransition(
+        position: _slide,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(radius),
+              boxShadow: [
+                BoxShadow(
+                  color: _dialogShadowColor(context),
+                  blurRadius: 34,
+                  offset: const Offset(0, 18),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(radius),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: _dialogSurfaceColor(context),
+                  borderRadius: BorderRadius.circular(radius),
+                  border: Border.all(color: _onSurface(context, 0.12)),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                  child: Text(
+                    _message,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: onSurface,
+                      fontWeight: FontWeight.w600,
+                      height: 1.2,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -513,9 +771,10 @@ class _AtlasHomePageState extends State<AtlasHomePage>
     if (!mounted) return;
     if (info == null) {
       if (!silent) {
-        ScaffoldMessenger.of(
+        showAtlasSnackBar(
           context,
-        ).showSnackBar(const SnackBar(content: Text('No updates available.')));
+          const SnackBar(content: Text('No updates available.')),
+        );
       }
       return;
     }
@@ -728,7 +987,8 @@ class _AtlasHomePageState extends State<AtlasHomePage>
                         mode: LaunchMode.externalApplication,
                       );
                       if (!opened && mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        showAtlasSnackBar(
+                          context,
                           const SnackBar(
                             content: Text('Unable to open download link.'),
                           ),
@@ -837,7 +1097,8 @@ class _AtlasHomePageState extends State<AtlasHomePage>
                     Clipboard.setData(ClipboardData(text: 'open $vpnIp'));
                     Navigator.pop(context);
                     if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      showAtlasSnackBar(
+                        context,
                         const SnackBar(
                           content: Text('VPN IP copied to clipboard!'),
                         ),
@@ -897,7 +1158,8 @@ class _AtlasHomePageState extends State<AtlasHomePage>
         .toList();
 
     if (newerReleases.isEmpty && olderReleases.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAtlasSnackBar(
+        context,
         const SnackBar(content: Text('No other versions available.')),
       );
       return;
@@ -1062,7 +1324,8 @@ class _AtlasHomePageState extends State<AtlasHomePage>
   Future<void> _showCurrentVersionNotes(BuildContext _) async {
     final currentVersion = await _readBackendVersion();
     if (currentVersion.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAtlasSnackBar(
+        context,
         const SnackBar(content: Text('Current version unavailable.')),
       );
       return;
@@ -1071,9 +1334,10 @@ class _AtlasHomePageState extends State<AtlasHomePage>
     final notesPayload = await UpdateNotesService.loadNotes();
     if (!mounted) return;
     if (notesPayload == null) {
-      ScaffoldMessenger.of(
+      showAtlasSnackBar(
         context,
-      ).showSnackBar(const SnackBar(content: Text('No update notes found.')));
+        const SnackBar(content: Text('No update notes found.')),
+      );
       return;
     }
 
@@ -1206,7 +1470,8 @@ class _AtlasHomePageState extends State<AtlasHomePage>
                             );
                             if (!mounted) return;
                             Navigator.pop(context);
-                            ScaffoldMessenger.of(this.context).showSnackBar(
+                            showAtlasSnackBar(
+                              this.context,
                               SnackBar(
                                 content: Text(
                                   'Updated to ${info.latestLabel}. Restarting...',
@@ -1407,10 +1672,7 @@ class _AtlasHomePageState extends State<AtlasHomePage>
                   opacity: _shellEntranceFade,
                   child: ScaleTransition(
                     scale: _shellEntranceScale,
-                    child: IgnorePointer(
-                      ignoring: showIntro,
-                      child: content,
-                    ),
+                    child: IgnorePointer(ignoring: showIntro, child: content),
                   ),
                 ),
               ),
@@ -1598,18 +1860,18 @@ class _AtlasStartupAnimationOverlayState
                                       fit: BoxFit.contain,
                                     )
                                   : startupLogoDefault.existsSync()
-                                      ? Image.file(
-                                          startupLogoDefault,
-                                          width: 180,
-                                          height: 180,
-                                          fit: BoxFit.contain,
-                                        )
-                                      : Image.asset(
-                                          'assets/images/atlas_logo.png',
-                                          width: 180,
-                                          height: 180,
-                                          fit: BoxFit.contain,
-                                        ),
+                                  ? Image.file(
+                                      startupLogoDefault,
+                                      width: 180,
+                                      height: 180,
+                                      fit: BoxFit.contain,
+                                    )
+                                  : Image.asset(
+                                      'assets/images/atlas_logo.png',
+                                      width: 180,
+                                      height: 180,
+                                      fit: BoxFit.contain,
+                                    ),
                             ),
                           ),
                           const SizedBox(height: 22),
@@ -1690,25 +1952,17 @@ class _TopBar extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-            GestureDetector(
-              onTap: () => _showAboutDialog(context, versionLabel: versionLabel),
-              child: bannerFigureless.existsSync()
-                  ? Image.file(
-                      bannerFigureless,
-                      height: 100,
-                      fit: BoxFit.contain,
-                    )
-                  : bannerDefault.existsSync()
-                      ? Image.file(
-                          bannerDefault,
-                          height: 100,
-                          fit: BoxFit.contain,
-                        )
-                      : Row(
-                      children: [
-                        Image.asset(
-                          'assets/images/atlas_logo.png',
-                          width: 100,
+          GestureDetector(
+            onTap: () => _showAboutDialog(context, versionLabel: versionLabel),
+            child: bannerFigureless.existsSync()
+                ? Image.file(bannerFigureless, height: 100, fit: BoxFit.contain)
+                : bannerDefault.existsSync()
+                ? Image.file(bannerDefault, height: 100, fit: BoxFit.contain)
+                : Row(
+                    children: [
+                      Image.asset(
+                        'assets/images/atlas_logo.png',
+                        width: 100,
                         height: 100,
                         fit: BoxFit.contain,
                       ),
@@ -2146,7 +2400,8 @@ class _SidePanel extends StatelessWidget {
                               text: controller.recentLogs.join('\n'),
                             ),
                           );
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          showAtlasSnackBar(
+                            context,
                             const SnackBar(
                               content: Text('Live logs copied to clipboard'),
                             ),
@@ -2336,7 +2591,7 @@ class FeatureScreen extends StatelessWidget {
     return Scaffold(
       body: Stack(
         children: [
-            const AtlasBackground(showParticles: false),
+          const AtlasBackground(showParticles: false),
           Padding(
             padding: const EdgeInsets.all(32),
             child: Column(
@@ -2411,9 +2666,8 @@ class FeatureScreen extends StatelessWidget {
                                   trailing: _HoverScale(
                                     child: ElevatedButton(
                                       onPressed: () {
-                                        ScaffoldMessenger.of(
+                                        showAtlasSnackBar(
                                           context,
-                                        ).showSnackBar(
                                           SnackBar(
                                             content: Text(
                                               '${action.title} (coming soon)',
@@ -2662,7 +2916,10 @@ class _AtlasParticle {
   final double twinklePhase;
   final bool glow;
 
-  static List<_AtlasParticle> generate({required int seed, required int count}) {
+  static List<_AtlasParticle> generate({
+    required int seed,
+    required int count,
+  }) {
     final rng = Random(seed);
 
     double nextDoubleRange(double min, double max) =>
@@ -2674,10 +2931,12 @@ class _AtlasParticle {
       final y = rng.nextDouble();
 
       final sizeRoll = rng.nextDouble();
-      final radius =
-          sizeRoll < 0.12 ? nextDoubleRange(1.8, 2.8) : nextDoubleRange(0.8, 1.8);
-      final baseAlpha =
-          sizeRoll < 0.12 ? nextDoubleRange(0.08, 0.16) : nextDoubleRange(0.04, 0.12);
+      final radius = sizeRoll < 0.12
+          ? nextDoubleRange(1.8, 2.8)
+          : nextDoubleRange(0.8, 1.8);
+      final baseAlpha = sizeRoll < 0.12
+          ? nextDoubleRange(0.08, 0.16)
+          : nextDoubleRange(0.04, 0.12);
 
       final speed = nextDoubleRange(0.002, 0.012) * (radius / 2.0);
       final angle = nextDoubleRange(0, pi * 2);
@@ -3025,10 +3284,7 @@ Future<void> _showAboutDialog(
     builder: (dialogContext) {
       final secondary = Theme.of(dialogContext).colorScheme.secondary;
 
-      Widget linkRow({
-        required String label,
-        required String url,
-      }) {
+      Widget linkRow({required String label, required String url}) {
         return Wrap(
           crossAxisAlignment: WrapCrossAlignment.center,
           spacing: 4,
@@ -3185,7 +3441,10 @@ Future<void> _showCustomCosmeticPresetsInfoDialog(BuildContext context) async {
     builder: (context) => AlertDialog(
       title: Row(
         children: [
-          Icon(Icons.palette_rounded, color: Theme.of(context).colorScheme.secondary),
+          Icon(
+            Icons.palette_rounded,
+            color: Theme.of(context).colorScheme.secondary,
+          ),
           const SizedBox(width: 10),
           const Text('Custom Cosmetic Presets'),
         ],
@@ -3298,7 +3557,8 @@ Future<void> _showCustomCosmeticPresetsInfoDialog(BuildContext context) async {
             onPressed: () async {
               await Clipboard.setData(const ClipboardData(text: discordUrl));
               if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
+                showAtlasSnackBar(
+                  context,
                   const SnackBar(content: Text('Discord link copied.')),
                 );
               }
@@ -3548,8 +3808,11 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
   Future<int> _importCurvesFromIniContent(
     String importContent, {
     bool showSummary = true,
-    void Function(Map<String, List<String>> grouped, List<_ImportCurveDraft> missing)?
-        onSummary,
+    void Function(
+      Map<String, List<String>> grouped,
+      List<_ImportCurveDraft> missing,
+    )?
+    onSummary,
   }) async {
     final regex = RegExp(
       '^\\+CurveTable=(.+?);RowUpdate;(.+?);(\\d+);(.+)\$',
@@ -3651,7 +3914,8 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     }
     if (templateFile == null) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAtlasSnackBar(
+        context,
         const SnackBar(
           content: Text(
             'Template DefaultGame.ini not found in static/hotfixes/DefaultGame Template.',
@@ -3676,12 +3940,16 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
 
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('DefaultGame.ini repaired from template.')),
+      showAtlasSnackBar(
+        context,
+        const SnackBar(
+          content: Text('DefaultGame.ini repaired from template.'),
+        ),
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAtlasSnackBar(
+        context,
         SnackBar(content: Text('Failed to repair DefaultGame.ini: $error')),
       );
     }
@@ -3706,7 +3974,8 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
       } else {
         if (!isValidNumeric(valueText)) {
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
+          showAtlasSnackBar(
+            context,
             const SnackBar(content: Text('Enter a valid numeric value.')),
           );
           return;
@@ -3732,7 +4001,8 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     ).hasMatch(newValue.trim());
     if (!isValid) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAtlasSnackBar(
+        context,
         const SnackBar(content: Text('Enter a valid numeric value.')),
       );
       return;
@@ -3841,7 +4111,8 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     if (lines.isEmpty) {
       if (showNoEntriesSnackBar) {
         if (!mounted) return 0;
-        ScaffoldMessenger.of(context).showSnackBar(
+        showAtlasSnackBar(
+          context,
           const SnackBar(content: Text('No DataTable entries found in file')),
         );
       }
@@ -3853,7 +4124,8 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
 
     if (!mounted) return lines.length;
     if (showImportedSnackBar) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAtlasSnackBar(
+        context,
         SnackBar(content: Text('Imported ${lines.length} DataTable entries')),
       );
     }
@@ -3942,11 +4214,9 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
       final message = (attemptCurves && attemptDataTables)
           ? 'No CurveTable or DataTable entries found in file'
           : attemptCurves
-              ? 'No CurveTable entries found in file'
-              : 'No DataTable entries found in file';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+          ? 'No CurveTable entries found in file'
+          : 'No DataTable entries found in file';
+      showAtlasSnackBar(context, SnackBar(content: Text(message)));
       return;
     }
 
@@ -4004,13 +4274,12 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
           ),
           const SizedBox(width: 10),
           _HoverScale(
-            enabled:
-                !_isLoading && (_curveTablesEnabled || _dataTablesEnabled),
+            enabled: !_isLoading && (_curveTablesEnabled || _dataTablesEnabled),
             child: OutlinedButton.icon(
               onPressed:
                   (!_isLoading && (_curveTablesEnabled || _dataTablesEnabled))
-                      ? _importIniInModifications
-                      : null,
+                  ? _importIniInModifications
+                  : null,
               icon: const Icon(Icons.file_upload_outlined),
               label: const Text('Import INI'),
             ),
@@ -4059,9 +4328,7 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                               const SizedBox(height: 4),
                               Text(
                                 message,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
+                                style: Theme.of(context).textTheme.bodySmall
                                     ?.copyWith(color: _onSurface(context, 0.7)),
                               ),
                             ],
@@ -4134,10 +4401,11 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                       final bgColor = selected
                           ? accent.withOpacity(0.18)
                           : hovered
-                              ? Colors.black.withOpacity(0.06)
-                              : Colors.transparent;
-                      final borderColor =
-                          selected ? accent.withOpacity(0.55) : Colors.transparent;
+                          ? Colors.black.withOpacity(0.06)
+                          : Colors.transparent;
+                      final borderColor = selected
+                          ? accent.withOpacity(0.55)
+                          : Colors.transparent;
                       return GestureDetector(
                         onTap: () => setState(() => _tab = tab),
                         child: AnimatedContainer(
@@ -4155,10 +4423,12 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                           alignment: Alignment.center,
                           child: Text(
                             label,
-                            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                              color:
-                                  selected ? accent : _onSurface(context, 0.75),
-                            ),
+                            style: Theme.of(context).textTheme.labelLarge
+                                ?.copyWith(
+                                  color: selected
+                                      ? accent
+                                      : _onSurface(context, 0.75),
+                                ),
                           ),
                         ),
                       );
@@ -4219,262 +4489,302 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Wrap(
-                              spacing: 12,
-                              runSpacing: 12,
-                              children: visibleGroups.map((group) {
-                                final isSelected = selectedGroup.id == group.id;
-                                final imageFile = File(_groupImagePath(group));
-                                final isDark =
-                                    Theme.of(context).brightness ==
-                                    Brightness.dark;
-                                return GestureDetector(
-                                  onTap: () => setState(
-                                    () => _selectedGroupId = group.id,
-                                  ),
-                                  child: _HoverRegion(
-                                    builder: (context, hovered) => AnimatedScale(
-                                      duration: const Duration(
-                                        milliseconds: 140,
-                                      ),
-                                      curve: Curves.easeOutCubic,
-                                      scale: hovered ? 1.03 : 1,
-                                      child: AnimatedContainer(
-                                        duration: const Duration(
-                                          milliseconds: 180,
+                                    spacing: 12,
+                                    runSpacing: 12,
+                                    children: visibleGroups.map((group) {
+                                      final isSelected =
+                                          selectedGroup.id == group.id;
+                                      final imageFile = File(
+                                        _groupImagePath(group),
+                                      );
+                                      final isDark =
+                                          Theme.of(context).brightness ==
+                                          Brightness.dark;
+                                      return GestureDetector(
+                                        onTap: () => setState(
+                                          () => _selectedGroupId = group.id,
                                         ),
-                                        width: 140,
-                                        height: 130,
-                                        padding: const EdgeInsets.all(10),
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(
-                                            16,
-                                          ),
-                                          color: isSelected
-                                              ? Theme.of(context)
-                                                    .colorScheme
-                                                    .secondary
-                                                    .withOpacity(0.18)
-                                              : Colors.black.withOpacity(0.08),
-                                          border: Border.all(
-                                            color: isSelected
-                                                ? Theme.of(context)
-                                                      .colorScheme
-                                                      .secondary
-                                                      .withOpacity(0.6)
-                                                : _onSurface(context, 0.12),
-                                          ),
-                                        ),
-                                        child: Column(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            if (imageFile.existsSync())
-                                              _HoverShadow(
-                                                opacity: 0.75,
-                                                blurSigma: 2,
-                                                baseOffset: const Offset(0, 2),
-                                                hoverOffset: const Offset(4, 2),
-                                                hovered: hovered,
-                                                child: (group.id == 'fall'
-                                                    ? ColorFiltered(
-                                                        colorFilter:
-                                                            ColorFilter.mode(
-                                                              isDark
-                                                                  ? Colors.white
-                                                                  : Colors
-                                                                        .black,
-                                                              BlendMode.srcIn,
-                                                            ),
-                                                        child: Image.file(
-                                                          imageFile,
-                                                          width: 52,
-                                                          height: 52,
-                                                          fit: BoxFit.contain,
+                                        child: _HoverRegion(
+                                          builder: (context, hovered) => AnimatedScale(
+                                            duration: const Duration(
+                                              milliseconds: 140,
+                                            ),
+                                            curve: Curves.easeOutCubic,
+                                            scale: hovered ? 1.03 : 1,
+                                            child: AnimatedContainer(
+                                              duration: const Duration(
+                                                milliseconds: 180,
+                                              ),
+                                              width: 140,
+                                              height: 130,
+                                              padding: const EdgeInsets.all(10),
+                                              decoration: BoxDecoration(
+                                                borderRadius:
+                                                    BorderRadius.circular(16),
+                                                color: isSelected
+                                                    ? Theme.of(context)
+                                                          .colorScheme
+                                                          .secondary
+                                                          .withOpacity(0.18)
+                                                    : Colors.black.withOpacity(
+                                                        0.08,
+                                                      ),
+                                                border: Border.all(
+                                                  color: isSelected
+                                                      ? Theme.of(context)
+                                                            .colorScheme
+                                                            .secondary
+                                                            .withOpacity(0.6)
+                                                      : _onSurface(
+                                                          context,
+                                                          0.12,
                                                         ),
-                                                      )
-                                                    : Image.file(
-                                                        imageFile,
-                                                        width: 52,
-                                                        height: 52,
-                                                        fit: BoxFit.contain,
-                                                      )),
-                                              )
-                                            else
-                                              _HoverShadow(
-                                                opacity: 0.75,
-                                                blurSigma: 2,
-                                                baseOffset: const Offset(0, 2),
-                                                hoverOffset: const Offset(4, 2),
-                                                hovered: hovered,
-                                                child: Icon(
-                                                  group.icon,
-                                                  size: 38,
-                                                  color: Theme.of(
-                                                    context,
-                                                  ).colorScheme.secondary,
                                                 ),
                                               ),
-                                            const SizedBox(height: 8),
-                                            Text(
-                                              group.title,
-                                              textAlign: TextAlign.center,
-                                              style: Theme.of(
-                                                context,
-                                              ).textTheme.bodySmall,
+                                              child: Column(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: [
+                                                  if (imageFile.existsSync())
+                                                    _HoverShadow(
+                                                      opacity: 0.75,
+                                                      blurSigma: 2,
+                                                      baseOffset: const Offset(
+                                                        0,
+                                                        2,
+                                                      ),
+                                                      hoverOffset: const Offset(
+                                                        4,
+                                                        2,
+                                                      ),
+                                                      hovered: hovered,
+                                                      child: (group.id == 'fall'
+                                                          ? ColorFiltered(
+                                                              colorFilter:
+                                                                  ColorFilter.mode(
+                                                                    isDark
+                                                                        ? Colors
+                                                                              .white
+                                                                        : Colors
+                                                                              .black,
+                                                                    BlendMode
+                                                                        .srcIn,
+                                                                  ),
+                                                              child: Image.file(
+                                                                imageFile,
+                                                                width: 52,
+                                                                height: 52,
+                                                                fit: BoxFit
+                                                                    .contain,
+                                                              ),
+                                                            )
+                                                          : Image.file(
+                                                              imageFile,
+                                                              width: 52,
+                                                              height: 52,
+                                                              fit: BoxFit
+                                                                  .contain,
+                                                            )),
+                                                    )
+                                                  else
+                                                    _HoverShadow(
+                                                      opacity: 0.75,
+                                                      blurSigma: 2,
+                                                      baseOffset: const Offset(
+                                                        0,
+                                                        2,
+                                                      ),
+                                                      hoverOffset: const Offset(
+                                                        4,
+                                                        2,
+                                                      ),
+                                                      hovered: hovered,
+                                                      child: Icon(
+                                                        group.icon,
+                                                        size: 38,
+                                                        color: Theme.of(
+                                                          context,
+                                                        ).colorScheme.secondary,
+                                                      ),
+                                                    ),
+                                                  const SizedBox(height: 8),
+                                                  Text(
+                                                    group.title,
+                                                    textAlign: TextAlign.center,
+                                                    style: Theme.of(
+                                                      context,
+                                                    ).textTheme.bodySmall,
+                                                  ),
+                                                ],
+                                              ),
                                             ),
-                                          ],
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Row(
+                                    children: [
+                                      Text(
+                                        selectedGroup.title,
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.titleLarge,
+                                      ),
+                                      const Spacer(),
+                                      if (selectedGroup.isCustom)
+                                        _HoverScale(
+                                          child: OutlinedButton.icon(
+                                            onPressed: () async {
+                                              final updated =
+                                                  await _promptEditCustomGroup(
+                                                    context,
+                                                    selectedGroup.id,
+                                                    selectedGroup.title,
+                                                  );
+                                              if (updated == null) return;
+                                              await CurveTableService.updateCustomGroup(
+                                                selectedGroup.id,
+                                                updated.name,
+                                                updated.imagePath,
+                                              );
+                                              await _load();
+                                            },
+                                            icon: const Icon(
+                                              Icons.edit_outlined,
+                                            ),
+                                            label: const Text('Edit Group'),
+                                          ),
+                                        ),
+                                      if (selectedGroup.isCustom)
+                                        const SizedBox(width: 8),
+                                      if (selectedGroup.isCustom)
+                                        _HoverScale(
+                                          child: OutlinedButton.icon(
+                                            onPressed: () async {
+                                              final confirm =
+                                                  await DataService._confirmDialog(
+                                                    context,
+                                                    'Delete group "${selectedGroup.title}" and all its custom curves?',
+                                                  );
+                                              if (!confirm) return;
+                                              await CurveTableService.deleteCustomGroup(
+                                                selectedGroup.id,
+                                              );
+                                              await _load();
+                                            },
+                                            icon: const Icon(
+                                              Icons.delete_outline,
+                                              color: Colors.redAccent,
+                                            ),
+                                            label: const Text('Delete Group'),
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor: Colors.redAccent,
+                                            ),
+                                          ),
+                                        ),
+                                      if (selectedGroup.isCustom)
+                                        const SizedBox(width: 8),
+                                      _HoverScale(
+                                        enabled: _curveTablesEnabled,
+                                        child: OutlinedButton.icon(
+                                          onPressed: _addCustomCurve,
+                                          icon: const Icon(
+                                            Icons.add_circle_outline,
+                                          ),
+                                          label: const Text('Add Custom Curve'),
+                                          style: OutlinedButton.styleFrom(
+                                            foregroundColor: const Color(
+                                              0xFF1E88E5,
+                                            ),
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
-                            ),
-                            const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                Text(
-                                  selectedGroup.title,
-                                  style: Theme.of(context).textTheme.titleLarge,
-                                ),
-                                const Spacer(),
-                                if (selectedGroup.isCustom)
-                                  _HoverScale(
-                                    child: OutlinedButton.icon(
-                                      onPressed: () async {
-                                        final updated =
-                                            await _promptEditCustomGroup(
-                                              context,
-                                              selectedGroup.id,
-                                              selectedGroup.title,
-                                            );
-                                        if (updated == null) return;
-                                        await CurveTableService.updateCustomGroup(
-                                          selectedGroup.id,
-                                          updated.name,
-                                          updated.imagePath,
-                                        );
-                                        await _load();
-                                      },
-                                      icon: const Icon(Icons.edit_outlined),
-                                      label: const Text('Edit Group'),
-                                    ),
-                                  ),
-                                if (selectedGroup.isCustom)
-                                  const SizedBox(width: 8),
-                                if (selectedGroup.isCustom)
-                                  _HoverScale(
-                                    child: OutlinedButton.icon(
-                                      onPressed: () async {
-                                        final confirm =
-                                            await DataService._confirmDialog(
-                                              context,
-                                              'Delete group "${selectedGroup.title}" and all its custom curves?',
-                                            );
-                                        if (!confirm) return;
-                                        await CurveTableService.deleteCustomGroup(
-                                          selectedGroup.id,
-                                        );
-                                        await _load();
-                                      },
-                                      icon: const Icon(
-                                        Icons.delete_outline,
-                                        color: Colors.redAccent,
+                                      const SizedBox(width: 8),
+                                      _HoverScale(
+                                        enabled: _curveTablesEnabled,
+                                        child: OutlinedButton.icon(
+                                          onPressed: () async {
+                                            final confirm =
+                                                await DataService._confirmDialog(
+                                                  context,
+                                                  'Clear all CurveTables from DefaultGame.ini?',
+                                                );
+                                            if (!confirm) return;
+                                            await CurveTableService.clearAllCurveTables();
+                                            await _load();
+                                          },
+                                          icon: const Icon(
+                                            Icons.delete_sweep_outlined,
+                                          ),
+                                          label: const Text(
+                                            'Clear All CurveTables',
+                                          ),
+                                          style: OutlinedButton.styleFrom(
+                                            foregroundColor: const Color(
+                                              0xFF1E88E5,
+                                            ),
+                                          ),
+                                        ),
                                       ),
-                                      label: const Text('Delete Group'),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: Colors.redAccent,
-                                      ),
-                                    ),
+                                    ],
                                   ),
-                                if (selectedGroup.isCustom)
-                                  const SizedBox(width: 8),
-                                _HoverScale(
-                                  enabled: _curveTablesEnabled,
-                                  child: OutlinedButton.icon(
-                                    onPressed: _addCustomCurve,
-                                    icon: const Icon(Icons.add_circle_outline),
-                                    label: const Text('Add Custom Curve'),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: const Color(0xFF1E88E5),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                _HoverScale(
-                                  enabled: _curveTablesEnabled,
-                                  child: OutlinedButton.icon(
-                                    onPressed: () async {
-                                      final confirm =
-                                          await DataService._confirmDialog(
-                                            context,
-                                            'Clear all CurveTables from DefaultGame.ini?',
-                                          );
-                                      if (!confirm) return;
-                                      await CurveTableService.clearAllCurveTables();
-                                      await _load();
-                                    },
-                                    icon: const Icon(
-                                      Icons.delete_sweep_outlined,
-                                    ),
-                                    label: const Text('Clear All CurveTables'),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: const Color(0xFF1E88E5),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            ..._entriesForGroup(selectedGroup, _curves).map((
-                              entry,
-                            ) {
-                              final controller = _valueControllers.putIfAbsent(
-                                entry.id,
-                                () => TextEditingController(),
-                              );
-                              return _CurveEntryTile(
-                                entry: entry,
-                                enabled: _curveTablesEnabled,
-                                valueController: controller,
-                                onToggle: (value) => _toggleCurve(entry, value),
-                                onSubmit: (value) =>
-                                    _updateCurveValue(entry, value),
-                                onEdit: entry.isCustom
-                                    ? () async {
-                                        final updated =
-                                            await _promptEditCustomCurve(
-                                              context,
-                                              entry,
-                                              _groupInfosForPrompt(_curves),
-                                            );
-                                        if (updated == null) return;
-                                        await CurveTableService.updateCustomCurve(
+                                  const SizedBox(height: 12),
+                                  ..._entriesForGroup(
+                                    selectedGroup,
+                                    _curves,
+                                  ).map((entry) {
+                                    final controller = _valueControllers
+                                        .putIfAbsent(
                                           entry.id,
-                                          updated,
+                                          () => TextEditingController(),
                                         );
-                                        await _load();
-                                      }
-                                    : null,
-                                onDelete: entry.isCustom
-                                    ? () async {
-                                        final confirm =
-                                            await DataService._confirmDialog(
-                                              context,
-                                              'Delete custom curve "${entry.name}"?',
-                                            );
-                                        if (!confirm) return;
-                                        await CurveTableService.deleteCustomCurve(
-                                          entry.id,
-                                        );
-                                        await _load();
-                                      }
-                                    : null,
-                              );
-                            }),
-                              ],
-                            ),
-                    ],
+                                    return _CurveEntryTile(
+                                      entry: entry,
+                                      enabled: _curveTablesEnabled,
+                                      valueController: controller,
+                                      onToggle: (value) =>
+                                          _toggleCurve(entry, value),
+                                      onSubmit: (value) =>
+                                          _updateCurveValue(entry, value),
+                                      onEdit: entry.isCustom
+                                          ? () async {
+                                              final updated =
+                                                  await _promptEditCustomCurve(
+                                                    context,
+                                                    entry,
+                                                    _groupInfosForPrompt(
+                                                      _curves,
+                                                    ),
+                                                  );
+                                              if (updated == null) return;
+                                              await CurveTableService.updateCustomCurve(
+                                                entry.id,
+                                                updated,
+                                              );
+                                              await _load();
+                                            }
+                                          : null,
+                                      onDelete: entry.isCustom
+                                          ? () async {
+                                              final confirm =
+                                                  await DataService._confirmDialog(
+                                                    context,
+                                                    'Delete custom curve "${entry.name}"?',
+                                                  );
+                                              if (!confirm) return;
+                                              await CurveTableService.deleteCustomCurve(
+                                                entry.id,
+                                              );
+                                              await _load();
+                                            }
+                                          : null,
+                                    );
+                                  }),
+                                ],
+                              ),
+                      ],
                     ],
                     if (_tab == _ModificationsTab.dataTables) ...[
                       if (!isWide) dataTablesSwitch,
@@ -4494,176 +4804,207 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Wrap(
-                              spacing: 12,
-                              runSpacing: 12,
-                              children: _weapons.map((weapon) {
-                                final isSelected =
-                                    _selectedWeaponId == weapon.id;
-                                // Check if selected variant has its own image
-                                String? effectiveImagePath = weapon.imagePath;
-                                if (weapon.variants != null &&
-                                    weapon.variants!.isNotEmpty) {
-                                  // Use currently selected variant if this weapon is selected, otherwise use remembered variant
-                                  final variantWeaponId = isSelected
-                                      ? _selectedVariantWeaponId
-                                      : _weaponVariantSelections[weapon.id];
+                                    spacing: 12,
+                                    runSpacing: 12,
+                                    children: _weapons.map((weapon) {
+                                      final isSelected =
+                                          _selectedWeaponId == weapon.id;
+                                      // Check if selected variant has its own image
+                                      String? effectiveImagePath =
+                                          weapon.imagePath;
+                                      if (weapon.variants != null &&
+                                          weapon.variants!.isNotEmpty) {
+                                        // Use currently selected variant if this weapon is selected, otherwise use remembered variant
+                                        final variantWeaponId = isSelected
+                                            ? _selectedVariantWeaponId
+                                            : _weaponVariantSelections[weapon
+                                                  .id];
 
-                                  if (variantWeaponId != null) {
-                                    final variant = weapon.variants!.firstWhere(
-                                      (v) => v.weaponId == variantWeaponId,
-                                      orElse: () => weapon.variants!.first,
-                                    );
-                                    if (variant.imagePath != null) {
-                                      effectiveImagePath = variant.imagePath;
-                                    }
-                                  }
-                                }
-                                final imagePath = effectiveImagePath != null
-                                    ? joinPath([
-                                        getBackendRoot(),
-                                        'public',
-                                        'items',
-                                        effectiveImagePath,
-                                      ])
-                                    : null;
-                                final imageFile = imagePath != null
-                                    ? File(imagePath)
-                                    : null;
-                                return GestureDetector(
-                                  onTap: () async {
-                                    final hasVariants =
-                                        weapon.variants != null &&
-                                        weapon.variants!.isNotEmpty;
-                                    // Check if we've previously selected a variant for this weapon
-                                    String? variantWeaponId;
-                                    if (hasVariants) {
-                                      variantWeaponId =
-                                          _weaponVariantSelections[weapon.id] ??
-                                          weapon.variants!.first.weaponId;
-                                    }
-                                    final settings =
-                                        await DataTableService.getWeaponSettings(
-                                          weapon,
-                                          variantWeaponId: variantWeaponId,
-                                        );
-                                    setState(() {
-                                      _selectedWeaponId = weapon.id;
-                                      _selectedVariantWeaponId =
-                                          variantWeaponId;
-                                      _selectedWeaponSettings = settings;
-                                    });
-                                  },
-                                  child: _HoverRegion(
-                                    builder: (context, hovered) =>
-                                        AnimatedScale(
-                                          duration: const Duration(
-                                            milliseconds: 140,
-                                          ),
-                                          curve: Curves.easeOutCubic,
-                                          scale: hovered ? 1.03 : 1,
-                                          child: AnimatedContainer(
-                                            duration: const Duration(
-                                              milliseconds: 180,
-                                            ),
-                                            width: 140,
-                                            height: 130,
-                                            padding: const EdgeInsets.all(10),
-                                            decoration: BoxDecoration(
-                                              borderRadius:
-                                                  BorderRadius.circular(16),
-                                              color: isSelected
-                                                  ? Theme.of(context)
-                                                        .colorScheme
-                                                        .secondary
-                                                        .withOpacity(0.18)
-                                                  : Colors.black.withOpacity(
-                                                      0.08,
-                                                    ),
-                                              border: Border.all(
-                                                color: isSelected
-                                                    ? Theme.of(context)
-                                                          .colorScheme
-                                                          .secondary
-                                                          .withOpacity(0.6)
-                                                    : _onSurface(context, 0.12),
-                                              ),
-                                            ),
-                                            child: Column(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.center,
-                                              children: [
-                                                if (imageFile != null &&
-                                                    imageFile.existsSync())
-                                                  _HoverShadow(
-                                                    opacity: 0.75,
-                                                    blurSigma: 2,
-                                                    baseOffset: const Offset(
-                                                      0,
-                                                      2,
-                                                    ),
-                                                    hoverOffset: const Offset(
-                                                      4,
-                                                      2,
-                                                    ),
-                                                    hovered: hovered,
-                                                    child: Image.file(
-                                                      imageFile,
-                                                      width: 52,
-                                                      height: 52,
-                                                      fit: BoxFit.contain,
-                                                    ),
-                                                  )
-                                                else
-                                                  _HoverShadow(
-                                                    opacity: 0.75,
-                                                    blurSigma: 2,
-                                                    baseOffset: const Offset(
-                                                      0,
-                                                      2,
-                                                    ),
-                                                    hoverOffset: const Offset(
-                                                      4,
-                                                      2,
-                                                    ),
-                                                    hovered: hovered,
-                                                    child: Icon(
-                                                      Icons.sports_esports,
-                                                      size: 38,
-                                                      color: Theme.of(
-                                                        context,
-                                                      ).colorScheme.secondary,
+                                        if (variantWeaponId != null) {
+                                          final variant = weapon.variants!
+                                              .firstWhere(
+                                                (v) =>
+                                                    v.weaponId ==
+                                                    variantWeaponId,
+                                                orElse: () =>
+                                                    weapon.variants!.first,
+                                              );
+                                          if (variant.imagePath != null) {
+                                            effectiveImagePath =
+                                                variant.imagePath;
+                                          }
+                                        }
+                                      }
+                                      final imagePath =
+                                          effectiveImagePath != null
+                                          ? joinPath([
+                                              getBackendRoot(),
+                                              'public',
+                                              'items',
+                                              effectiveImagePath,
+                                            ])
+                                          : null;
+                                      final imageFile = imagePath != null
+                                          ? File(imagePath)
+                                          : null;
+                                      return GestureDetector(
+                                        onTap: () async {
+                                          final hasVariants =
+                                              weapon.variants != null &&
+                                              weapon.variants!.isNotEmpty;
+                                          // Check if we've previously selected a variant for this weapon
+                                          String? variantWeaponId;
+                                          if (hasVariants) {
+                                            variantWeaponId =
+                                                _weaponVariantSelections[weapon
+                                                    .id] ??
+                                                weapon.variants!.first.weaponId;
+                                          }
+                                          final settings =
+                                              await DataTableService.getWeaponSettings(
+                                                weapon,
+                                                variantWeaponId:
+                                                    variantWeaponId,
+                                              );
+                                          setState(() {
+                                            _selectedWeaponId = weapon.id;
+                                            _selectedVariantWeaponId =
+                                                variantWeaponId;
+                                            _selectedWeaponSettings = settings;
+                                          });
+                                        },
+                                        child: _HoverRegion(
+                                          builder: (context, hovered) =>
+                                              AnimatedScale(
+                                                duration: const Duration(
+                                                  milliseconds: 140,
+                                                ),
+                                                curve: Curves.easeOutCubic,
+                                                scale: hovered ? 1.03 : 1,
+                                                child: AnimatedContainer(
+                                                  duration: const Duration(
+                                                    milliseconds: 180,
+                                                  ),
+                                                  width: 140,
+                                                  height: 130,
+                                                  padding: const EdgeInsets.all(
+                                                    10,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          16,
+                                                        ),
+                                                    color: isSelected
+                                                        ? Theme.of(context)
+                                                              .colorScheme
+                                                              .secondary
+                                                              .withOpacity(0.18)
+                                                        : Colors.black
+                                                              .withOpacity(
+                                                                0.08,
+                                                              ),
+                                                    border: Border.all(
+                                                      color: isSelected
+                                                          ? Theme.of(context)
+                                                                .colorScheme
+                                                                .secondary
+                                                                .withOpacity(
+                                                                  0.6,
+                                                                )
+                                                          : _onSurface(
+                                                              context,
+                                                              0.12,
+                                                            ),
                                                     ),
                                                   ),
-                                                const SizedBox(height: 8),
-                                                Text(
-                                                  weapon.name,
-                                                  textAlign: TextAlign.center,
-                                                  style: Theme.of(
-                                                    context,
-                                                  ).textTheme.bodySmall,
-                                                  maxLines: 2,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
+                                                  child: Column(
+                                                    mainAxisAlignment:
+                                                        MainAxisAlignment
+                                                            .center,
+                                                    children: [
+                                                      if (imageFile != null &&
+                                                          imageFile
+                                                              .existsSync())
+                                                        _HoverShadow(
+                                                          opacity: 0.75,
+                                                          blurSigma: 2,
+                                                          baseOffset:
+                                                              const Offset(
+                                                                0,
+                                                                2,
+                                                              ),
+                                                          hoverOffset:
+                                                              const Offset(
+                                                                4,
+                                                                2,
+                                                              ),
+                                                          hovered: hovered,
+                                                          child: Image.file(
+                                                            imageFile,
+                                                            width: 52,
+                                                            height: 52,
+                                                            fit: BoxFit.contain,
+                                                          ),
+                                                        )
+                                                      else
+                                                        _HoverShadow(
+                                                          opacity: 0.75,
+                                                          blurSigma: 2,
+                                                          baseOffset:
+                                                              const Offset(
+                                                                0,
+                                                                2,
+                                                              ),
+                                                          hoverOffset:
+                                                              const Offset(
+                                                                4,
+                                                                2,
+                                                              ),
+                                                          hovered: hovered,
+                                                          child: Icon(
+                                                            Icons
+                                                                .sports_esports,
+                                                            size: 38,
+                                                            color:
+                                                                Theme.of(
+                                                                      context,
+                                                                    )
+                                                                    .colorScheme
+                                                                    .secondary,
+                                                          ),
+                                                        ),
+                                                      const SizedBox(height: 8),
+                                                      Text(
+                                                        weapon.name,
+                                                        textAlign:
+                                                            TextAlign.center,
+                                                        style: Theme.of(
+                                                          context,
+                                                        ).textTheme.bodySmall,
+                                                        maxLines: 2,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ],
+                                                  ),
                                                 ),
-                                              ],
-                                            ),
-                                          ),
+                                              ),
                                         ),
+                                      );
+                                    }).toList(),
                                   ),
-                                );
-                              }).toList(),
-                            ),
-                            if (_selectedWeaponId != null &&
-                                _selectedWeaponSettings != null) ...[
-                              const SizedBox(height: 20),
-                              _buildWeaponSettings(),
-                            ],
-                          ],
-                        ),
-                ],
+                                  if (_selectedWeaponId != null &&
+                                      _selectedWeaponSettings != null) ...[
+                                    const SizedBox(height: 20),
+                                    _buildWeaponSettings(),
+                                  ],
+                                ],
+                              ),
+                      ],
                     ],
-              ],
-            );
+                  ],
+                );
 
                 if (!isWide) return contentPanel;
 
@@ -4705,7 +5046,7 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     final hasDamageFields = weapon.damageFields.isNotEmpty;
     final hasEnvDamageFields = weapon.environmentalDamageFields.isNotEmpty;
     final hasClipSize = weapon.clipSize != null;
-    final hasReloadTime = hasVariants 
+    final hasReloadTime = hasVariants
         ? (currentVariant?.reloadTime != null)
         : false;
 
@@ -4805,50 +5146,51 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
           ),
           const SizedBox(height: 12),
         ],
-        if (hasDamageFields) SwitchListTile(
-          value: settings.damageEnabled,
-          onChanged: (value) async {
-            if (value) {
-              // Prompt for damage value
-              final promptedValue = await _promptValue(
-                context,
-                'Damage',
-                defaultValue: displayDefaultDamage,
-              );
-              if (promptedValue == null) return;
-              final newSettings = settings.copyWith(
-                damageEnabled: value,
-                damageValue: promptedValue,
-              );
-              await DataTableService.applyWeaponSettings(
-                weapon,
-                newSettings,
-                variantWeaponId: _selectedVariantWeaponId,
-              );
-              final updated = await DataTableService.getWeaponSettings(
-                weapon,
-                variantWeaponId: _selectedVariantWeaponId,
-              );
-              setState(() => _selectedWeaponSettings = updated);
-            } else {
-              final newSettings = settings.copyWith(damageEnabled: value);
-              await DataTableService.applyWeaponSettings(
-                weapon,
-                newSettings,
-                variantWeaponId: _selectedVariantWeaponId,
-              );
-              final updated = await DataTableService.getWeaponSettings(
-                weapon,
-                variantWeaponId: _selectedVariantWeaponId,
-              );
-              setState(() => _selectedWeaponSettings = updated);
-            }
-          },
-          title: const Text('Damage'),
-          subtitle: settings.damageEnabled && !settings.advancedMode
-              ? Text('Current value: ${settings.damageValue}')
-              : const Text('Enable custom damage values'),
-        ),
+        if (hasDamageFields)
+          SwitchListTile(
+            value: settings.damageEnabled,
+            onChanged: (value) async {
+              if (value) {
+                // Prompt for damage value
+                final promptedValue = await _promptValue(
+                  context,
+                  'Damage',
+                  defaultValue: displayDefaultDamage,
+                );
+                if (promptedValue == null) return;
+                final newSettings = settings.copyWith(
+                  damageEnabled: value,
+                  damageValue: promptedValue,
+                );
+                await DataTableService.applyWeaponSettings(
+                  weapon,
+                  newSettings,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
+                final updated = await DataTableService.getWeaponSettings(
+                  weapon,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
+                setState(() => _selectedWeaponSettings = updated);
+              } else {
+                final newSettings = settings.copyWith(damageEnabled: value);
+                await DataTableService.applyWeaponSettings(
+                  weapon,
+                  newSettings,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
+                final updated = await DataTableService.getWeaponSettings(
+                  weapon,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
+                setState(() => _selectedWeaponSettings = updated);
+              }
+            },
+            title: const Text('Damage'),
+            subtitle: settings.damageEnabled && !settings.advancedMode
+                ? Text('Current value: ${settings.damageValue}')
+                : const Text('Enable custom damage values'),
+          ),
         if (settings.damageEnabled && !settings.advancedMode) ...[
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -4880,50 +5222,51 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
           ),
           const SizedBox(height: 8),
         ],
-        if (hasEnvDamageFields) SwitchListTile(
-          value: settings.envDamageEnabled,
-          onChanged: (value) async {
-            if (value) {
-              // Prompt for environmental damage value
-              final promptedValue = await _promptValue(
-                context,
-                'Environmental Damage',
-                defaultValue: displayDefaultEnvDamage,
-              );
-              if (promptedValue == null) return;
-              final newSettings = settings.copyWith(
-                envDamageEnabled: value,
-                envDamageValue: promptedValue,
-              );
-              await DataTableService.applyWeaponSettings(
-                weapon,
-                newSettings,
-                variantWeaponId: _selectedVariantWeaponId,
-              );
-              final updated = await DataTableService.getWeaponSettings(
-                weapon,
-                variantWeaponId: _selectedVariantWeaponId,
-              );
-              setState(() => _selectedWeaponSettings = updated);
-            } else {
-              final newSettings = settings.copyWith(envDamageEnabled: value);
-              await DataTableService.applyWeaponSettings(
-                weapon,
-                newSettings,
-                variantWeaponId: _selectedVariantWeaponId,
-              );
-              final updated = await DataTableService.getWeaponSettings(
-                weapon,
-                variantWeaponId: _selectedVariantWeaponId,
-              );
-              setState(() => _selectedWeaponSettings = updated);
-            }
-          },
-          title: const Text('Environmental Damage'),
-          subtitle: settings.envDamageEnabled && !settings.advancedMode
-              ? Text('Current value: ${settings.envDamageValue}')
-              : const Text('Enable custom environmental damage'),
-        ),
+        if (hasEnvDamageFields)
+          SwitchListTile(
+            value: settings.envDamageEnabled,
+            onChanged: (value) async {
+              if (value) {
+                // Prompt for environmental damage value
+                final promptedValue = await _promptValue(
+                  context,
+                  'Environmental Damage',
+                  defaultValue: displayDefaultEnvDamage,
+                );
+                if (promptedValue == null) return;
+                final newSettings = settings.copyWith(
+                  envDamageEnabled: value,
+                  envDamageValue: promptedValue,
+                );
+                await DataTableService.applyWeaponSettings(
+                  weapon,
+                  newSettings,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
+                final updated = await DataTableService.getWeaponSettings(
+                  weapon,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
+                setState(() => _selectedWeaponSettings = updated);
+              } else {
+                final newSettings = settings.copyWith(envDamageEnabled: value);
+                await DataTableService.applyWeaponSettings(
+                  weapon,
+                  newSettings,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
+                final updated = await DataTableService.getWeaponSettings(
+                  weapon,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
+                setState(() => _selectedWeaponSettings = updated);
+              }
+            },
+            title: const Text('Environmental Damage'),
+            subtitle: settings.envDamageEnabled && !settings.advancedMode
+                ? Text('Current value: ${settings.envDamageValue}')
+                : const Text('Enable custom environmental damage'),
+          ),
         if (settings.envDamageEnabled && !settings.advancedMode) ...[
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -4955,50 +5298,51 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
           ),
           const SizedBox(height: 8),
         ],
-        if (hasClipSize) SwitchListTile(
-          value: settings.clipSizeEnabled,
-          onChanged: (value) async {
-            if (value) {
-              // Prompt for clip size value
-              final promptedValue = await _promptValue(
-                context,
-                'Clip Size',
-                defaultValue: displayDefaultClipSize,
-              );
-              if (promptedValue == null) return;
-              final newSettings = settings.copyWith(
-                clipSizeEnabled: value,
-                clipSizeValue: promptedValue,
-              );
-              await DataTableService.applyWeaponSettings(
-                weapon,
-                newSettings,
-                variantWeaponId: _selectedVariantWeaponId,
-              );
-              final updated = await DataTableService.getWeaponSettings(
-                weapon,
-                variantWeaponId: _selectedVariantWeaponId,
-              );
-              setState(() => _selectedWeaponSettings = updated);
-            } else {
-              final newSettings = settings.copyWith(clipSizeEnabled: value);
-              await DataTableService.applyWeaponSettings(
-                weapon,
-                newSettings,
-                variantWeaponId: _selectedVariantWeaponId,
-              );
-              final updated = await DataTableService.getWeaponSettings(
-                weapon,
-                variantWeaponId: _selectedVariantWeaponId,
-              );
-              setState(() => _selectedWeaponSettings = updated);
-            }
-          },
-          title: const Text('Clip Size'),
-          subtitle: settings.clipSizeEnabled
-              ? Text('Current value: ${settings.clipSizeValue}')
-              : const Text('Enable custom clip size'),
-        ),
+        if (hasClipSize)
+          SwitchListTile(
+            value: settings.clipSizeEnabled,
+            onChanged: (value) async {
+              if (value) {
+                // Prompt for clip size value
+                final promptedValue = await _promptValue(
+                  context,
+                  'Clip Size',
+                  defaultValue: displayDefaultClipSize,
+                );
+                if (promptedValue == null) return;
+                final newSettings = settings.copyWith(
+                  clipSizeEnabled: value,
+                  clipSizeValue: promptedValue,
+                );
+                await DataTableService.applyWeaponSettings(
+                  weapon,
+                  newSettings,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
+                final updated = await DataTableService.getWeaponSettings(
+                  weapon,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
+                setState(() => _selectedWeaponSettings = updated);
+              } else {
+                final newSettings = settings.copyWith(clipSizeEnabled: value);
+                await DataTableService.applyWeaponSettings(
+                  weapon,
+                  newSettings,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
+                final updated = await DataTableService.getWeaponSettings(
+                  weapon,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
+                setState(() => _selectedWeaponSettings = updated);
+              }
+            },
+            title: const Text('Clip Size'),
+            subtitle: settings.clipSizeEnabled
+                ? Text('Current value: ${settings.clipSizeValue}')
+                : const Text('Enable custom clip size'),
+          ),
         if (settings.clipSizeEnabled) ...[
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -5030,50 +5374,51 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
           ),
           const SizedBox(height: 8),
         ],
-        if (hasReloadTime) SwitchListTile(
-          value: settings.reloadTimeEnabled,
-          onChanged: (value) async {
-            if (value) {
-              // Prompt for reload time value
-              final promptedValue = await _promptValue(
-                context,
-                'Reload Time',
-                defaultValue: displayDefaultReloadTime,
-              );
-              if (promptedValue == null) return;
-              final newSettings = settings.copyWith(
-                reloadTimeEnabled: value,
-                reloadTimeValue: promptedValue,
-              );
-              await DataTableService.applyWeaponSettings(
-                weapon,
-                newSettings,
-                variantWeaponId: _selectedVariantWeaponId,
-              );
-              final updated = await DataTableService.getWeaponSettings(
-                weapon,
-                variantWeaponId: _selectedVariantWeaponId,
-              );
-              setState(() => _selectedWeaponSettings = updated);
-            } else {
-              final newSettings = settings.copyWith(reloadTimeEnabled: value);
-              await DataTableService.applyWeaponSettings(
-                weapon,
-                newSettings,
-                variantWeaponId: _selectedVariantWeaponId,
-              );
-              final updated = await DataTableService.getWeaponSettings(
-                weapon,
-                variantWeaponId: _selectedVariantWeaponId,
-              );
-              setState(() => _selectedWeaponSettings = updated);
-            }
-          },
-          title: const Text('Reload Time'),
-          subtitle: settings.reloadTimeEnabled
-              ? Text('Current value: ${settings.reloadTimeValue}')
-              : const Text('Enable custom reload time'),
-        ),
+        if (hasReloadTime)
+          SwitchListTile(
+            value: settings.reloadTimeEnabled,
+            onChanged: (value) async {
+              if (value) {
+                // Prompt for reload time value
+                final promptedValue = await _promptValue(
+                  context,
+                  'Reload Time',
+                  defaultValue: displayDefaultReloadTime,
+                );
+                if (promptedValue == null) return;
+                final newSettings = settings.copyWith(
+                  reloadTimeEnabled: value,
+                  reloadTimeValue: promptedValue,
+                );
+                await DataTableService.applyWeaponSettings(
+                  weapon,
+                  newSettings,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
+                final updated = await DataTableService.getWeaponSettings(
+                  weapon,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
+                setState(() => _selectedWeaponSettings = updated);
+              } else {
+                final newSettings = settings.copyWith(reloadTimeEnabled: value);
+                await DataTableService.applyWeaponSettings(
+                  weapon,
+                  newSettings,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
+                final updated = await DataTableService.getWeaponSettings(
+                  weapon,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
+                setState(() => _selectedWeaponSettings = updated);
+              }
+            },
+            title: const Text('Reload Time'),
+            subtitle: settings.reloadTimeEnabled
+                ? Text('Current value: ${settings.reloadTimeValue}')
+                : const Text('Enable custom reload time'),
+          ),
         if (settings.reloadTimeEnabled) ...[
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -5105,79 +5450,82 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
           ),
           const SizedBox(height: 8),
         ],
-        if (hasDamageFields || hasEnvDamageFields) SwitchListTile(
-          value: settings.advancedMode,
-          onChanged: (value) async {
-            if (value) {
-              // Collect all relevant fields
-              final allFields = <String>[];
-              if (settings.damageEnabled) {
-                allFields.addAll(weapon.damageFields);
-              }
-              if (settings.envDamageEnabled) {
-                allFields.addAll(weapon.environmentalDamageFields);
-              }
+        if (hasDamageFields || hasEnvDamageFields)
+          SwitchListTile(
+            value: settings.advancedMode,
+            onChanged: (value) async {
+              if (value) {
+                // Collect all relevant fields
+                final allFields = <String>[];
+                if (settings.damageEnabled) {
+                  allFields.addAll(weapon.damageFields);
+                }
+                if (settings.envDamageEnabled) {
+                  allFields.addAll(weapon.environmentalDamageFields);
+                }
 
-              if (allFields.isEmpty) {
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Enable Damage or Environmental Damage first.',
+                if (allFields.isEmpty) {
+                  if (!mounted) return;
+                  showAtlasSnackBar(
+                    context,
+                    const SnackBar(
+                      content: Text(
+                        'Enable Damage or Environmental Damage first.',
+                      ),
                     ),
-                  ),
+                  );
+                  return;
+                }
+
+                // Determine default values based on what's enabled
+                String defaultValue = displayDefaultDamage;
+                if (settings.damageEnabled && !settings.envDamageEnabled) {
+                  defaultValue = displayDefaultDamage;
+                } else if (!settings.damageEnabled &&
+                    settings.envDamageEnabled) {
+                  defaultValue = displayDefaultEnvDamage;
+                }
+
+                final values = await _promptAdvancedSettings(
+                  context,
+                  allFields,
+                  settings.customValues,
+                  defaultValue,
                 );
-                return;
+                if (values == null) return;
+
+                final newSettings = settings.copyWith(
+                  advancedMode: value,
+                  customValues: values,
+                );
+                await DataTableService.applyWeaponSettings(
+                  weapon,
+                  newSettings,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
+                final updated = await DataTableService.getWeaponSettings(
+                  weapon,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
+                setState(() => _selectedWeaponSettings = updated);
+              } else {
+                final newSettings = settings.copyWith(advancedMode: value);
+                // Re-apply settings to use simple mode values
+                await DataTableService.applyWeaponSettings(
+                  weapon,
+                  newSettings,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
+                final updated = await DataTableService.getWeaponSettings(
+                  weapon,
+                  variantWeaponId: _selectedVariantWeaponId,
+                );
+                setState(() => _selectedWeaponSettings = updated);
               }
-
-              // Determine default values based on what's enabled
-              String defaultValue = displayDefaultDamage;
-              if (settings.damageEnabled && !settings.envDamageEnabled) {
-                defaultValue = displayDefaultDamage;
-              } else if (!settings.damageEnabled && settings.envDamageEnabled) {
-                defaultValue = displayDefaultEnvDamage;
-              }
-
-              final values = await _promptAdvancedSettings(
-                context,
-                allFields,
-                settings.customValues,
-                defaultValue,
-              );
-              if (values == null) return;
-
-              final newSettings = settings.copyWith(
-                advancedMode: value,
-                customValues: values,
-              );
-              await DataTableService.applyWeaponSettings(
-                weapon,
-                newSettings,
-                variantWeaponId: _selectedVariantWeaponId,
-              );
-              final updated = await DataTableService.getWeaponSettings(
-                weapon,
-                variantWeaponId: _selectedVariantWeaponId,
-              );
-              setState(() => _selectedWeaponSettings = updated);
-            } else {
-              final newSettings = settings.copyWith(advancedMode: value);
-              // Re-apply settings to use simple mode values
-              await DataTableService.applyWeaponSettings(
-                weapon,
-                newSettings,
-                variantWeaponId: _selectedVariantWeaponId,
-              );
-              final updated = await DataTableService.getWeaponSettings(
-                weapon,
-                variantWeaponId: _selectedVariantWeaponId,
-              );
-              setState(() => _selectedWeaponSettings = updated);
-            }
-          },
-          title: const Text('Advanced Settings'),
-          subtitle: const Text('Customize each damage field individually'),
-        ),
+            },
+            title: const Text('Advanced Settings'),
+            subtitle: const Text('Customize each damage field individually'),
+          ),
         if (settings.advancedMode) ...[
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -5290,7 +5638,8 @@ class _CurveTablesScreenState extends State<CurveTablesScreen> {
       } else {
         if (!isValidNumeric(valueText)) {
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
+          showAtlasSnackBar(
+            context,
             const SnackBar(content: Text('Enter a valid numeric value.')),
           );
           return;
@@ -5316,7 +5665,8 @@ class _CurveTablesScreenState extends State<CurveTablesScreen> {
     ).hasMatch(newValue.trim());
     if (!isValid) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAtlasSnackBar(
+        context,
         const SnackBar(content: Text('Enter a valid numeric value.')),
       );
       return;
@@ -5660,150 +6010,150 @@ class _ArenaScreenState extends State<ArenaScreen> {
               ],
             ),
             child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Full Leaderboard',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : Colors.black,
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 50,
-                      child: Text(
-                        'Rank',
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Full Leaderboard',
                         style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey.shade500,
+                          fontSize: 18,
                           fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : Colors.black,
                         ),
                       ),
-                    ),
-                    Expanded(
-                      child: Text(
-                        'Name',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey.shade500,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.of(context).pop(),
                       ),
-                    ),
-                    Text(
-                      'Points',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey.shade500,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Expanded(
-                child: ListView.builder(
+                Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: _leaderboard.length,
-                  itemBuilder: (context, index) {
-                    final entry = _leaderboard[index];
-                    final rank = index + 1;
-
-                    Color? rankColor;
-                    FontWeight rankWeight = FontWeight.bold;
-                    double rankSize = 14;
-
-                    if (rank == 1) {
-                      rankColor = const Color(0xFFD4AF37); // Gold
-                      rankWeight = FontWeight.w900;
-                      rankSize = 16;
-                    } else if (rank == 2) {
-                      rankColor = const Color(0xFFC0C0C0); // Silver
-                      rankWeight = FontWeight.w900;
-                      rankSize = 16;
-                    } else if (rank == 3) {
-                      rankColor = const Color(0xFFCD7F32); // Bronze
-                      rankWeight = FontWeight.w900;
-                      rankSize = 16;
-                    } else {
-                      rankColor = isDark
-                          ? Colors.grey.shade300
-                          : Colors.grey.shade700;
-                    }
-
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color:
-                              (isDark
-                                      ? Colors.grey.shade800
-                                      : Colors.grey.shade100)
-                                  .withOpacity(0.5),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 12,
-                        ),
-                        child: Row(
-                          children: [
-                            SizedBox(
-                              width: 50,
-                              child: Text(
-                                '#$rank',
-                                style: TextStyle(
-                                  fontWeight: rankWeight,
-                                  fontSize: rankSize,
-                                  color: rankColor,
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              child: Text(
-                                entry.accountId,
-                                style: TextStyle(
-                                  color: isDark
-                                      ? Colors.white70
-                                      : Colors.black87,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            Text(
-                              '${entry.hype}',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: isDark
-                                    ? Colors.orangeAccent
-                                    : Colors.orange.shade700,
-                              ),
-                            ),
-                          ],
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 50,
+                        child: Text(
+                          'Rank',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade500,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
-                    );
-                  },
+                      Expanded(
+                        child: Text(
+                          'Name',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade500,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        'Points',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.shade500,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 8),
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: _leaderboard.length,
+                    itemBuilder: (context, index) {
+                      final entry = _leaderboard[index];
+                      final rank = index + 1;
+
+                      Color? rankColor;
+                      FontWeight rankWeight = FontWeight.bold;
+                      double rankSize = 14;
+
+                      if (rank == 1) {
+                        rankColor = const Color(0xFFD4AF37); // Gold
+                        rankWeight = FontWeight.w900;
+                        rankSize = 16;
+                      } else if (rank == 2) {
+                        rankColor = const Color(0xFFC0C0C0); // Silver
+                        rankWeight = FontWeight.w900;
+                        rankSize = 16;
+                      } else if (rank == 3) {
+                        rankColor = const Color(0xFFCD7F32); // Bronze
+                        rankWeight = FontWeight.w900;
+                        rankSize = 16;
+                      } else {
+                        rankColor = isDark
+                            ? Colors.grey.shade300
+                            : Colors.grey.shade700;
+                      }
+
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color:
+                                (isDark
+                                        ? Colors.grey.shade800
+                                        : Colors.grey.shade100)
+                                    .withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12,
+                          ),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 50,
+                                child: Text(
+                                  '#$rank',
+                                  style: TextStyle(
+                                    fontWeight: rankWeight,
+                                    fontSize: rankSize,
+                                    color: rankColor,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  entry.accountId,
+                                  style: TextStyle(
+                                    color: isDark
+                                        ? Colors.white70
+                                        : Colors.black87,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              Text(
+                                '${entry.hype}',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark
+                                      ? Colors.orangeAccent
+                                      : Colors.orange.shade700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -7005,7 +7355,8 @@ class _DataManagementPanelState extends State<DataManagementPanel> {
     final backendRoot = getBackendRoot();
     if (!Directory(backendRoot).existsSync()) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAtlasSnackBar(
+        context,
         const SnackBar(content: Text('Backend folder not found.')),
       );
       return;
@@ -7014,7 +7365,8 @@ class _DataManagementPanelState extends State<DataManagementPanel> {
       await Process.start('explorer', [backendRoot], runInShell: true);
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAtlasSnackBar(
+        context,
         const SnackBar(content: Text('Failed to open backend folder.')),
       );
     }
@@ -7024,7 +7376,8 @@ class _DataManagementPanelState extends State<DataManagementPanel> {
     final exportsPath = joinPath([getBackendRoot(), 'exports']);
     if (!Directory(exportsPath).existsSync()) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAtlasSnackBar(
+        context,
         const SnackBar(content: Text('Exports folder not found.')),
       );
       return;
@@ -7033,7 +7386,8 @@ class _DataManagementPanelState extends State<DataManagementPanel> {
       await Process.start('explorer', [exportsPath], runInShell: true);
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAtlasSnackBar(
+        context,
         const SnackBar(content: Text('Failed to open exports folder.')),
       );
     }
@@ -7186,7 +7540,8 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
         _loading = false;
         _hasAnyUsers = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAtlasSnackBar(
+        context,
         SnackBar(content: Text('Failed to load profiles: $error')),
       );
     }
@@ -7218,9 +7573,10 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   Future<_CreateUserResult?> _showCreateUserDialog() async {
     if (_presets.isEmpty) {
       if (!mounted) return null;
-      ScaffoldMessenger.of(
+      showAtlasSnackBar(
         context,
-      ).showSnackBar(const SnackBar(content: Text('No presets found.')));
+        const SnackBar(content: Text('No presets found.')),
+      );
       return null;
     }
 
@@ -7330,7 +7686,8 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       await _load();
       if (!mounted) return;
       setState(() => _selectedProfile = result.accountId);
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAtlasSnackBar(
+        context,
         SnackBar(
           content: Text(
             'Created "${result.accountId}" with preset "${result.presetFolder}".',
@@ -7339,9 +7696,10 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
+      showAtlasSnackBar(
         context,
-      ).showSnackBar(SnackBar(content: Text('Failed to create user: $error')));
+        SnackBar(content: Text('Failed to create user: $error')),
+      );
     }
   }
 
@@ -7357,7 +7715,8 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       }
     }
     if (preset == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAtlasSnackBar(
+        context,
         const SnackBar(
           content: Text(
             'Selected preset no longer exists. Refresh and try again.',
@@ -7374,16 +7733,18 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     try {
       await ProfileService.applyPreset(profileId, presetFolder);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAtlasSnackBar(
+        context,
         SnackBar(
           content: Text('Applied "${preset.displayName}" to $profileId'),
         ),
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
+      showAtlasSnackBar(
         context,
-      ).showSnackBar(SnackBar(content: Text('Failed to apply preset: $error')));
+        SnackBar(content: Text('Failed to apply preset: $error')),
+      );
     }
   }
 
@@ -7398,7 +7759,8 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       }
     }
     if (preset == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAtlasSnackBar(
+        context,
         const SnackBar(
           content: Text(
             'Selected preset no longer exists. Refresh and try again.',
@@ -7415,7 +7777,8 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     try {
       final applied = await ProfileService.applyPresetToAll(presetFolder);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAtlasSnackBar(
+        context,
         SnackBar(
           content: Text(
             'Applied "${preset.displayName}" to $applied profile(s).',
@@ -7424,7 +7787,8 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAtlasSnackBar(
+        context,
         SnackBar(
           content: Text('Failed to apply preset to all profiles: $error'),
         ),
@@ -7489,7 +7853,9 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent,
+              ),
               onPressed: (deleteProfile || deleteClientSettings)
                   ? () => Navigator.of(stateContext).pop({
                       'profile': deleteProfile,
@@ -7516,12 +7882,14 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       );
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(
+      showAtlasSnackBar(
         context,
-      ).showSnackBar(SnackBar(content: Text('Deleted profile "$profileId".')));
+        SnackBar(content: Text('Deleted profile "$profileId".')),
+      );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAtlasSnackBar(
+        context,
         SnackBar(content: Text('Failed to delete profile: $error')),
       );
     }
@@ -7568,7 +7936,9 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent,
+              ),
               onPressed: (deleteProfiles || deleteClientSettings)
                   ? () => Navigator.of(stateContext).pop({
                       'profiles': deleteProfiles,
@@ -7594,12 +7964,14 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       );
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(
+      showAtlasSnackBar(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Deleted all profiles.')));
+        const SnackBar(content: Text('Deleted all profiles.')),
+      );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAtlasSnackBar(
+        context,
         SnackBar(content: Text('Failed to delete all profiles: $error')),
       );
     }
@@ -7614,7 +7986,8 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     ]);
     if (!Directory(clientSettingsPath).existsSync()) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAtlasSnackBar(
+        context,
         const SnackBar(content: Text('ClientSettings folder not found.')),
       );
       return;
@@ -7623,7 +7996,8 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       await Process.start('explorer', [clientSettingsPath], runInShell: true);
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAtlasSnackBar(
+        context,
         const SnackBar(content: Text('Failed to open Client Settings folder.')),
       );
     }
@@ -7638,7 +8012,8 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     ]);
     if (!Directory(profilePath).existsSync()) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAtlasSnackBar(
+        context,
         const SnackBar(content: Text('Profile folder not found.')),
       );
       return;
@@ -7647,7 +8022,8 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       await Process.start('explorer', [profilePath], runInShell: true);
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAtlasSnackBar(
+        context,
         const SnackBar(content: Text('Failed to open Profile folder.')),
       );
     }
@@ -7691,7 +8067,8 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
 
     if (!profileFolderExists && !clientSettingsFolderExists) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAtlasSnackBar(
+        context,
         const SnackBar(
           content: Text('No profile or client settings found to export.'),
         ),
@@ -7805,12 +8182,11 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       await tempDir.delete(recursive: true);
 
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Exported: $zipPath')));
+      showAtlasSnackBar(context, SnackBar(content: Text('Exported: $zipPath')));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAtlasSnackBar(
+        context,
         SnackBar(content: Text('Failed to export settings: $error')),
       );
     }
@@ -7881,21 +8257,24 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
 
       if (!mounted) return;
       if (matched.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        showAtlasSnackBar(
+          context,
           const SnackBar(content: Text('No valid profiles found in zip.')),
         );
         return;
       }
 
       await _load();
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAtlasSnackBar(
+        context,
         SnackBar(content: Text('Imported ${matched.length} profile(s).')),
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
+      showAtlasSnackBar(
         context,
-      ).showSnackBar(SnackBar(content: Text('Failed to import zip: $error')));
+        SnackBar(content: Text('Failed to import zip: $error')),
+      );
     }
   }
 
@@ -8420,7 +8799,8 @@ class _UserValuesScreenState extends State<UserValuesScreen> {
     if (!mounted) return;
     setState(() => _saving = false);
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    showAtlasSnackBar(
+      context,
       const SnackBar(content: Text('User values saved successfully!')),
     );
   }
@@ -8683,7 +9063,8 @@ class LogsScreen extends StatelessWidget {
                   ? null
                   : () {
                       Clipboard.setData(ClipboardData(text: allLogsText));
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      showAtlasSnackBar(
+                        context,
                         const SnackBar(
                           content: Text('Logs copied to clipboard'),
                         ),
@@ -9110,32 +9491,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             _SectionTitle(title: title),
             const SizedBox(height: 16),
-             SwitchListTile(
-               value: _useDarkMode,
-               onChanged: _updateTheme,
-               title: const Text('Dark mode'),
-               subtitle: const Text('Toggle between dark and light themes.'),
-             ),
-             const SizedBox(height: 8),
-             SwitchListTile(
-                 value: _dialogBlurEnabled,
-                 onChanged: _updateDialogBlur,
-                 title: const Text('Popup background blur'),
-               subtitle: const Text('Blur the background behind popups.'),
-             ),
-             const SizedBox(height: 8),
-             SwitchListTile(
-               value: _startupAnimationEnabled,
-               onChanged: _updateStartupAnimationEnabled,
-               title: const Text('Startup animation'),
-               subtitle: const Text(
-                 'Play the intro animation when ATLAS Backend launches.',
-               ),
-             ),
-             const SizedBox(height: 12),
-             ListTile(
-               title: const Text('Background image'),
-               subtitle: Text(
+            SwitchListTile(
+              value: _useDarkMode,
+              onChanged: _updateTheme,
+              title: const Text('Dark mode'),
+              subtitle: const Text('Toggle between dark and light themes.'),
+            ),
+            const SizedBox(height: 8),
+            SwitchListTile(
+              value: _dialogBlurEnabled,
+              onChanged: _updateDialogBlur,
+              title: const Text('Popup background blur'),
+              subtitle: const Text('Blur the background behind popups.'),
+            ),
+            const SizedBox(height: 8),
+            SwitchListTile(
+              value: _startupAnimationEnabled,
+              onChanged: _updateStartupAnimationEnabled,
+              title: const Text('Startup animation'),
+              subtitle: const Text(
+                'Play the intro animation when ATLAS Backend launches.',
+              ),
+            ),
+            const SizedBox(height: 12),
+            ListTile(
+              title: const Text('Background image'),
+              subtitle: Text(
                 _backgroundSubtitle(),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -9165,8 +9546,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 12),
             Text('Background blur (${_backgroundBlur.toStringAsFixed(0)})'),
             const SizedBox(height: 6),
-             LayoutBuilder(
-               builder: (context, constraints) {
+            LayoutBuilder(
+              builder: (context, constraints) {
                 const min = 0.0;
                 const max = 30.0;
                 const defaultBlur = 15.0;
@@ -9224,7 +9605,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         min: min,
                         max: max,
                         divisions: 20,
-                        label: '${(_backgroundParticlesOpacity * 100).round()}%',
+                        label:
+                            '${(_backgroundParticlesOpacity * 100).round()}%',
                         onChanged: _updateBackgroundParticlesOpacity,
                       ),
                       Positioned(
@@ -9775,10 +10157,10 @@ class ProfileService {
 
   static double _parseVersion(String? versionTag) {
     if (versionTag == null || versionTag.isEmpty) return 0.0;
-    
+
     final cleanVersion = versionTag.replaceAll('v', '').replaceAll('+', '');
     if (cleanVersion.isEmpty) return 0.0;
-    
+
     try {
       return double.parse(cleanVersion);
     } catch (e) {
@@ -11184,8 +11566,10 @@ class DataTableService {
   static ({String editable, String protected}) _splitProtectedFixesBlock(
     String content,
   ) {
-    final match =
-        RegExp(r'^\s*#\s*Fixes\s*$', multiLine: true).firstMatch(content);
+    final match = RegExp(
+      r'^\s*#\s*Fixes\s*$',
+      multiLine: true,
+    ).firstMatch(content);
     if (match == null) return (editable: content, protected: '');
     return (
       editable: content.substring(0, match.start),
@@ -11743,8 +12127,9 @@ class ConfigService {
         gui['LastShownUpdateNotesVersion'] ?? '';
     final legacyParticlesEnabled =
         (map['BackgroundParticlesEnabled'] ?? 'true').toLowerCase() == 'true';
-    final parsedParticlesOpacity =
-        double.tryParse(map['BackgroundParticlesOpacity'] ?? '');
+    final parsedParticlesOpacity = double.tryParse(
+      map['BackgroundParticlesOpacity'] ?? '',
+    );
     final resolvedParticlesOpacity =
         parsedParticlesOpacity ?? (legacyParticlesEnabled ? 1.0 : 0.0);
     return ConfigSettings(
@@ -11784,7 +12169,9 @@ class ConfigService {
       ..writeln(
         'BackgroundParticlesEnabled=${settings.backgroundParticlesOpacity > 0}',
       )
-      ..writeln('BackgroundParticlesOpacity=${settings.backgroundParticlesOpacity}')
+      ..writeln(
+        'BackgroundParticlesOpacity=${settings.backgroundParticlesOpacity}',
+      )
       ..writeln('DialogBlurEnabled=${settings.dialogBlurEnabled}')
       ..writeln('StartupAnimationEnabled=${settings.startupAnimationEnabled}')
       ..writeln(
@@ -11975,7 +12362,10 @@ class UpdateService {
     ValueNotifier<double>? progress,
   ) async {
     if (info.isInstaller) {
-      final installerFile = await _downloadInstaller(info.downloadUrl, progress);
+      final installerFile = await _downloadInstaller(
+        info.downloadUrl,
+        progress,
+      );
       final lowerPath = installerFile.path.toLowerCase();
       if (lowerPath.endsWith('.msi')) {
         await Process.start('msiexec', [
@@ -12175,10 +12565,12 @@ class UpdateService {
     if (normalized.startsWith('node_modules/')) return true;
     if (normalized.startsWith('exports/')) return true;
     if (normalized.startsWith('responses/curves.json')) return true;
+    if (normalized.startsWith('responses/datatables.json')) return true;
     if (normalized.startsWith('responses/datatables-ui.json')) return true;
     if (normalized.startsWith('responses/modifications-backup.json')) {
       return true;
     }
+    if (normalized.startsWith('responses/sniper.json')) return true;
     if (normalized.startsWith('src/config/config.ini')) return true;
     if (normalized.startsWith('public/items/custom-groups/')) return true;
     if (normalized.startsWith('static/hotfixes/DefaultGame.ini')) return true;
@@ -12340,13 +12732,17 @@ class UpdateBackupService {
       _BackupEntry.file(
         joinPath([backendRoot, 'static', 'hotfixes', 'DefaultGame.ini']),
       ),
-      // Don't backup curves.json - let new version provide updated curves
+      _BackupEntry.file(joinPath([backendRoot, 'responses', 'curves.json'])),
+      _BackupEntry.file(
+        joinPath([backendRoot, 'responses', 'datatables.json']),
+      ),
       _BackupEntry.file(
         joinPath([backendRoot, 'responses', 'modifications-backup.json']),
       ),
       _BackupEntry.file(
         joinPath([backendRoot, 'responses', 'datatables-ui.json']),
       ),
+      _BackupEntry.file(joinPath([backendRoot, 'responses', 'sniper.json'])),
       _BackupEntry.file(joinPath([backendRoot, 'src', 'config', 'config.ini'])),
       _BackupEntry.dir(
         joinPath([backendRoot, 'public', 'items', 'custom-groups']),
@@ -12407,12 +12803,20 @@ class UpdateBackupService {
       _BackupEntry.file(
         joinPath([backupRoot.path, 'static', 'hotfixes', 'DefaultGame.ini']),
       ),
-      // Don't restore curves.json - keep new version's curves with new entries
+      _BackupEntry.file(
+        joinPath([backupRoot.path, 'responses', 'curves.json']),
+      ),
+      _BackupEntry.file(
+        joinPath([backupRoot.path, 'responses', 'datatables.json']),
+      ),
       _BackupEntry.file(
         joinPath([backupRoot.path, 'responses', 'modifications-backup.json']),
       ),
       _BackupEntry.file(
         joinPath([backupRoot.path, 'responses', 'datatables-ui.json']),
+      ),
+      _BackupEntry.file(
+        joinPath([backupRoot.path, 'responses', 'sniper.json']),
       ),
       _BackupEntry.file(
         joinPath([backupRoot.path, 'src', 'config', 'config.ini']),
@@ -12460,7 +12864,8 @@ class UpdateBackupService {
     await backupRoot.delete(recursive: true);
 
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAtlasSnackBar(
+        context,
         const SnackBar(content: Text('Restored data from previous version.')),
       );
     }
@@ -12731,9 +13136,10 @@ class DataService {
     appBackgroundParticlesOpacity.value = 1.0;
 
     if (context.mounted) {
-      ScaffoldMessenger.of(
+      showAtlasSnackBar(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Backend data cleared.')));
+        const SnackBar(content: Text('Backend data cleared.')),
+      );
     }
   }
 
@@ -12785,7 +13191,8 @@ class DataService {
       await _deleteIfEmpty(clientDir);
       await _deleteIfEmpty(defaultGameDir);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        showAtlasSnackBar(
+          context,
           const SnackBar(content: Text('No data found to export.')),
         );
       }
@@ -12811,7 +13218,8 @@ class DataService {
     final clientDir = Directory(joinPath([exportsRoot.path, 'ClientSettings']));
     if (!await _hasExistingExport(defaultGameDir, profilesDir, clientDir)) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        showAtlasSnackBar(
+          context,
           const SnackBar(content: Text('No exported data found.')),
         );
       }
@@ -12850,7 +13258,8 @@ class DataService {
     }
 
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      showAtlasSnackBar(
+        context,
         const SnackBar(
           content: Text(
             'Import complete. Changes will be visible on next login.',
@@ -12869,9 +13278,10 @@ class DataService {
     final exportsRoot = Directory(joinPath([getBackendRoot(), 'exports']));
     await _clearDirectory(exportsRoot);
     if (context.mounted) {
-      ScaffoldMessenger.of(
+      showAtlasSnackBar(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Exported data cleared.')));
+        const SnackBar(content: Text('Exported data cleared.')),
+      );
     }
   }
 
@@ -13187,7 +13597,8 @@ Future<String?> _promptValue(
             onPressed: () {
               final value = controller.text.trim();
               if (value.isEmpty || !isValidNumeric(value)) {
-                ScaffoldMessenger.of(context).showSnackBar(
+                showAtlasSnackBar(
+                  context,
                   const SnackBar(content: Text('Enter a valid numeric value.')),
                 );
                 return;
@@ -13266,7 +13677,8 @@ Future<Map<String, String>?> _promptAdvancedSettings(
               for (final field in fields) {
                 final value = controllers[field]!.text.trim();
                 if (value.isEmpty || !isValidNumeric(value)) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  showAtlasSnackBar(
+                    context,
                     SnackBar(
                       content: Text('Enter a valid numeric value for $field.'),
                     ),
@@ -13385,7 +13797,10 @@ Future<void> _showModificationsIniImportSummary(
   required int curveLines,
   required int dataTableLines,
 }) async {
-  final curveSummary = _buildCurveImportSummaryLines(curveGrouped, curveMissing);
+  final curveSummary = _buildCurveImportSummaryLines(
+    curveGrouped,
+    curveMissing,
+  );
 
   await _showBlurDialog<void>(
     context: context,
@@ -13432,66 +13847,66 @@ Future<void> _showModificationsIniImportSummary(
             ? Text(
                 'Disabled in Modifications.',
                 style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
-                      color: _onSurface(dialogContext, 0.6),
-                    ),
+                  color: _onSurface(dialogContext, 0.6),
+                ),
               )
             : curveLines == 0
-                ? Text(
-                    'No CurveTable entries found.',
-                    style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
-                          color: _onSurface(dialogContext, 0.6),
-                        ),
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '${curveGrouped.length} CurveTable${curveGrouped.length == 1 ? '' : 's'} imported ($curveLines lines).',
-                      ),
-                      if (curveMissing.isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        Text('New entries: ${curveMissing.length}'),
-                      ],
-                      if (curveSummary.isNotEmpty) ...[
-                        const SizedBox(height: 10),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxHeight: 200),
-                            child: Scrollbar(
-                              controller: curveSummaryScrollController,
-                              thumbVisibility: true,
-                              thickness: 6,
-                              radius: const Radius.circular(12),
-                              child: SingleChildScrollView(
-                                controller: curveSummaryScrollController,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    for (final line in curveSummary)
-                                      Text(
-                                        '• $line',
-                                        style: Theme.of(dialogContext)
-                                            .textTheme
-                                            .bodySmall
-                                            ?.copyWith(
-                                              color: _onSurface(
-                                                dialogContext,
-                                                0.82,
-                                              ),
-                                            ),
-                                      ),
-                                  ],
-                                ),
-                              ),
+            ? Text(
+                'No CurveTable entries found.',
+                style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
+                  color: _onSurface(dialogContext, 0.6),
+                ),
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${curveGrouped.length} CurveTable${curveGrouped.length == 1 ? '' : 's'} imported ($curveLines lines).',
+                  ),
+                  if (curveMissing.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text('New entries: ${curveMissing.length}'),
+                  ],
+                  if (curveSummary.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 200),
+                        child: Scrollbar(
+                          controller: curveSummaryScrollController,
+                          thumbVisibility: true,
+                          thickness: 6,
+                          radius: const Radius.circular(12),
+                          child: SingleChildScrollView(
+                            controller: curveSummaryScrollController,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                for (final line in curveSummary)
+                                  Text(
+                                    '• $line',
+                                    style: Theme.of(dialogContext)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                          color: _onSurface(
+                                            dialogContext,
+                                            0.82,
+                                          ),
+                                        ),
+                                  ),
+                              ],
                             ),
                           ),
                         ),
-                      ],
-                    ],
-                  ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
       );
 
       final dataTablesCard = buildCard(
@@ -13501,32 +13916,31 @@ Future<void> _showModificationsIniImportSummary(
             ? Text(
                 'Disabled in Modifications.',
                 style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
-                      color: _onSurface(dialogContext, 0.6),
-                    ),
+                  color: _onSurface(dialogContext, 0.6),
+                ),
               )
             : dataTableLines == 0
-                ? Text(
-                    'No DataTable entries found.',
-                    style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
-                          color: _onSurface(dialogContext, 0.6),
-                        ),
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '$dataTableLines DataTable ${dataTableLines == 1 ? 'entry' : 'entries'} imported.',
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'You can view and edit these in the DataTables tab.',
-                        style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
-                              color: _onSurface(dialogContext, 0.72),
-                            ),
-                      ),
-                    ],
+            ? Text(
+                'No DataTable entries found.',
+                style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
+                  color: _onSurface(dialogContext, 0.6),
+                ),
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '$dataTableLines DataTable ${dataTableLines == 1 ? 'entry' : 'entries'} imported.',
                   ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'You can view and edit these in the DataTables tab.',
+                    style: Theme.of(dialogContext).textTheme.bodySmall
+                        ?.copyWith(color: _onSurface(dialogContext, 0.72)),
+                  ),
+                ],
+              ),
       );
 
       return AlertDialog(
@@ -13938,12 +14352,13 @@ Future<CustomDataTableInput?> _promptCustomDataTable(
   CustomDataTableInput? existingInput,
 }) async {
   // Determine which fields to show based on existing data
-  final bool hasDamageFields = existingInput == null || 
+  final bool hasDamageFields =
+      existingInput == null ||
       (existingInput.damagePB.isNotEmpty || existingInput.envDamage.isNotEmpty);
-  final bool hasClipSize = existingInput == null || 
-      (existingInput.clipSize?.isNotEmpty ?? false);
-  final bool hasReloadTime = existingInput == null || 
-      (existingInput.reloadTime?.isNotEmpty ?? false);
+  final bool hasClipSize =
+      existingInput == null || (existingInput.clipSize?.isNotEmpty ?? false);
+  final bool hasReloadTime =
+      existingInput == null || (existingInput.reloadTime?.isNotEmpty ?? false);
 
   final weaponNameController = TextEditingController(
     text: existingInput?.weaponName ?? '',
@@ -14007,7 +14422,7 @@ Future<CustomDataTableInput?> _promptCustomDataTable(
   // Helper to load values for a rarity
   void loadRarityValues(String rarity) {
     if (!hasDamageFields) return;
-    
+
     final values = rarityDamageValues[rarity];
     if (values != null) {
       damagePBController.text = values['damagePB'] ?? '50';
@@ -14084,50 +14499,51 @@ Future<CustomDataTableInput?> _promptCustomDataTable(
                   },
                 ),
                 const SizedBox(height: 12),
-                if (hasDamageFields) ...[DropdownButtonFormField<String>(
-                  value: selectedRarity,
-                  decoration: const InputDecoration(
-                    labelText: 'Rarity',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: rarities.map((rarity) {
-                    return DropdownMenuItem(
-                      value: rarity,
-                      child: Row(
-                        children: [
-                          Text(rarity),
-                          const SizedBox(width: 8),
-                          Text(
-                            '(${raritySuffixes[rarity]})',
-                            style: TextStyle(
-                              color: Colors.grey.shade600,
-                              fontSize: 12,
+                if (hasDamageFields) ...[
+                  DropdownButtonFormField<String>(
+                    value: selectedRarity,
+                    decoration: const InputDecoration(
+                      labelText: 'Rarity',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: rarities.map((rarity) {
+                      return DropdownMenuItem(
+                        value: rarity,
+                        child: Row(
+                          children: [
+                            Text(rarity),
+                            const SizedBox(width: 8),
+                            Text(
+                              '(${raritySuffixes[rarity]})',
+                              style: TextStyle(
+                                color: Colors.grey.shade600,
+                                fontSize: 12,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                  onChanged: (newRarity) {
-                    if (newRarity == null) return;
-                    setState(() {
-                      // Save current rarity's values before switching
-                      saveCurrentRarityValues();
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (newRarity) {
+                      if (newRarity == null) return;
+                      setState(() {
+                        // Save current rarity's values before switching
+                        saveCurrentRarityValues();
 
-                      // Switch to new rarity
-                      selectedRarity = newRarity;
+                        // Switch to new rarity
+                        selectedRarity = newRarity;
 
-                      // Load values for new rarity (or defaults)
-                      loadRarityValues(newRarity);
+                        // Load values for new rarity (or defaults)
+                        loadRarityValues(newRarity);
 
-                      // Update weaponId to match new rarity
-                      updateWeaponIdForRarity(newRarity);
+                        // Update weaponId to match new rarity
+                        updateWeaponIdForRarity(newRarity);
 
-                      errorText = null;
-                    });
-                  },
-                ),
-                const SizedBox(height: 12),
+                        errorText = null;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
                 ],
                 if (!hasDamageFields) const SizedBox(height: 12),
                 Row(
@@ -14162,16 +14578,18 @@ Future<CustomDataTableInput?> _promptCustomDataTable(
                     ),
                   ],
                 ),
-                if (hasDamageFields) ...[const SizedBox(height: 16),
-                TextField(
-                  controller: damagePBController,
-                  decoration: InputDecoration(
-                    labelText: advancedMode ? 'DamagePB' : 'Base Damage',
-                    hintText: '50',
-                    hintStyle: TextStyle(color: Colors.grey.shade600),
+                if (hasDamageFields) ...[
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: damagePBController,
+                    decoration: InputDecoration(
+                      labelText: advancedMode ? 'DamagePB' : 'Base Damage',
+                      hintText: '50',
+                      hintStyle: TextStyle(color: Colors.grey.shade600),
+                    ),
+                    keyboardType: TextInputType.number,
                   ),
-                  keyboardType: TextInputType.number,
-                ),],
+                ],
                 if (hasDamageFields && advancedMode) ...[
                   const SizedBox(height: 12),
                   TextField(
@@ -14204,45 +14622,55 @@ Future<CustomDataTableInput?> _promptCustomDataTable(
                     keyboardType: TextInputType.number,
                   ),
                 ],
-                if (hasDamageFields) ...[const SizedBox(height: 12),
-                TextField(
-                  controller: envDamageController,
-                  decoration: InputDecoration(
-                    labelText: 'Base Environmental Damage',
-                    hintText: '50',
-                    hintStyle: TextStyle(color: Colors.grey.shade600),
+                if (hasDamageFields) ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: envDamageController,
+                    decoration: InputDecoration(
+                      labelText: 'Base Environmental Damage',
+                      hintText: '50',
+                      hintStyle: TextStyle(color: Colors.grey.shade600),
+                    ),
+                    keyboardType: TextInputType.number,
                   ),
-                  keyboardType: TextInputType.number,
-                ),],
-                if (hasClipSize) ...[const SizedBox(height: 16),
-                TextField(
-                  controller: clipSizeController,
-                  decoration: InputDecoration(
-                    labelText: 'Clip Size',
-                    hintText: '30',
-                    hintStyle: TextStyle(color: Colors.grey.shade600),
+                ],
+                if (hasClipSize) ...[
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: clipSizeController,
+                    decoration: InputDecoration(
+                      labelText: 'Clip Size',
+                      hintText: '30',
+                      hintStyle: TextStyle(color: Colors.grey.shade600),
+                    ),
+                    keyboardType: TextInputType.number,
                   ),
-                  keyboardType: TextInputType.number,
-                ),],
-                if (hasReloadTime) ...[const SizedBox(height: 12),
-                TextField(
-                  controller: reloadTimeController,
-                  decoration: InputDecoration(
-                    labelText: 'Reload Time',
-                    hintText: '2.0',
-                    hintStyle: TextStyle(color: Colors.grey.shade600),
+                ],
+                if (hasReloadTime) ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: reloadTimeController,
+                    decoration: InputDecoration(
+                      labelText: 'Reload Time',
+                      hintText: '2.0',
+                      hintStyle: TextStyle(color: Colors.grey.shade600),
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                   ),
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
+                ],
+                if (hasDamageFields) ...[
+                  const SizedBox(height: 16),
+                  SwitchListTile(
+                    value: advancedMode,
+                    onChanged: (value) => setState(() => advancedMode = value),
+                    title: const Text('Advanced Options'),
+                    subtitle: const Text(
+                      'Configure damage for different ranges',
+                    ),
                   ),
-                ),],
-                if (hasDamageFields) ...[const SizedBox(height: 16),
-                SwitchListTile(
-                  value: advancedMode,
-                  onChanged: (value) => setState(() => advancedMode = value),
-                  title: const Text('Advanced Options'),
-                  subtitle: const Text('Configure damage for different ranges'),
-                ),],
+                ],
                 if (errorText != null) ...[
                   const SizedBox(height: 12),
                   Text(
@@ -14266,8 +14694,12 @@ Future<CustomDataTableInput?> _promptCustomDataTable(
               onPressed: () {
                 final weaponName = weaponNameController.text.trim();
                 final weaponId = weaponIdController.text.trim();
-                final damagePB = hasDamageFields ? damagePBController.text.trim() : '';
-                final envDamage = hasDamageFields ? envDamageController.text.trim() : '';
+                final damagePB = hasDamageFields
+                    ? damagePBController.text.trim()
+                    : '';
+                final envDamage = hasDamageFields
+                    ? envDamageController.text.trim()
+                    : '';
 
                 if (weaponName.isEmpty) {
                   setState(() => errorText = 'Weapon name is required.');
@@ -14313,13 +14745,18 @@ Future<CustomDataTableInput?> _promptCustomDataTable(
                     damageMaxRange: (hasDamageFields && advancedMode)
                         ? damageMaxRangeController.text.trim()
                         : null,
-                    rarityConfigs: (hasDamageFields && rarityDamageValues.isNotEmpty)
+                    rarityConfigs:
+                        (hasDamageFields && rarityDamageValues.isNotEmpty)
                         ? Map.from(rarityDamageValues)
                         : null,
-                    clipSize: (hasClipSize && clipSizeController.text.trim().isNotEmpty)
+                    clipSize:
+                        (hasClipSize &&
+                            clipSizeController.text.trim().isNotEmpty)
                         ? clipSizeController.text.trim()
                         : null,
-                    reloadTime: (hasReloadTime && reloadTimeController.text.trim().isNotEmpty)
+                    reloadTime:
+                        (hasReloadTime &&
+                            reloadTimeController.text.trim().isNotEmpty)
                         ? reloadTimeController.text.trim()
                         : null,
                   ),
@@ -15142,7 +15579,9 @@ class BackendController extends ChangeNotifier {
     }
   }
 
-  Future<bool> _pingBackend({Duration timeout = const Duration(seconds: 2)}) async {
+  Future<bool> _pingBackend({
+    Duration timeout = const Duration(seconds: 2),
+  }) async {
     try {
       final client = HttpClient();
       final request = await client.getUrl(

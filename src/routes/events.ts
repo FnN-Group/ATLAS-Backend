@@ -2,7 +2,7 @@ import app from "..";
 import getVersion from "../utils/handlers/getVersion";
 import fs from 'node:fs'
 import path from 'node:path'
-import ini from "ini";
+import { readConfig } from "../config/config";
 
 export default function () {
     app.get("/api/v1/events/Fortnite/download/:accountId", async (c) => {
@@ -29,9 +29,7 @@ export default function () {
             const arenaTemplates = JSON.parse(arenaTemplatesData);
 
             // Load config to check if arena points should be saved
-            const config = ini.parse(
-                fs.readFileSync(path.join(__dirname, "..", "config", "config.ini"), "utf-8")
-            );
+            const config = readConfig();
             const saveArenaPoints = config.SaveArenaPoints === "true" || config.SaveArenaPoints === true;
 
             // Load player's arena points and division from their profile if save is enabled
@@ -139,9 +137,7 @@ export default function () {
             const body = await c.req.json();
             
             // Load config to check if arena points should be saved
-            const config = ini.parse(
-                fs.readFileSync(path.join(__dirname, "..", "config", "config.ini"), "utf-8")
-            );
+            const config = readConfig();
             const saveArenaPoints = config.SaveArenaPoints === "true" || config.SaveArenaPoints === true;
             
             if (saveArenaPoints && body && typeof body.finalScores === 'object') {

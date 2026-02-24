@@ -177,6 +177,7 @@ dist
 
 # Atlas
 tools/bun/
+src/config/config.ini
 static/profiles/*
 static/ClientSettings/*
 .vscode/settings.json

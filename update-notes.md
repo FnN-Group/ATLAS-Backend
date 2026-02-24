@@ -13,7 +13,10 @@ Markdown Quick Key
 
 ---
 
-# Fixes
-- Fixed images and icons
+# Improvements
+- Changed Toast notifcations to match Link
+
+# To-Do Later
+- Adding Solaris & Twine Profile Presets
 
 [Full release notes](https://github.com/cipherfps/ATLAS-Backend/releases)

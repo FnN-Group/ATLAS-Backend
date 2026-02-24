@@ -1,6 +1,4 @@
-import ini from "ini";
-import fs from "node:fs";
-import path from "node:path";
+import { readConfig } from "../../config/config";
 
 function createEvent(eventType: any) {
   return {
@@ -12,10 +10,10 @@ function createEvent(eventType: any) {
 
 function getEvents(ver: any) {
   // Reload config on each call to get the latest values
-  const rawConfig = ini.parse(fs.readFileSync(path.join(__dirname, "../../config/config.ini"), "utf-8"));
+  const rawConfig = readConfig();
   const config = {
-    RufusStage: parseInt(rawConfig.RufusStage) || 1,
-    WaterLevel: parseInt(rawConfig.WaterLevel) || 1,
+    RufusStage: parseInt(String(rawConfig.RufusStage ?? ""), 10) || 1,
+    WaterLevel: parseInt(String(rawConfig.WaterLevel ?? ""), 10) || 1,
     UseWaterStorm: rawConfig.UseWaterStorm === 'true' || rawConfig.UseWaterStorm === 'True' || rawConfig.UseWaterStorm === true,
     SaveArenaPoints: rawConfig.SaveArenaPoints === 'true' || rawConfig.SaveArenaPoints === 'True' || rawConfig.SaveArenaPoints === true,
   };
