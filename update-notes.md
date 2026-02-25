@@ -15,6 +15,8 @@ Markdown Quick Key
 
 # Improvements
 - New Default CurveTable, Rune Vents
+- Infinite Render toggle for v26+
+- No Swap Cooldown toggle
 
 # Fixes
 - Fixed Clearing Backend Data

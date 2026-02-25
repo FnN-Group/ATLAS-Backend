@@ -1,6 +1,6 @@
 {
   "name": "atlas",
-  "version": "1.4.6",
+  "version": "1.4.7",
   "module": "src/index.ts",
   "type": "module",
   "scripts": {
