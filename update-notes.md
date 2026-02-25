@@ -14,9 +14,10 @@ Markdown Quick Key
 ---
 
 # Improvements
-- Updated Default Profile, if you are having issues clear your profile_athena.json
+- New Default CurveTable, Rune Vents
 
-# To-Do/Fix Later
-- Adding Solaris & Twine Profile Presets
+# Fixes
+- Fixed Clearing Backend Data
+- Fixed Data Transfer over updates
 
 [Full release notes](https://github.com/cipherfps/ATLAS-Backend/releases)

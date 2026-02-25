@@ -143,5 +143,15 @@
     "name": "Heavy Ammo",
     "key": "Default.Ammo.MaxStackAmount.Heavy",
     "type": "amount"
+  },
+  "25": {
+    "name": "XY Velocity",
+    "key": "Default.RuneVent.LaunchXYVelocity",
+    "type": "amount"
+  },
+  "26": {
+    "name": "Z Velocity",
+    "key": "Default.RuneVent.LaunchZVelocity",
+    "type": "amount"
   }
 }

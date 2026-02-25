@@ -112,6 +112,8 @@ const centeredLogo = lines.map(line => {
 
 const CURVE_TABLE_COMMENT = '# CurveTables';
 const STRAIGHT_BLOOM_COMMENT = '# Straight Bloom';
+const DATA_TABLE_COMMENT = '# DataTables';
+const FIXES_COMMENT = '# Fixes';
 
 function findInsertPoint(fileContent: string, commentLabel: string): number {
   const commentIndex = fileContent.indexOf(commentLabel);
@@ -165,6 +167,62 @@ function normalizeCurveTablePlacement(fileContent: string): string {
   content = ensured.content;
   const insertPoint = ensured.insertPoint;
   return content.slice(0, insertPoint) + curveLines.join('\n') + '\n' + content.slice(insertPoint);
+}
+
+function normalizeCommentLabel(value: string): string {
+  return value.toLowerCase().replace(/[\s#]+/g, '');
+}
+
+function clearDataTableSections(fileContent: string, includeFixes = false): string {
+  const knownBlocks = new Set<string>([
+    normalizeCommentLabel(DATA_TABLE_COMMENT),
+    normalizeCommentLabel(STRAIGHT_BLOOM_COMMENT),
+    normalizeCommentLabel(CURVE_TABLE_COMMENT),
+    normalizeCommentLabel(FIXES_COMMENT),
+  ]);
+  const targetBlocks = new Set<string>([
+    normalizeCommentLabel(DATA_TABLE_COMMENT),
+  ]);
+  if (includeFixes) {
+    targetBlocks.add(normalizeCommentLabel(FIXES_COMMENT));
+  }
+
+  const lines = fileContent.split('\n');
+  const output: string[] = [];
+  const dataTableLine = /^\s*\+DataTable=.*$/;
+  const commentHeader = /^\s*#\s*(.+?)\s*$/;
+  const assetHeader = /^\s*\[AssetHotfix\]\s*$/i;
+  let activeBlock: string | null = null;
+
+  for (const line of lines) {
+    if (assetHeader.test(line)) {
+      activeBlock = null;
+      output.push(line);
+      continue;
+    }
+
+    const commentMatch = line.match(commentHeader);
+    if (commentMatch) {
+      const normalized = normalizeCommentLabel(commentMatch[1]);
+      if (knownBlocks.has(normalized)) {
+        activeBlock = normalized;
+      }
+      output.push(line);
+      continue;
+    }
+
+    const shouldRemove = (
+      activeBlock !== null &&
+      targetBlocks.has(activeBlock) &&
+      dataTableLine.test(line)
+    );
+    if (shouldRemove) {
+      continue;
+    }
+    output.push(line);
+  }
+
+  return output.join('\n').replace(/\n\n+/g, '\n');
 }
 
 // Function to toggle Straight Bloom
@@ -1114,7 +1172,7 @@ async function clearExportedData() {
   }
 }
 
-// Function to clear backend data (client settings, profiles, straightbloom, curvetables)
+// Function to clear backend data (client settings, profiles, straightbloom, datatables, curvetables)
 async function clearBackendData() {
   try {
     const staticProfilesDir = path.join(__dirname, '../static/profiles');
@@ -1139,7 +1197,7 @@ async function clearBackendData() {
     const confirmResponse = await prompts({
       type: 'text',
       name: 'confirm',
-      message: '\x1b[31mAre you sure you want to clear all backend data? This will delete client settings, player profiles, straightbloom, and curvetables. (Y/N):\x1b[0m',
+      message: '\x1b[31mAre you sure you want to clear all backend data? This will delete client settings, player profiles, straightbloom, datatables, and curvetables. (Y/N):\x1b[0m',
       validate: (value: string) => ['y', 'Y', 'n', 'N'].includes(value) ? true : 'Please enter Y or N'
     });
     
@@ -1232,6 +1290,19 @@ async function clearBackendData() {
         console.log(`\x1b[32m✓\x1b[0m Straight Bloom removed`);
       } else {
         console.log(`\x1b[90m○\x1b[0m Straight Bloom was not enabled`);
+      }
+    }
+
+    // Clear DataTables in the "# DataTables" block
+    if (fs.existsSync(iniPath)) {
+      const content = fs.readFileSync(iniPath, 'utf-8');
+      const updatedContent = clearDataTableSections(content);
+      const hadDataTables = updatedContent !== content;
+      fs.writeFileSync(iniPath, updatedContent);
+      if (hadDataTables) {
+        console.log(`\x1b[32m✓\x1b[0m DataTables cleared`);
+      } else {
+        console.log(`\x1b[90m○\x1b[0m No DataTables were configured`);
       }
     }
     

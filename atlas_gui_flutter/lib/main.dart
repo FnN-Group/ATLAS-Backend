@@ -742,6 +742,10 @@ class _AtlasHomePageState extends State<AtlasHomePage>
 
   Future<void> _initStartup() async {
     final config = await ConfigService.load();
+    await DataTableService.setBackendInfiniteRenderEnabled(
+      config.backendInfiniteRenderEnabled,
+    );
+    await DataTableService.setSwapCooldownEnabled(config.swapCooldownEnabled);
     if (config.startBackendOnLaunch) {
       await _controller.ensureStoppedOnLaunch();
       await _controller.startBackend();
@@ -1548,7 +1552,7 @@ class _AtlasHomePageState extends State<AtlasHomePage>
   static const List<MenuItemData> _menuItems = [
     MenuItemData(
       title: 'Modifications',
-      subtitle: 'Manage Straight Bloom, CurveTables and DataTables',
+      subtitle: 'Manage Straight Bloom, CurveTables, DataTables and more',
       icon: Icons.tune,
       accent: Color(0xFF6BE7FF),
       actions: [
@@ -3702,6 +3706,8 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
 
   // DataTable state
   bool _dataTablesEnabled = false;
+  bool _backendInfiniteRenderEnabled = false;
+  bool _swapCooldownEnabled = false;
   bool _dataTablesLoading = true;
   List<DataTableWeapon> _weapons = [];
   String? _selectedWeaponId;
@@ -3736,6 +3742,9 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     final curves = await CurveTableService.loadCurves();
     final weapons = await DataTableService.loadWeapons();
     final dataTablesEnabled = await DataTableService.getUIEnabledState();
+    final backendInfiniteRenderEnabled =
+        await DataTableService.isBackendInfiniteRenderEnabled();
+    final swapCooldownEnabled = await DataTableService.isSwapCooldownEnabled();
     if (!mounted) return;
     setState(() {
       _straightBloom = bloom;
@@ -3743,6 +3752,8 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
       _curves = curves;
       _weapons = weapons;
       _dataTablesEnabled = dataTablesEnabled;
+      _backendInfiniteRenderEnabled = backendInfiniteRenderEnabled;
+      _swapCooldownEnabled = swapCooldownEnabled;
       _isLoading = false;
       _curveLoading = false;
       _dataTablesLoading = false;
@@ -3788,6 +3799,26 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
         _selectedWeaponSettings = settings;
       });
     }
+  }
+
+  Future<void> _setBackendInfiniteRenderEnabled(bool enabled) async {
+    final existing = await ConfigService.load();
+    await ConfigService.save(
+      existing.copyWith(backendInfiniteRenderEnabled: enabled),
+    );
+    await DataTableService.setBackendInfiniteRenderEnabled(enabled);
+    final current = await DataTableService.isBackendInfiniteRenderEnabled();
+    if (!mounted) return;
+    setState(() => _backendInfiniteRenderEnabled = current);
+  }
+
+  Future<void> _setSwapCooldownEnabled(bool enabled) async {
+    final existing = await ConfigService.load();
+    await ConfigService.save(existing.copyWith(swapCooldownEnabled: enabled));
+    await DataTableService.setSwapCooldownEnabled(enabled);
+    final current = await DataTableService.isSwapCooldownEnabled();
+    if (!mounted) return;
+    setState(() => _swapCooldownEnabled = current);
   }
 
   Future<void> _importCurvesInModifications() async {
@@ -4375,6 +4406,57 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                   subtitle: const Text('Toggle weapon damage modifications'),
                 );
 
+                Widget versionTag(String label) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0E3F73),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: const Color(0xFF2F9CFF).withOpacity(0.45),
+                      ),
+                    ),
+                    child: Text(
+                      label,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: const Color(0xFF7FC4FF),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  );
+                }
+
+                final backendInfiniteRenderSwitch = SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: _backendInfiniteRenderEnabled,
+                  onChanged: _setBackendInfiniteRenderEnabled,
+                  title: Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      const Text('Backend Infinite Render'),
+                      versionTag('v26+'),
+                    ],
+                  ),
+                  subtitle: const Text(
+                    'Keeps projectiles and bullets active and rendering over long distances on v26.00 and higher',
+                  ),
+                );
+
+                final swapCooldownSwitch = SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: _swapCooldownEnabled,
+                  onChanged: _setSwapCooldownEnabled,
+                  title: const Text('No Swap Cooldown'),
+                  subtitle: const Text(
+                    'Removes the delay between switching weapons or items (Ex. Double Pump)',
+                  ),
+                );
+
                 final togglesPanel = ListView(
                   padding: EdgeInsets.zero,
                   children: [
@@ -4386,6 +4468,10 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                     const SizedBox(height: 20),
                     const _SectionTitle(title: 'DataTables'),
                     dataTablesSwitch,
+                    const SizedBox(height: 20),
+                    const _SectionTitle(title: 'Other'),
+                    backendInfiniteRenderSwitch,
+                    swapCooldownSwitch,
                   ],
                 );
 
@@ -4467,6 +4553,10 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                     if (!isWide) ...[
                       const _SectionTitle(title: 'Straight Bloom'),
                       straightBloomSwitch,
+                      const SizedBox(height: 20),
+                      const _SectionTitle(title: 'Other'),
+                      backendInfiniteRenderSwitch,
+                      swapCooldownSwitch,
                       const SizedBox(height: 20),
                     ],
                     tablesTabs,
@@ -6903,6 +6993,8 @@ class _GameConfigurationScreenState extends State<GameConfigurationScreen> {
       saveArenaPoints: existing.saveArenaPoints,
       useWaterStorm: _useWaterStorm,
       startBackendOnLaunch: existing.startBackendOnLaunch,
+      backendInfiniteRenderEnabled: existing.backendInfiniteRenderEnabled,
+      swapCooldownEnabled: existing.swapCooldownEnabled,
       disableBackendUpdateCheck: existing.disableBackendUpdateCheck,
       useDarkMode: existing.useDarkMode,
       backgroundImagePath: existing.backgroundImagePath,
@@ -7476,7 +7568,7 @@ class _DataManagementPanelState extends State<DataManagementPanel> {
         ListTile(
           title: const Text('Clear Backend Data'),
           subtitle: const Text(
-            'Clear All Profile, Client Setting, CurveTable, and Straight Bloom data from the backend',
+            'Clear All Profile, Client Setting, DataTable, CurveTable, and Straight Bloom data from the backend',
           ),
           trailing: _HoverScale(
             enabled: !_busy,
@@ -10369,6 +10461,8 @@ class BackendPaths {
 
   static String get defaultGameIni =>
       joinPath([getBackendRoot(), 'static', 'hotfixes', 'DefaultGame.ini']);
+  static String get defaultEngineIni =>
+      joinPath([getBackendRoot(), 'static', 'hotfixes', 'DefaultEngine.ini']);
   static String get curvesJson =>
       joinPath([getBackendRoot(), 'responses', 'curves.json']);
   static String get dataTablesJson =>
@@ -10759,6 +10853,13 @@ const List<CurveGroup> _baseCurveGroups = [
     imageName: 'cube.webp',
     icon: Icons.crop_square,
     keywords: ['cube'],
+  ),
+  CurveGroup(
+    id: 'runevent',
+    title: 'Rune Vent',
+    imageName: 'runevent.webp',
+    icon: Icons.air,
+    keywords: ['rune vent', 'runevent'],
   ),
   CurveGroup(
     id: 'rift',
@@ -11562,6 +11663,203 @@ class CurveTableService {
 }
 
 class DataTableService {
+  static const String _fixesComment = '# Fixes';
+  static const List<String> _backendInfiniteRenderFilterLines = [
+    '+FilterConfigs=(ClassName=/Script/Engine.Pawn, DynamicFilterName=None, FilterProfile=None)',
+    '+FilterConfigs=(ClassName=/Script/FortniteGame.FortPawn, DynamicFilterName=None, FilterProfile=None)',
+    '+FilterConfigs=(ClassName=/Script/FortniteGame.FortPlayerPawn, DynamicFilterName=None, FilterProfile=None)',
+    '+FilterConfigs=(ClassName=/Script/FortniteGame.FortPlayerPawnAthena, DynamicFilterName=None, FilterProfile=None)',
+    '+FilterConfigs=(ClassName=/Script/FortniteGame.FortInventory, DynamicFilterName=None)',
+    '+FilterConfigs=(ClassName=/Script/FortniteGame.FortBroadcastRemoteClientInfo, DynamicFilterName=None)',
+  ];
+  static const String _swapCooldownLine =
+      'Weapon.TryToFireRestrictedByTypeCooldowns=0';
+
+  static String _normalizeCommentLabel(String value) {
+    return value.toLowerCase().replaceAll(RegExp(r'[\s#]+'), '');
+  }
+
+  static String _removeDataTableLinesFromBlocks(
+    String content,
+    Set<String> targetBlocks,
+  ) {
+    final lines = content.split('\n');
+    final output = <String>[];
+    final knownBlocks = <String>{
+      _normalizeCommentLabel(BackendPaths.dataTableComment),
+      _normalizeCommentLabel(BackendPaths.straightBloomComment),
+      _normalizeCommentLabel(BackendPaths.curveTableComment),
+      _normalizeCommentLabel(_fixesComment),
+    };
+    final dataTableLine = RegExp(r'^\s*\+DataTable=.*$');
+    final commentHeader = RegExp(r'^\s*#\s*(.+?)\s*$');
+    final assetHeader = RegExp(
+      r'^\s*\[AssetHotfix\]\s*$',
+      caseSensitive: false,
+    );
+    String? activeBlock;
+
+    for (final line in lines) {
+      if (assetHeader.hasMatch(line)) {
+        activeBlock = null;
+        output.add(line);
+        continue;
+      }
+
+      final commentMatch = commentHeader.firstMatch(line);
+      if (commentMatch != null) {
+        final normalized = _normalizeCommentLabel(commentMatch.group(1)!);
+        if (knownBlocks.contains(normalized)) {
+          activeBlock = normalized;
+        }
+        output.add(line);
+        continue;
+      }
+
+      final shouldRemove =
+          activeBlock != null &&
+          targetBlocks.contains(activeBlock) &&
+          dataTableLine.hasMatch(line);
+      if (shouldRemove) continue;
+      output.add(line);
+    }
+
+    return output.join('\n').replaceAll(RegExp(r'\n\n+'), '\n');
+  }
+
+  static String clearDataTableSections(
+    String content, {
+    bool includeFixes = false,
+  }) {
+    final targetBlocks = <String>{
+      _normalizeCommentLabel(BackendPaths.dataTableComment),
+    };
+    if (includeFixes) {
+      targetBlocks.add(_normalizeCommentLabel(_fixesComment));
+    }
+    return _removeDataTableLinesFromBlocks(content, targetBlocks);
+  }
+
+  static Future<bool> isBackendInfiniteRenderEnabled() async {
+    final engineFile = File(BackendPaths.defaultEngineIni);
+    if (!await engineFile.exists()) return false;
+    final content = await engineFile.readAsString();
+    final lines = content.split(RegExp(r'\r?\n'));
+    final active = <String>{};
+    for (final line in lines) {
+      final trimmedLeft = line.trimLeft();
+      if (trimmedLeft.isEmpty || trimmedLeft.startsWith(';')) continue;
+      final normalized = trimmedLeft.trimRight();
+      if (_backendInfiniteRenderFilterLines.contains(normalized)) {
+        active.add(normalized);
+      }
+    }
+    return _backendInfiniteRenderFilterLines.every(active.contains);
+  }
+
+  static Future<void> setBackendInfiniteRenderEnabled(bool enabled) async {
+    final engineFile = File(BackendPaths.defaultEngineIni);
+    if (!await engineFile.exists()) return;
+    final content = await engineFile.readAsString();
+    final lineEnding = content.contains('\r\n') ? '\r\n' : '\n';
+    final hasTrailingNewline = content.endsWith('\n');
+    final lines = content.split(RegExp(r'\r?\n'));
+    var changed = false;
+
+    for (var i = 0; i < lines.length; i++) {
+      final original = lines[i];
+      final leadingMatch = RegExp(r'^\s*').firstMatch(original);
+      final leading = leadingMatch?.group(0) ?? '';
+      var rest = original.substring(leading.length);
+      var isCommented = false;
+      if (rest.startsWith(';')) {
+        isCommented = true;
+        rest = rest.substring(1).trimLeft();
+      }
+      final normalized = rest.trimRight();
+      if (!_backendInfiniteRenderFilterLines.contains(normalized)) continue;
+
+      final updated = enabled ? '$leading$normalized' : '$leading;$normalized';
+      if (updated != original) {
+        lines[i] = updated;
+        changed = true;
+      } else if (enabled && isCommented) {
+        // Keep behavior deterministic when spacing around ";" differs.
+        lines[i] = updated;
+        changed = true;
+      }
+    }
+
+    if (!changed) return;
+
+    var updatedContent = lines.join(lineEnding);
+    if (hasTrailingNewline && !updatedContent.endsWith(lineEnding)) {
+      updatedContent = '$updatedContent$lineEnding';
+    }
+    await engineFile.writeAsString(updatedContent);
+  }
+
+  static Future<bool> isSwapCooldownEnabled() async {
+    final engineFile = File(BackendPaths.defaultEngineIni);
+    if (!await engineFile.exists()) return false;
+    final content = await engineFile.readAsString();
+    final lines = content.split(RegExp(r'\r?\n'));
+    for (final line in lines) {
+      final trimmedLeft = line.trimLeft();
+      if (trimmedLeft.isEmpty) continue;
+      var rest = trimmedLeft;
+      var isCommented = false;
+      if (rest.startsWith(';')) {
+        isCommented = true;
+        rest = rest.substring(1).trimLeft();
+      }
+      if (rest.trimRight() != _swapCooldownLine) continue;
+      return !isCommented;
+    }
+    return false;
+  }
+
+  static Future<void> setSwapCooldownEnabled(bool enabled) async {
+    final engineFile = File(BackendPaths.defaultEngineIni);
+    if (!await engineFile.exists()) return;
+    final content = await engineFile.readAsString();
+    final lineEnding = content.contains('\r\n') ? '\r\n' : '\n';
+    final hasTrailingNewline = content.endsWith('\n');
+    final lines = content.split(RegExp(r'\r?\n'));
+    var changed = false;
+
+    for (var i = 0; i < lines.length; i++) {
+      final original = lines[i];
+      final leadingMatch = RegExp(r'^\s*').firstMatch(original);
+      final leading = leadingMatch?.group(0) ?? '';
+      var rest = original.substring(leading.length);
+      var isCommented = false;
+      if (rest.startsWith(';')) {
+        isCommented = true;
+        rest = rest.substring(1).trimLeft();
+      }
+      final normalized = rest.trimRight();
+      if (normalized != _swapCooldownLine) continue;
+
+      final updated = enabled ? '$leading$normalized' : '$leading;$normalized';
+      if (updated != original) {
+        lines[i] = updated;
+        changed = true;
+      } else if (enabled && isCommented) {
+        lines[i] = updated;
+        changed = true;
+      }
+    }
+
+    if (!changed) return;
+
+    var updatedContent = lines.join(lineEnding);
+    if (hasTrailingNewline && !updatedContent.endsWith(lineEnding)) {
+      updatedContent = '$updatedContent$lineEnding';
+    }
+    await engineFile.writeAsString(updatedContent);
+  }
+
   // Preserve any manual fixes under the "# Fixes" marker in DefaultGame.ini.
   static ({String editable, String protected}) _splitProtectedFixesBlock(
     String content,
@@ -11937,13 +12235,8 @@ class DataTableService {
     final iniFile = File(BackendPaths.defaultGameIni);
     if (!await iniFile.exists()) return;
     var content = await iniFile.readAsString();
-    final split = _splitProtectedFixesBlock(content);
-    var editable = split.editable;
-    final protected = split.protected;
-    final regex = RegExp(r'^\+DataTable=.*$', multiLine: true);
-    editable = editable.replaceAll(regex, '');
-    editable = editable.replaceAll(RegExp(r'\n\n+'), '\n');
-    await iniFile.writeAsString('$editable$protected');
+    content = clearDataTableSections(content);
+    await iniFile.writeAsString(content);
   }
 
   static Future<void> addCustomWeapon(CustomDataTableInput input) async {
@@ -12040,6 +12333,8 @@ class ConfigSettings {
     required this.saveArenaPoints,
     required this.useWaterStorm,
     required this.startBackendOnLaunch,
+    required this.backendInfiniteRenderEnabled,
+    required this.swapCooldownEnabled,
     required this.disableBackendUpdateCheck,
     required this.useDarkMode,
     required this.backgroundImagePath,
@@ -12055,6 +12350,8 @@ class ConfigSettings {
   final bool saveArenaPoints;
   final bool useWaterStorm;
   final bool startBackendOnLaunch;
+  final bool backendInfiniteRenderEnabled;
+  final bool swapCooldownEnabled;
   final bool disableBackendUpdateCheck;
   final bool useDarkMode;
   final String backgroundImagePath;
@@ -12070,6 +12367,8 @@ class ConfigSettings {
     bool? saveArenaPoints,
     bool? useWaterStorm,
     bool? startBackendOnLaunch,
+    bool? backendInfiniteRenderEnabled,
+    bool? swapCooldownEnabled,
     bool? disableBackendUpdateCheck,
     bool? useDarkMode,
     String? backgroundImagePath,
@@ -12085,6 +12384,9 @@ class ConfigSettings {
       saveArenaPoints: saveArenaPoints ?? this.saveArenaPoints,
       useWaterStorm: useWaterStorm ?? this.useWaterStorm,
       startBackendOnLaunch: startBackendOnLaunch ?? this.startBackendOnLaunch,
+      backendInfiniteRenderEnabled:
+          backendInfiniteRenderEnabled ?? this.backendInfiniteRenderEnabled,
+      swapCooldownEnabled: swapCooldownEnabled ?? this.swapCooldownEnabled,
       disableBackendUpdateCheck:
           disableBackendUpdateCheck ?? this.disableBackendUpdateCheck,
       useDarkMode: useDarkMode ?? this.useDarkMode,
@@ -12108,11 +12410,13 @@ class ConfigService {
     final map = {...base, ...gui};
     if (map.isEmpty) {
       return const ConfigSettings(
-        rufusStage: 1,
+        rufusStage: 4,
         waterLevel: 1,
         saveArenaPoints: false,
         useWaterStorm: false,
-        startBackendOnLaunch: false,
+        startBackendOnLaunch: true,
+        backendInfiniteRenderEnabled: true,
+        swapCooldownEnabled: false,
         disableBackendUpdateCheck: false,
         useDarkMode: true,
         backgroundImagePath: '',
@@ -12132,13 +12436,31 @@ class ConfigService {
     );
     final resolvedParticlesOpacity =
         parsedParticlesOpacity ?? (legacyParticlesEnabled ? 1.0 : 0.0);
-    return ConfigSettings(
+    final hasGuiBackendInfiniteRender = gui.containsKey(
+      'BackendInfiniteRenderEnabled',
+    );
+    final hasGuiSwapCooldown = gui.containsKey('SwapCooldownEnabled');
+    var resolvedBackendInfiniteRender =
+        (map['BackendInfiniteRenderEnabled'] ?? 'true').toLowerCase() == 'true';
+    var resolvedSwapCooldown =
+        (map['SwapCooldownEnabled'] ?? 'false').toLowerCase() == 'true';
+    if (!hasGuiBackendInfiniteRender) {
+      resolvedBackendInfiniteRender =
+          await DataTableService.isBackendInfiniteRenderEnabled();
+    }
+    if (!hasGuiSwapCooldown) {
+      resolvedSwapCooldown = await DataTableService.isSwapCooldownEnabled();
+    }
+
+    final settings = ConfigSettings(
       rufusStage: int.tryParse(map['RufusStage'] ?? '') ?? 1,
       waterLevel: int.tryParse(map['WaterLevel'] ?? '') ?? 1,
       saveArenaPoints: (map['SaveArenaPoints'] ?? '').toLowerCase() == 'true',
       useWaterStorm: (map['UseWaterStorm'] ?? '').toLowerCase() == 'true',
       startBackendOnLaunch:
           (map['StartBackendOnLaunch'] ?? '').toLowerCase() == 'true',
+      backendInfiniteRenderEnabled: resolvedBackendInfiniteRender,
+      swapCooldownEnabled: resolvedSwapCooldown,
       disableBackendUpdateCheck:
           (map['DisableBackendUpdateCheck'] ?? '').toLowerCase() == 'true',
       useDarkMode: (map['UseDarkMode'] ?? 'true').toLowerCase() == 'true',
@@ -12151,6 +12473,10 @@ class ConfigService {
           (map['StartupAnimationEnabled'] ?? 'true').toLowerCase() == 'true',
       lastShownUpdateNotesVersion: lastShownUpdateNotesVersion,
     );
+    if (!hasGuiBackendInfiniteRender || !hasGuiSwapCooldown) {
+      await save(settings);
+    }
+    return settings;
   }
 
   static Future<void> save(ConfigSettings settings) async {
@@ -12160,6 +12486,10 @@ class ConfigService {
       ..writeln('SaveArenaPoints=${settings.saveArenaPoints}')
       ..writeln('UseWaterStorm=${settings.useWaterStorm}')
       ..writeln('StartBackendOnLaunch=${settings.startBackendOnLaunch}')
+      ..writeln(
+        'BackendInfiniteRenderEnabled=${settings.backendInfiniteRenderEnabled}',
+      )
+      ..writeln('SwapCooldownEnabled=${settings.swapCooldownEnabled}')
       ..writeln(
         'DisableBackendUpdateCheck=${settings.disableBackendUpdateCheck}',
       )
@@ -13090,9 +13420,12 @@ class DataService {
   static const String _profileTemplateBackupDirName = '.defaults';
 
   static Future<void> clearBackendData(BuildContext context) async {
+    const backendInfiniteRenderDefault = true;
+    const swapCooldownDefault = false;
+
     final confirm = await _confirmDialog(
       context,
-      'Clear all backend data? This will reset user Profiles, Client settings, CurveTables, and Straight Bloom.',
+      'Clear all backend data? This will reset user Profiles, Client settings, DataTables, CurveTables, and Straight Bloom.',
     );
     if (!confirm) return;
     final profilesDir = Directory(
@@ -13130,31 +13463,46 @@ class DataService {
       }
     }
 
-    if (await iniFile.exists() && await curvesFile.exists()) {
+    if (await iniFile.exists()) {
       var content = await iniFile.readAsString();
-      content = content.replaceAll(
-        RegExp('^\\+CurveTable=.*\$', multiLine: true),
-        '',
-      );
+      content = DataTableService.clearDataTableSections(content);
+
+      if (await curvesFile.exists()) {
+        content = content.replaceAll(
+          RegExp('^\\+CurveTable=.*\$', multiLine: true),
+          '',
+        );
+        final curves =
+            jsonDecode(await curvesFile.readAsString()) as Map<String, dynamic>;
+        final keysToRemove = curves.entries
+            .where((e) => (e.value as Map<String, dynamic>)['isCustom'] == true)
+            .map((e) => e.key)
+            .toList();
+        for (final key in keysToRemove) {
+          curves.remove(key);
+        }
+        await curvesFile.writeAsString(
+          const JsonEncoder.withIndent('  ').convert(curves),
+        );
+        await backupFile.writeAsString(jsonEncode({'curveTableLines': []}));
+      }
+
       content = content.replaceAll(RegExp('\n\n+'), '\n');
       await iniFile.writeAsString(content);
-      final curves =
-          jsonDecode(await curvesFile.readAsString()) as Map<String, dynamic>;
-      final keysToRemove = curves.entries
-          .where((e) => (e.value as Map<String, dynamic>)['isCustom'] == true)
-          .map((e) => e.key)
-          .toList();
-      for (final key in keysToRemove) {
-        curves.remove(key);
-      }
-      await curvesFile.writeAsString(
-        const JsonEncoder.withIndent('  ').convert(curves),
-      );
-      await backupFile.writeAsString(jsonEncode({'curveTableLines': []}));
     }
+
+    // Reset DataTables UI toggle to OFF when backend data is cleared.
+    await DataTableService.setUIEnabledState(false);
+    await DataTableService.setBackendInfiniteRenderEnabled(
+      backendInfiniteRenderDefault,
+    );
+    await DataTableService.setSwapCooldownEnabled(swapCooldownDefault);
+
     final current = await ConfigService.load();
     await ConfigService.save(
       current.copyWith(
+        backendInfiniteRenderEnabled: backendInfiniteRenderDefault,
+        swapCooldownEnabled: swapCooldownDefault,
         backgroundImagePath: '',
         backgroundBlur: 15,
         backgroundParticlesOpacity: 1.0,
