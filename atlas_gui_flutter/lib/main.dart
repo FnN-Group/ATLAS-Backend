@@ -664,6 +664,7 @@ class _AtlasHomePageState extends State<AtlasHomePage>
   String _backendVersionLabel = '1.0.0';
   bool _showStartupAnimation = true;
   bool _revealHomeContent = true;
+  bool _postStartupTasksQueued = false;
   late final AnimationController _shellEntranceController;
   late final Animation<double> _shellEntranceFade;
   late final Animation<double> _shellEntranceScale;
@@ -711,15 +712,9 @@ class _AtlasHomePageState extends State<AtlasHomePage>
     appStartupAnimationEnabled.addListener(_startupAnimationListener);
     unawaited(_initStartup());
     unawaited(_loadBackendVersion());
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _startupAnimationGate.future;
-      if (!mounted) return;
-      await UpdateBackupService.restoreIfNeeded(context);
-      if (!mounted) return;
-      await _maybeCheckForUpdatesOnLaunch();
-      if (!mounted) return;
-      await _maybeShowUpdateNotesOnLaunch();
-    });
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => unawaited(_runPostStartupTasks()),
+    );
   }
 
   void _finishStartupAnimation() {
@@ -732,6 +727,60 @@ class _AtlasHomePageState extends State<AtlasHomePage>
     if (!_startupAnimationGate.isCompleted) {
       _startupAnimationGate.complete();
     }
+  }
+
+  Future<void> _runPostStartupTasks() async {
+    if (_postStartupTasksQueued) return;
+    _postStartupTasksQueued = true;
+
+    await _startupAnimationGate.future;
+    if (!mounted) return;
+
+    await _waitForShellEntranceAnimation();
+    if (!mounted) return;
+
+    await _yieldForUi();
+    if (!mounted) return;
+
+    await UpdateBackupService.restoreIfNeeded(context);
+    if (!mounted) return;
+
+    await _yieldForUi();
+    if (!mounted) return;
+
+    await _maybeCheckForUpdatesOnLaunch();
+    if (!mounted) return;
+
+    await _yieldForUi();
+    if (!mounted) return;
+
+    await _maybeShowUpdateNotesOnLaunch();
+  }
+
+  Future<void> _waitForShellEntranceAnimation() async {
+    if (_shellEntranceController.value >= 1.0) return;
+
+    final completer = Completer<void>();
+    late AnimationStatusListener listener;
+    listener = (status) {
+      if (status == AnimationStatus.completed && !completer.isCompleted) {
+        completer.complete();
+      }
+    };
+
+    _shellEntranceController.addStatusListener(listener);
+    try {
+      await completer.future.timeout(const Duration(seconds: 2));
+    } catch (_) {
+      // If the entrance animation is interrupted, continue startup tasks.
+    } finally {
+      _shellEntranceController.removeStatusListener(listener);
+    }
+  }
+
+  Future<void> _yieldForUi() async {
+    await Future<void>.delayed(const Duration(milliseconds: 16));
+    await WidgetsBinding.instance.endOfFrame;
   }
 
   Future<void> _maybeCheckForUpdatesOnLaunch() async {
@@ -1669,7 +1718,10 @@ class _AtlasHomePageState extends State<AtlasHomePage>
       child: Scaffold(
         body: Stack(
           children: [
-            AtlasBackground(showParticles: !showIntro),
+            AtlasBackground(
+              showParticles: true,
+              animateParticles: !showIntro,
+            ),
             if (_revealHomeContent)
               Positioned.fill(
                 child: FadeTransition(
@@ -2739,9 +2791,14 @@ class GlassPanel extends StatelessWidget {
 }
 
 class AtlasBackground extends StatelessWidget {
-  const AtlasBackground({super.key, this.showParticles = true});
+  const AtlasBackground({
+    super.key,
+    this.showParticles = true,
+    this.animateParticles = true,
+  });
 
   final bool showParticles;
+  final bool animateParticles;
 
   @override
   Widget build(BuildContext context) {
@@ -2836,9 +2893,12 @@ class AtlasBackground extends StatelessWidget {
             }
             return Positioned.fill(
               child: IgnorePointer(
-                child: TickerMode(
-                  enabled: routeIsCurrent,
-                  child: _AtlasParticleField(opacity: clamped),
+                child: Opacity(
+                  opacity: animateParticles ? 1.0 : 0.0,
+                  child: TickerMode(
+                    enabled: routeIsCurrent && animateParticles,
+                    child: _AtlasParticleField(opacity: clamped),
+                  ),
                 ),
               ),
             );
@@ -10465,6 +10525,8 @@ class BackendPaths {
       joinPath([getBackendRoot(), 'static', 'hotfixes', 'DefaultEngine.ini']);
   static String get curvesJson =>
       joinPath([getBackendRoot(), 'responses', 'curves.json']);
+  static String get curvesDefaultsJson =>
+      joinPath([getBackendRoot(), 'responses', 'curves.defaults.json']);
   static String get dataTablesJson =>
       joinPath([getBackendRoot(), 'responses', 'datatables.json']);
   static String get dataTablesUiState =>
@@ -11043,7 +11105,112 @@ class CurveTableService {
     );
   }
 
+  static String _curveSignature(Map<String, dynamic> data) {
+    final key = (data['key'] as String? ?? '').trim().toLowerCase();
+    if (key.isEmpty) return '';
+    final rawPathPart = (data['pathPart'] as String?)?.trim() ?? '';
+    final pathPart = rawPathPart.isEmpty
+        ? BackendPaths.defaultCurvePath
+        : rawPathPart;
+    return '${pathPart.toLowerCase()}|||$key';
+  }
+
+  static Future<Map<String, dynamic>?> _readCurveMap(File file) async {
+    if (!await file.exists()) return null;
+    try {
+      final decoded = jsonDecode(await file.readAsString());
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      if (decoded is Map) {
+        return decoded.map((key, value) => MapEntry('$key', value));
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<Map<String, dynamic>?> _loadDefaultCurveMap() async {
+    final candidates = <String>[
+      BackendPaths.curvesDefaultsJson,
+      joinPath([getInstallationRoot(), 'responses', 'curves.defaults.json']),
+      joinPath([getInstallationRoot(), 'responses', 'curves.json']),
+    ];
+
+    for (final candidate in candidates) {
+      final map = await _readCurveMap(File(candidate));
+      if (map != null && map.isNotEmpty) {
+        return map;
+      }
+    }
+
+    return null;
+  }
+
+  static Future<void> _mergeMissingDefaultCurves() async {
+    final curvesFile = File(BackendPaths.curvesJson);
+    final defaults = await _loadDefaultCurveMap();
+    if (defaults == null || defaults.isEmpty) return;
+
+    if (!await curvesFile.exists()) {
+      await curvesFile.parent.create(recursive: true);
+      await curvesFile.writeAsString(
+        const JsonEncoder.withIndent('  ').convert(defaults),
+      );
+      return;
+    }
+
+    final current = await _readCurveMap(curvesFile);
+    if (current == null) return;
+
+    final existingSignatures = <String>{};
+    for (final value in current.values) {
+      if (value is! Map) continue;
+      final signature = _curveSignature(Map<String, dynamic>.from(value));
+      if (signature.isNotEmpty) {
+        existingSignatures.add(signature);
+      }
+    }
+
+    var maxId = 0;
+    for (final id in current.keys) {
+      final parsed = int.tryParse(id);
+      if (parsed != null && parsed > maxId) {
+        maxId = parsed;
+      }
+    }
+
+    var changed = false;
+    final defaultEntries = defaults.entries.toList()
+      ..sort((a, b) {
+        final aId = int.tryParse(a.key) ?? (1 << 30);
+        final bId = int.tryParse(b.key) ?? (1 << 30);
+        return aId.compareTo(bId);
+      });
+
+    for (final entry in defaultEntries) {
+      if (entry.value is! Map) continue;
+      final curveData = Map<String, dynamic>.from(entry.value);
+      final signature = _curveSignature(curveData);
+      if (signature.isEmpty || existingSignatures.contains(signature)) {
+        continue;
+      }
+      maxId += 1;
+      current['$maxId'] = jsonDecode(jsonEncode(curveData));
+      existingSignatures.add(signature);
+      changed = true;
+    }
+
+    if (changed) {
+      await curvesFile.writeAsString(
+        const JsonEncoder.withIndent('  ').convert(current),
+      );
+    }
+  }
+
   static Future<List<CurveEntry>> loadCurves() async {
+    await _mergeMissingDefaultCurves();
     final curvesFile = File(BackendPaths.curvesJson);
     if (!await curvesFile.exists()) return [];
     final map =

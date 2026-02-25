@@ -13,10 +13,112 @@ import { ensureConfigFile, getConfigPath, readConfig, writeConfig } from "./conf
 const resolvedPortEnv = process.env.ATLAS_PORT ?? process.env.PORT ?? "3551";
 const parsedPort = Number(resolvedPortEnv);
 const PORT = Number.isFinite(parsedPort) && parsedPort > 0 ? parsedPort : 3551;
+const DEFAULT_CURVE_PATH = "/Game/Athena/Balance/DataTables/AthenaGameData";
 export const app = new Hono({ strict: false });
 export default app;
 
 ensureConfigFile();
+ensureCurveDefaults();
+
+function parseJsonObject(filePath: string): Record<string, any> | null {
+  if (!fs.existsSync(filePath)) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return null;
+    }
+    return parsed as Record<string, any>;
+  } catch {
+    return null;
+  }
+}
+
+function getCurveSignature(curve: any): string {
+  if (!curve || typeof curve !== "object") {
+    return "";
+  }
+
+  const key = typeof curve.key === "string" ? curve.key.trim().toLowerCase() : "";
+  if (!key) {
+    return "";
+  }
+
+  const rawPathPart = typeof curve.pathPart === "string" ? curve.pathPart.trim() : "";
+  const pathPart = (rawPathPart || DEFAULT_CURVE_PATH).toLowerCase();
+  return `${pathPart}|||${key}`;
+}
+
+function ensureCurveDefaults() {
+  const curvesPath = path.join(__dirname, "../responses/curves.json");
+  const defaultsPath = path.join(__dirname, "../responses/curves.defaults.json");
+
+  if (!fs.existsSync(defaultsPath)) {
+    return;
+  }
+
+  try {
+    if (!fs.existsSync(curvesPath)) {
+      fs.mkdirSync(path.dirname(curvesPath), { recursive: true });
+      fs.copyFileSync(defaultsPath, curvesPath);
+      logger.info("[STARTUP] Initialized curves.json from curves.defaults.json");
+      return;
+    }
+
+    const curves = parseJsonObject(curvesPath);
+    const defaults = parseJsonObject(defaultsPath);
+    if (!curves || !defaults) {
+      return;
+    }
+
+    const existingSignatures = new Set<string>();
+    Object.values(curves).forEach((curve) => {
+      const signature = getCurveSignature(curve);
+      if (signature) {
+        existingSignatures.add(signature);
+      }
+    });
+
+    let maxId = Math.max(
+      0,
+      ...Object.keys(curves)
+        .map((id) => Number.parseInt(id, 10))
+        .filter((id) => Number.isFinite(id)),
+    );
+
+    let addedCount = 0;
+    const defaultEntries = Object.entries(defaults).sort((a, b) => {
+      const aId = Number.parseInt(a[0], 10);
+      const bId = Number.parseInt(b[0], 10);
+      const safeA = Number.isFinite(aId) ? aId : Number.MAX_SAFE_INTEGER;
+      const safeB = Number.isFinite(bId) ? bId : Number.MAX_SAFE_INTEGER;
+      return safeA - safeB;
+    });
+
+    defaultEntries.forEach(([, curve]) => {
+      const signature = getCurveSignature(curve);
+      if (!signature || existingSignatures.has(signature)) {
+        return;
+      }
+
+      maxId += 1;
+      curves[String(maxId)] = JSON.parse(JSON.stringify(curve));
+      existingSignatures.add(signature);
+      addedCount += 1;
+    });
+
+    if (addedCount > 0) {
+      fs.writeFileSync(curvesPath, JSON.stringify(curves, null, 2));
+      logger.info(`[STARTUP] Added ${addedCount} missing CurveTable default(s)`);
+    }
+  } catch (error) {
+    logger.warning(
+      `[STARTUP] Failed to merge CurveTable defaults: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
 
 // Version: 1.0.1 - Update notification system is now working!
 
