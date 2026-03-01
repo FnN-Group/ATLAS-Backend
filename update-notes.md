@@ -14,12 +14,11 @@ Markdown Quick Key
 ---
 
 # Improvements
-- New Default CurveTable, Rune Vents
-- Infinite Render toggle for v26+
-- No Swap Cooldown toggle
+- Added Item Shop purchasing (thanks to andrew)
+- Added Empty Profile
 
 # Fixes
-- Fixed Clearing Backend Data
-- Fixed Data Transfer over updates
+- Fixed cosmetic style applying issues
+- Saves User and Profile state in GUI for less confusion
 
 [Full release notes](https://github.com/cipherfps/ATLAS-Backend/releases)

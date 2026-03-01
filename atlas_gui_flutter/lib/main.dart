@@ -7663,6 +7663,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   bool _hasAnyUsers = false;
   String? _selectedProfile;
   String? _selectedPreset;
+  Map<String, String> _lastAppliedPresetByUser = {};
 
   @override
   void initState() {
@@ -7675,17 +7676,56 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       final profiles = await ProfileService.listProfiles();
       final presets = await ProfileService.listPresets();
       final hasAnyUsers = await ProfileService.hasAnyUsers();
+      final uiState = await ProfilesUiStateService.load();
+      final profileIds = profiles.map((profile) => profile.accountId).toSet();
+      final presetFolders = presets.map((preset) => preset.folder).toSet();
+      final savedPresetByUser = <String, String>{};
+      uiState.lastAppliedPresetByUser.forEach((accountId, presetFolder) {
+        if (accountId.trim().isEmpty || presetFolder.trim().isEmpty) return;
+        if (!profileIds.contains(accountId)) return;
+        savedPresetByUser[accountId] = presetFolder;
+      });
+
+      String? resolvedSelectedProfile = _selectedProfile;
+      if (resolvedSelectedProfile == null ||
+          !profileIds.contains(resolvedSelectedProfile)) {
+        final savedSelectedProfile = uiState.lastSelectedProfile;
+        if (savedSelectedProfile != null &&
+            profileIds.contains(savedSelectedProfile)) {
+          resolvedSelectedProfile = savedSelectedProfile;
+        } else {
+          resolvedSelectedProfile = profiles.isNotEmpty
+              ? profiles.first.accountId
+              : null;
+        }
+      }
+
+      String? resolvedSelectedPreset;
+      if (resolvedSelectedProfile != null) {
+        final mappedPreset = savedPresetByUser[resolvedSelectedProfile];
+        if (mappedPreset != null && presetFolders.contains(mappedPreset)) {
+          resolvedSelectedPreset = mappedPreset;
+        }
+      }
+      if (resolvedSelectedPreset == null &&
+          _selectedPreset != null &&
+          presetFolders.contains(_selectedPreset)) {
+        resolvedSelectedPreset = _selectedPreset;
+      }
+      resolvedSelectedPreset ??=
+          presets.isNotEmpty ? presets.first.folder : null;
+
       if (!mounted) return;
       setState(() {
         _profiles = profiles;
         _presets = presets;
         _hasAnyUsers = hasAnyUsers;
-        _selectedProfile = profiles.isNotEmpty
-            ? profiles.first.accountId
-            : null;
-        _selectedPreset = presets.isNotEmpty ? presets.first.folder : null;
+        _selectedProfile = resolvedSelectedProfile;
+        _selectedPreset = resolvedSelectedPreset;
+        _lastAppliedPresetByUser = savedPresetByUser;
         _loading = false;
       });
+      unawaited(_persistProfilesUiState());
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -7697,6 +7737,41 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
         SnackBar(content: Text('Failed to load profiles: $error')),
       );
     }
+  }
+
+  String? _resolvedPresetForUser(String? accountId) {
+    if (accountId == null) return null;
+    final presetFolder = _lastAppliedPresetByUser[accountId];
+    if (presetFolder == null) return null;
+    return _presets.any((preset) => preset.folder == presetFolder)
+        ? presetFolder
+        : null;
+  }
+
+  void _selectProfile(String? accountId) {
+    final mappedPreset = _resolvedPresetForUser(accountId);
+    setState(() {
+      _selectedProfile = accountId;
+      if (mappedPreset != null) {
+        _selectedPreset = mappedPreset;
+      } else if (_presets.isNotEmpty) {
+        _selectedPreset = _presets.first.folder;
+      } else {
+        _selectedPreset = null;
+      }
+    });
+    unawaited(_persistProfilesUiState());
+  }
+
+  Future<void> _persistProfilesUiState() async {
+    try {
+      await ProfilesUiStateService.save(
+        ProfilesUiState(
+          lastSelectedProfile: _selectedProfile,
+          lastAppliedPresetByUser: _lastAppliedPresetByUser,
+        ),
+      );
+    } catch (_) {}
   }
 
   String? _validateNewUserName(String value) {
@@ -7837,7 +7912,12 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       );
       await _load();
       if (!mounted) return;
-      setState(() => _selectedProfile = result.accountId);
+      setState(() {
+        _selectedProfile = result.accountId;
+        _selectedPreset = result.presetFolder;
+        _lastAppliedPresetByUser[result.accountId] = result.presetFolder;
+      });
+      unawaited(_persistProfilesUiState());
       showAtlasSnackBar(
         context,
         SnackBar(
@@ -7885,6 +7965,10 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     try {
       await ProfileService.applyPreset(profileId, presetFolder);
       if (!mounted) return;
+      setState(() {
+        _lastAppliedPresetByUser[profileId] = presetFolder;
+      });
+      unawaited(_persistProfilesUiState());
       showAtlasSnackBar(
         context,
         SnackBar(
@@ -7929,6 +8013,12 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     try {
       final applied = await ProfileService.applyPresetToAll(presetFolder);
       if (!mounted) return;
+      setState(() {
+        for (final profile in _profiles) {
+          _lastAppliedPresetByUser[profile.accountId] = presetFolder;
+        }
+      });
+      unawaited(_persistProfilesUiState());
       showAtlasSnackBar(
         context,
         SnackBar(
@@ -8564,10 +8654,8 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                                                 color: Colors.greenAccent,
                                               )
                                             : null,
-                                        onTap: () => setState(
-                                          () => _selectedProfile =
-                                              profile.accountId,
-                                        ),
+                                        onTap: () =>
+                                            _selectProfile(profile.accountId),
                                       ),
                                     );
                                   },
@@ -8724,8 +8812,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                               ),
                             )
                             .toList(),
-                        onChanged: (value) =>
-                            setState(() => _selectedProfile = value),
+                        onChanged: _selectProfile,
                       ),
                       const SizedBox(height: 16),
                       Row(
@@ -9888,6 +9975,94 @@ class _CreateUserResult {
   final String presetFolder;
 }
 
+class ProfilesUiState {
+  const ProfilesUiState({
+    this.lastSelectedProfile,
+    this.lastAppliedPresetByUser = const <String, String>{},
+  });
+
+  final String? lastSelectedProfile;
+  final Map<String, String> lastAppliedPresetByUser;
+}
+
+class ProfilesUiStateService {
+  static Future<ProfilesUiState> load() async {
+    final stateFile = File(_statePath());
+    if (!await stateFile.exists()) {
+      return const ProfilesUiState();
+    }
+
+    try {
+      final raw = await stateFile.readAsString();
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) {
+        return const ProfilesUiState();
+      }
+
+      final selectedProfileRaw = decoded['lastSelectedProfile'];
+      final selectedProfile = selectedProfileRaw is String &&
+              selectedProfileRaw.trim().isNotEmpty
+          ? selectedProfileRaw
+          : null;
+
+      final presetMap = <String, String>{};
+      final presetRaw = decoded['lastAppliedPresetByUser'];
+      if (presetRaw is Map) {
+        presetRaw.forEach((key, value) {
+          if (key is! String || value is! String) return;
+          final accountId = key.trim();
+          final presetFolder = value.trim();
+          if (accountId.isEmpty || presetFolder.isEmpty) return;
+          presetMap[accountId] = presetFolder;
+        });
+      }
+
+      return ProfilesUiState(
+        lastSelectedProfile: selectedProfile,
+        lastAppliedPresetByUser: presetMap,
+      );
+    } catch (_) {
+      return const ProfilesUiState();
+    }
+  }
+
+  static Future<void> save(ProfilesUiState state) async {
+    final stateFile = File(_statePath());
+    final map = <String, dynamic>{
+      'lastSelectedProfile': state.lastSelectedProfile,
+      'lastAppliedPresetByUser': state.lastAppliedPresetByUser,
+    };
+    await stateFile.parent.create(recursive: true);
+    await stateFile.writeAsString(
+      const JsonEncoder.withIndent('  ').convert(map),
+      flush: true,
+    );
+  }
+
+  static String _statePath() {
+    final appData = Platform.environment['APPDATA'] ?? '';
+    if (appData.isNotEmpty) {
+      return joinPath([appData, 'ATLAS', 'profiles-ui-state.json']);
+    }
+
+    final home =
+        Platform.environment['USERPROFILE'] ??
+        Platform.environment['HOME'] ??
+        '';
+    if (home.isNotEmpty) {
+      return joinPath([
+        home,
+        'AppData',
+        'Roaming',
+        'ATLAS',
+        'profiles-ui-state.json',
+      ]);
+    }
+
+    return joinPath([Directory.current.path, 'profiles-ui-state.json']);
+  }
+}
+
 class UserValues {
   const UserValues({
     required this.level,
@@ -10267,6 +10442,7 @@ class ProfileService {
       if (entity is! Directory) continue;
       final folder = _basename(entity.path);
       if (folder.trim().isEmpty) continue;
+      if (_isHiddenPresetFolder(folder)) continue;
       final presetPath = File(joinPath([entity.path, 'profile_athena.json']));
       if (!await presetPath.exists()) continue;
       final labelParts = _presetLabelParts(folder);
@@ -10279,15 +10455,35 @@ class ProfileService {
       );
     }
     presets.sort((a, b) {
+      final aTopPinned = _isTopPinnedPresetFolder(a.folder);
+      final bTopPinned = _isTopPinnedPresetFolder(b.folder);
+      if (aTopPinned != bTopPinned) {
+        return aTopPinned ? -1 : 1;
+      }
+
+      final aBottomPinned = _isBottomPinnedPresetFolder(a.folder);
+      final bBottomPinned = _isBottomPinnedPresetFolder(b.folder);
+      if (aBottomPinned != bBottomPinned) {
+        return aBottomPinned ? 1 : -1;
+      }
+
       final aVersion = _parseVersion(a.versionTag);
       final bVersion = _parseVersion(b.versionTag);
-      return bVersion.compareTo(aVersion); // Descending order (highest first)
+      final versionOrder = bVersion.compareTo(aVersion);
+      if (versionOrder != 0) {
+        return versionOrder; // Descending order (highest first)
+      }
+
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
     });
     return presets;
   }
 
   static (String, String?) _presetLabelParts(String folderName) {
     switch (folderName.trim().toLowerCase()) {
+      case 'blank profile':
+      case 'blank':
+        return ('Blank', null);
       case 'reboot x pulse profile':
       case 'reboot x pulse one profile':
       case 'reboot x pulse one':
@@ -10300,8 +10496,6 @@ class ProfileService {
         return ('Reboot X Retrac', 'v14.40');
       case 'reboot x twine profile':
         return ('Reboot X Twine', 'v14.40');
-      case 'latest profile':
-        return ('Latest', 'v39+');
       default:
         return (folderName, null);
     }
@@ -10317,6 +10511,26 @@ class ProfileService {
       return double.parse(cleanVersion);
     } catch (e) {
       return 0.0;
+    }
+  }
+
+  static bool _isHiddenPresetFolder(String folderName) {
+    switch (folderName.trim().toLowerCase()) {
+      case 'latest profile':
+      case 'latest profile preset':
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  static bool _isTopPinnedPresetFolder(String folderName) {
+    switch (folderName.trim().toLowerCase()) {
+      case 'blank profile':
+      case 'blank':
+        return true;
+      default:
+        return false;
     }
   }
 
