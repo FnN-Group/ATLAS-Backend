@@ -1,10 +1,11 @@
-<img width="1920" height="1080" alt="ATLAS-Backend-Banner-Transparent-Figureless" src="https://github.com/user-attachments/assets/44669ae6-f2f0-414e-908a-74053f233aa6" />
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/b9982db2-efe3-4182-a450-dfac6d55596e" />
+
 
 ## Credits
 
 - [andr1ww](https://github.com/andr1ww) ATLAS is a fork of [Nexa](https://github.com/andr1ww/Nexa)
 - [Ralzify](https://github.com/Ralzify) ATLAS uses the CurveTable and Straight Bloom code from [FortBackend](https://github.com/Ralzify/FortBackend)
-- [Lawin](https://github.com/Lawin0129) For some references and code
+- [Lawin](https://github.com/Lawin0129) Using [LawinServerV1](https://github.com/Lawin0129/LawinServer) references and code
 
 ## ATLAS Backend
 
