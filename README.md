@@ -5,7 +5,7 @@
 
 - [andr1ww](https://github.com/andr1ww) ATLAS is a fork of [Nexa](https://github.com/andr1ww/Nexa)
 - [Ralzify](https://github.com/Ralzify) ATLAS uses the CurveTable and Straight Bloom code from [FortBackend](https://github.com/Ralzify/FortBackend)
-- [Lawin](https://github.com/Lawin0129) LawinServerV1 references and code
+- [Lawin](https://github.com/Lawin0129) [LawinServerV1](https://github.com/Lawin0129/LawinServer) references and code
 
 ## ATLAS Backend
 
