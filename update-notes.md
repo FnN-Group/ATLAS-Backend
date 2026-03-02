@@ -14,11 +14,7 @@ Markdown Quick Key
 ---
 
 # Improvements
-- Added Item Shop purchasing (thanks to andrew)
-- Added Empty Profile
-
-# Fixes
-- Fixed cosmetic style applying issues
-- Saves User and Profile state in GUI for less confusion
+- Fixed Map Discovery
+- Added Default Profile
 
 [Full release notes](https://github.com/cipherfps/ATLAS-Backend/releases)

@@ -10481,9 +10481,14 @@ class ProfileService {
 
   static (String, String?) _presetLabelParts(String folderName) {
     switch (folderName.trim().toLowerCase()) {
+      case 'default profile':
+      case 'default':
+        return ('Default Profile', null);
       case 'blank profile':
       case 'blank':
-        return ('Blank', null);
+      case 'empty profile':
+      case 'empty':
+        return ('Empty Profile', null);
       case 'reboot x pulse profile':
       case 'reboot x pulse one profile':
       case 'reboot x pulse one':
@@ -10526,8 +10531,12 @@ class ProfileService {
 
   static bool _isTopPinnedPresetFolder(String folderName) {
     switch (folderName.trim().toLowerCase()) {
+      case 'default profile':
+      case 'default':
       case 'blank profile':
       case 'blank':
+      case 'empty profile':
+      case 'empty':
         return true;
       default:
         return false;
