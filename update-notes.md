@@ -16,5 +16,6 @@ Markdown Quick Key
 # Improvements
 - Fixed Map Discovery
 - Added Default Profile
+(Fixed a mistake, sorry for another update)
 
 [Full release notes](https://github.com/cipherfps/ATLAS-Backend/releases)

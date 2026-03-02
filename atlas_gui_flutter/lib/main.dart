@@ -92,6 +92,50 @@ Future<void> _initializeAppDataDirectory() async {
       await dir.create(recursive: true);
     }
   }
+
+  await _migrateLegacyPresetFolders(atlasDataDir);
+}
+
+Future<void> _migrateLegacyPresetFolders(Directory atlasDataDir) async {
+  final presetsDir = Directory(
+    joinPath([atlasDataDir.path, 'static', 'athenaprofiles', 'Profile Presets']),
+  );
+  if (!await presetsDir.exists()) return;
+
+  await _migratePresetFolderName(
+    presetsDir: presetsDir,
+    legacyFolderName: 'Blank Profile',
+    canonicalFolderName: 'Empty Profile',
+  );
+  await _migratePresetFolderName(
+    presetsDir: presetsDir,
+    legacyFolderName: 'Blank',
+    canonicalFolderName: 'Empty Profile',
+  );
+}
+
+Future<void> _migratePresetFolderName({
+  required Directory presetsDir,
+  required String legacyFolderName,
+  required String canonicalFolderName,
+}) async {
+  final legacyDir = Directory(joinPath([presetsDir.path, legacyFolderName]));
+  if (!await legacyDir.exists()) return;
+
+  final canonicalDir = Directory(
+    joinPath([presetsDir.path, canonicalFolderName]),
+  );
+
+  if (!await canonicalDir.exists()) {
+    try {
+      await legacyDir.rename(canonicalDir.path);
+      return;
+    } catch (_) {}
+  }
+
+  try {
+    await legacyDir.delete(recursive: true);
+  } catch (_) {}
 }
 
 class AtlasApp extends StatefulWidget {
