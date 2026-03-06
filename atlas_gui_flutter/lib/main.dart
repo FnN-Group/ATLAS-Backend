@@ -12098,6 +12098,25 @@ class CurveTableService {
 
 class DataTableService {
   static const String _fixesComment = '# Fixes';
+  static const String _textHotfixSection =
+      '[/Script/FortniteGame.FortTextHotfixConfig]';
+  static const List<String> _atlasTextReplacements = [
+    '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="", Key="9F28701D47C7B91B048FEBA378ADDEAE", NativeString="Epic Games", LocalizedStrings=(("en","ATLAS")))',
+    '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="LoadingScreen", Key="Connecting", NativeString="CONNECTING", LocalizedStrings=(("en","CONNECTING TO ATLAS")))',
+    '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="FortLoginStatus", Key="LoggingIn", NativeString="Logging In...", LocalizedStrings=(("en","Logging Into ATLAS...")))',
+    '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="OnlineAccount", Key="DoQosPingTests", NativeString="Checking connection to datacenters...", LocalizedStrings=(("en","Checking connection to ATLAS...")))',
+    '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="", Key="37020CCD402F073607D9D4A9561EF035", NativeString="PLAY", LocalizedStrings=(("en","Play ATLAS")))',
+    '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="", Key="C8C6606D4ED4B816D4A358A42DFBDD59", NativeString="PLAY", LocalizedStrings=(("en","Play ATLAS")))',
+    '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="", Key="03875FFD49212D2F37B01788C09086B5", NativeString="Quit", LocalizedStrings=(("en","Quit ATLAS")))',
+    '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="", Key="1D20854C403FDD474AE7C8B929815DA2", NativeString="Quit", LocalizedStrings=(("en","Quit ATLAS")))',
+    '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="", Key="1FB7052F40BE8B647B5CA5A362BE8F21", NativeString="Quit", LocalizedStrings=(("en","Quit ATLAS")))',
+    '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="", Key="2E42C9FB4F551A859C05BF99F7E36FB1", NativeString="Quit", LocalizedStrings=(("en","Quit ATLAS")))',
+    '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="", Key="370415344EEEA09D8C01A48F4B8148D7", NativeString="Quit", LocalizedStrings=(("en","Quit ATLAS")))',
+    '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="", Key="538BD1FD46BCEFA4813E2FAFAA07E1A2", NativeString="Quit", LocalizedStrings=(("en","Quit ATLAS")))',
+    '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="FortOnlineAccount", Key="CreatingParty", NativeString="Creating party...", LocalizedStrings=(("en","Welcome to ATLAS")))',
+    '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="PartyContext", Key="BattleRoyaleInLobby", NativeString="Battle Royale - In Lobby", LocalizedStrings=(("en","ATLAS - Lobby")))',
+    '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="OnlineAccount", Key="TokenExpired", NativeString="Login Expired or Logged In Elsewhere", LocalizedStrings=(("en","Backend Restarted... Restart your game")))',
+  ];
   static const List<String> _backendInfiniteRenderFilterLines = [
     '+FilterConfigs=(ClassName=/Script/Engine.Pawn, DynamicFilterName=None, FilterProfile=None)',
     '+FilterConfigs=(ClassName=/Script/FortniteGame.FortPawn, DynamicFilterName=None, FilterProfile=None)',
@@ -12292,6 +12311,91 @@ class DataTableService {
       updatedContent = '$updatedContent$lineEnding';
     }
     await engineFile.writeAsString(updatedContent);
+  }
+
+  static Future<void> ensureAtlasTextHotfixInDefaultGame() async {
+    final iniFile = File(BackendPaths.defaultGameIni);
+    if (!await iniFile.exists()) return;
+
+    final original = await iniFile.readAsString();
+    final lineEnding = original.contains('\r\n') ? '\r\n' : '\n';
+    final hasTrailingNewline = original.endsWith('\n');
+    var lines = original.split(RegExp(r'\r?\n'));
+
+    final sectionRanges = <({int start, int end})>[];
+    final existingSectionLines = <String>[];
+    final sectionHeaderRegex = RegExp(r'^\[[^\r\n\]]+\]$');
+
+    for (var i = 0; i < lines.length; i++) {
+      if (lines[i].trim() != _textHotfixSection) continue;
+
+      final start = i;
+      i++;
+      while (i < lines.length && !sectionHeaderRegex.hasMatch(lines[i].trim())) {
+        existingSectionLines.add(lines[i].trimRight());
+        i++;
+      }
+      sectionRanges.add((start: start, end: i));
+      i--;
+    }
+
+    if (sectionRanges.isNotEmpty) {
+      final kept = <String>[];
+      var rangeIndex = 0;
+      for (var i = 0; i < lines.length;) {
+        if (rangeIndex < sectionRanges.length &&
+            i == sectionRanges[rangeIndex].start) {
+          i = sectionRanges[rangeIndex].end;
+          rangeIndex++;
+          continue;
+        }
+        kept.add(lines[i]);
+        i++;
+      }
+      lines = kept;
+    }
+
+    final mergedSectionLines = <String>[];
+    final seen = <String>{};
+    void addUnique(String line) {
+      if (line.isEmpty) return;
+      if (!seen.add(line)) return;
+      mergedSectionLines.add(line);
+    }
+
+    for (final line in existingSectionLines) {
+      addUnique(line);
+    }
+    for (final line in _atlasTextReplacements) {
+      addUnique(line);
+    }
+
+    final sectionBlockLines = <String>[
+      _textHotfixSection,
+      ...mergedSectionLines,
+    ];
+    final firstAssetHotfixIndex = lines.indexWhere(
+      (line) => line.trim() == '[AssetHotfix]',
+    );
+    late final List<String> resultLines;
+    if (firstAssetHotfixIndex == -1) {
+      resultLines = [...lines, ...sectionBlockLines];
+    } else {
+      resultLines = [
+        ...lines.sublist(0, firstAssetHotfixIndex),
+        ...sectionBlockLines,
+        ...lines.sublist(firstAssetHotfixIndex),
+      ];
+    }
+
+    var output = resultLines.join(lineEnding);
+    if (hasTrailingNewline && !output.endsWith(lineEnding)) {
+      output = '$output$lineEnding';
+    }
+
+    if (output != original) {
+      await iniFile.writeAsString(output);
+    }
   }
 
   // Preserve any manual fixes under the "# Fixes" marker in DefaultGame.ini.
@@ -13642,6 +13746,10 @@ class UpdateBackupService {
       await guiConfigFile.parent.create(recursive: true);
       await guiBackupFile.copy(guiConfigFile.path);
     }
+
+    // Restoring a pre-update DefaultGame.ini can remove newer text replacements.
+    // Re-apply the section after restore while preserving user data lines.
+    await DataTableService.ensureAtlasTextHotfixInDefaultGame();
 
     final restoredConfig = await ConfigService.load();
     appThemeMode.value = restoredConfig.useDarkMode
