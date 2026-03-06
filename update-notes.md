@@ -14,8 +14,6 @@ Markdown Quick Key
 ---
 
 # Improvements
-- Fixed Map Discovery
-- Added Default Profile
-(Fixed a mistake, sorry for another update)
+- ATLAS Text Replacement In-Game
 
 [Full release notes](https://github.com/cipherfps/ATLAS-Backend/releases)

@@ -9,7 +9,173 @@ const hotfixCache = new Map<
   { content: string; mtimeMs: number; size: number }
 >();
 
+const TEXT_HOTFIX_SECTION = "[/Script/FortniteGame.FortTextHotfixConfig]";
+const TEXT_HOTFIX_MIGRATION_ID = "atlas_text_hotfix_v2";
+const TEXT_HOTFIX_MIGRATION_MARKER = ".atlas_text_hotfix_migration";
+const ATLAS_TEXT_REPLACEMENTS = [
+  '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="", Key="9F28701D47C7B91B048FEBA378ADDEAE", NativeString="Epic Games", LocalizedStrings=(("en","ATLAS")))',
+  '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="LoadingScreen", Key="Connecting", NativeString="CONNECTING", LocalizedStrings=(("en","CONNECTING TO ATLAS")))',
+  '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="FortLoginStatus", Key="LoggingIn", NativeString="Logging In...", LocalizedStrings=(("en","Logging Into ATLAS...")))',
+  '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="OnlineAccount", Key="DoQosPingTests", NativeString="Checking connection to datacenters...", LocalizedStrings=(("en","Checking connection to ATLAS...")))',
+  '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="", Key="37020CCD402F073607D9D4A9561EF035", NativeString="PLAY", LocalizedStrings=(("en","Play ATLAS")))',
+  '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="", Key="C8C6606D4ED4B816D4A358A42DFBDD59", NativeString="PLAY", LocalizedStrings=(("en","Play ATLAS")))',
+  '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="", Key="03875FFD49212D2F37B01788C09086B5", NativeString="Quit", LocalizedStrings=(("en","Quit ATLAS")))',
+  '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="", Key="1D20854C403FDD474AE7C8B929815DA2", NativeString="Quit", LocalizedStrings=(("en","Quit ATLAS")))',
+  '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="", Key="1FB7052F40BE8B647B5CA5A362BE8F21", NativeString="Quit", LocalizedStrings=(("en","Quit ATLAS")))',
+  '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="", Key="2E42C9FB4F551A859C05BF99F7E36FB1", NativeString="Quit", LocalizedStrings=(("en","Quit ATLAS")))',
+  '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="", Key="370415344EEEA09D8C01A48F4B8148D7", NativeString="Quit", LocalizedStrings=(("en","Quit ATLAS")))',
+  '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="", Key="538BD1FD46BCEFA4813E2FAFAA07E1A2", NativeString="Quit", LocalizedStrings=(("en","Quit ATLAS")))',
+  '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="FortOnlineAccount", Key="CreatingParty", NativeString="Creating party...", LocalizedStrings=(("en","Welcome to ATLAS")))',
+  '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="PartyContext", Key="BattleRoyaleInLobby", NativeString="Battle Royale - In Lobby", LocalizedStrings=(("en","ATLAS - Lobby")))',
+  '+TextReplacements=(Category=Game, bIsMinimalPatch=True, Namespace="OnlineAccount", Key="TokenExpired", NativeString="Login Expired or Logged In Elsewhere", LocalizedStrings=(("en","Backend Restarted... Restart your game")))',
+] as const;
+
+function getBackendVersion(): string {
+  if (process.env.npm_package_version) {
+    return process.env.npm_package_version;
+  }
+
+  try {
+    const packageJsonPath = path.join(__dirname, "../../package.json");
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as {
+      version?: string;
+    };
+
+    if (packageJson.version) {
+      return packageJson.version;
+    }
+  } catch {
+    // Fall through to default below.
+  }
+
+  return "dev";
+}
+
+function normalizeAtlasTextHotfixSection(defaultGameIni: string): string {
+  const newline = defaultGameIni.includes("\r\n") ? "\r\n" : "\n";
+  const hadTrailingNewline = /\r?\n$/.test(defaultGameIni);
+  let lines = defaultGameIni.split(/\r?\n/);
+
+  const sectionRanges: Array<{ start: number; end: number }> = [];
+  const existingSectionLines: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trim() !== TEXT_HOTFIX_SECTION) continue;
+
+    const start = i;
+    i++;
+
+    while (i < lines.length && !/^\[[^\r\n\]]+\]$/.test(lines[i].trim())) {
+      existingSectionLines.push(lines[i].trimEnd());
+      i++;
+    }
+
+    sectionRanges.push({ start, end: i });
+    i--;
+  }
+
+  if (sectionRanges.length > 0) {
+    const keptLines: string[] = [];
+    let rangeIndex = 0;
+
+    for (let i = 0; i < lines.length; ) {
+      const currentRange = sectionRanges[rangeIndex];
+      if (currentRange && i === currentRange.start) {
+        i = currentRange.end;
+        rangeIndex++;
+        continue;
+      }
+
+      keptLines.push(lines[i]);
+      i++;
+    }
+
+    lines = keptLines;
+  }
+
+  const mergedSectionLines: string[] = [];
+  const seenSectionLine = new Set<string>();
+  const addUniqueSectionLine = (line: string) => {
+    if (!line) return;
+    if (seenSectionLine.has(line)) return;
+    seenSectionLine.add(line);
+    mergedSectionLines.push(line);
+  };
+
+  for (const line of existingSectionLines) addUniqueSectionLine(line);
+  for (const line of ATLAS_TEXT_REPLACEMENTS) addUniqueSectionLine(line);
+
+  const sectionBlockLines = [TEXT_HOTFIX_SECTION, ...mergedSectionLines];
+  const firstAssetHotfixIndex = lines.findIndex(
+    (line) => line.trim() === "[AssetHotfix]"
+  );
+
+  let resultLines: string[];
+  if (firstAssetHotfixIndex === -1) {
+    resultLines = [...lines, ...sectionBlockLines];
+  } else {
+    resultLines = [
+      ...lines.slice(0, firstAssetHotfixIndex),
+      ...sectionBlockLines,
+      ...lines.slice(firstAssetHotfixIndex),
+    ];
+  }
+
+  let output = resultLines.join(newline);
+  if (hadTrailingNewline && !output.endsWith(newline)) {
+    output += newline;
+  }
+
+  return output;
+}
+
+function ensureAtlasTextHotfixInFile(filePath: string): void {
+  try {
+    if (!fs.existsSync(filePath)) return;
+
+    const original = fs.readFileSync(filePath, "utf8");
+    const patched = normalizeAtlasTextHotfixSection(original);
+
+    if (patched !== original) {
+      fs.writeFileSync(filePath, patched, "utf8");
+    }
+  } catch (err) {
+    console.error(`Failed to apply text hotfix migration for ${filePath}:`, err);
+  }
+}
+
+function runAtlasTextHotfixMigration(): void {
+  const hotfixesDir = path.join(__dirname, "../../static/hotfixes");
+  const markerPath = path.join(hotfixesDir, TEXT_HOTFIX_MIGRATION_MARKER);
+  const migrationToken = `${TEXT_HOTFIX_MIGRATION_ID}@${getBackendVersion()}`;
+
+  try {
+    if (fs.existsSync(markerPath)) {
+      const existingToken = fs.readFileSync(markerPath, "utf8").trim();
+      if (existingToken === migrationToken) {
+        return;
+      }
+    }
+  } catch (err) {
+    console.error("Failed reading text hotfix migration marker:", err);
+  }
+
+  ensureAtlasTextHotfixInFile(path.join(hotfixesDir, "DefaultGame.ini"));
+  ensureAtlasTextHotfixInFile(
+    path.join(hotfixesDir, "DefaultGame Template", "DefaultGame.ini")
+  );
+
+  try {
+    fs.writeFileSync(markerPath, `${migrationToken}\n`, "utf8");
+  } catch (err) {
+    console.error("Failed writing text hotfix migration marker:", err);
+  }
+}
+
 export default function () {
+  // One-time/idempotent migration per app version.
+  runAtlasTextHotfixMigration();
+
   async function listSystemHotfixFiles() {
     const hotfixesDir = path.join(__dirname, "../../static/hotfixes");
     const csFiles: any[] = [];
