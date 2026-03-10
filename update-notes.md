@@ -14,6 +14,6 @@ Markdown Quick Key
 ---
 
 # Improvements
-- ATLAS Text Replacement In-Game
+- Updated Reboot x Stellar Profile to V2
 
 [Full release notes](https://github.com/cipherfps/ATLAS-Backend/releases)
