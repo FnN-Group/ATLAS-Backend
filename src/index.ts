@@ -1,4 +1,4 @@
-﻿import { Hono } from "hono";
+import { Hono } from "hono";
 import path from "node:path";
 import { loadRoutes } from "./utils/startup/loadRoutes";
 import { Atlas } from "./utils/handlers/errors";

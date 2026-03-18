@@ -13,7 +13,6 @@ Markdown Quick Key
 
 ---
 
-# Improvements
-- Updated Reboot x Stellar Profile to V2
-
+# Fixes
+- Removed Parental Controls
 [Full release notes](https://github.com/cipherfps/ATLAS-Backend/releases)

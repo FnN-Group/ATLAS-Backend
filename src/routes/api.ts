@@ -62,30 +62,10 @@ export default function () {
     return c.json([]);
   });
 
-  app.get("/content-controls/:accountId", async (c) => {
-    return c.json({
-      data: {
-        ageGate: 0,
-        controlsEnabled: false,
-        maxEpicProfilePrivacy: "none",
-        principalId: c.req.param("accountId"),
-      },
-    });
-  });
-
-  app.get("/content-controls/:accountId/rules/namespaces/fn", async (c) => {
-    return c.json({
-      data: []
-    });
-  });
-
-  app.post("/content-controls/:accountId/verify-pin", async (c) => {
-    return c.json({
-      data: {
-        pinCorrect: true,
-      },
-    });
-  });
+  // Return 404 so game treats parental controls as unavailable → no lock on privacy settings
+  app.get("/content-controls/:accountId", async (c) => c.notFound());
+  app.get("/content-controls/:accountId/rules/namespaces/fn", async (c) => c.notFound());
+  app.post("/content-controls/:accountId/verify-pin", async (c) => c.notFound());
 
   app.get("/fortnite/api/game/v2/privacy/account/:accountId", async (c) => {
     return c.json({

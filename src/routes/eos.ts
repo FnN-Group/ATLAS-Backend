@@ -1,4 +1,6 @@
 import app from "..";
+import path from "node:path";
+import fs from "node:fs";
 
 export default function () {
   app.get("/epic/friends/v1/:accountId/blocklist", async (c) => {
@@ -6,7 +8,13 @@ export default function () {
   });
 
   app.all("/v1/epic-settings/public/users/*/values", async (c) => {
-    return c.json({});
+    const epicSettingsPath = path.join(__dirname, "..", "..", "responses", "epic-settings.json");
+    try {
+      const data = JSON.parse(fs.readFileSync(epicSettingsPath, "utf-8"));
+      return c.json(data);
+    } catch {
+      return c.json({});
+    }
   });
 
   app.get("/epic/id/v2/sdk/accounts", async (c) => {
