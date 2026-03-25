@@ -4,12 +4,13 @@ import jwt from "jsonwebtoken";
 import logger from "../utils/logger/logger";
 import fs from "node:fs";
 import path from "node:path";
+import { atlasDataPath } from "../config/paths";
 
 interface requestBody {
   [key: string]: any;
 }
 
-const authLogDir = path.join(__dirname, "../../logs");
+const authLogDir = atlasDataPath("logs");
 const authLogPath = path.join(authLogDir, "auth-debug.log");
 
 function ensureAuthLogDir() {

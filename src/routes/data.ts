@@ -4,8 +4,9 @@ import getVersion from "../utils/handlers/getVersion";
 import fs from "fs";
 import path from "path";
 import logger from "../utils/logger/logger";
+import { atlasDataPath, atlasInstallPath } from "../config/paths";
 
-const cmsDir = path.join(process.cwd(), "static", "cms");
+const cmsDir = atlasInstallPath("static", "cms");
 const legacyCms = JSON.parse(
   fs.readFileSync(path.join(cmsDir, "fortnite-game_s6.json"), "utf8")
 );
@@ -113,7 +114,7 @@ function setCmsNoCacheHeaders(c: any): void {
 
 function appendCmsDebugLog(line: string): void {
   try {
-    const logDir = path.join(process.cwd(), "logs");
+    const logDir = atlasDataPath("logs");
     if (!fs.existsSync(logDir)) {
       fs.mkdirSync(logDir, { recursive: true });
     }

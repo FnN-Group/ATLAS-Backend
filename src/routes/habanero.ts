@@ -3,6 +3,7 @@ import getVersion from "../utils/handlers/getVersion";
 import fs from "node:fs";
 import path from "node:path";
 import { readConfig } from "../config/config";
+import { atlasDataPath } from "../config/paths";
 
 export default function () {
   app.get("/api/v1/games/fortnite/trackprogress/:accountId", async (c) => {
@@ -26,7 +27,9 @@ export default function () {
       
       if (saveArenaPoints) {
         const profilePath = path.join(
-          __dirname, "..", "..", "static", "profiles", accountId, "profile_athena.json"
+          atlasDataPath("static", "profiles"),
+          accountId,
+          "profile_athena.json",
         );
         const profileData = fs.readFileSync(profilePath, "utf-8");
         const profile = JSON.parse(profileData);

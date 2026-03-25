@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import ini from "ini";
+import { atlasDataPath } from "./paths";
 
 export type AtlasConfigValue = string | boolean | number | undefined;
 export type AtlasConfig = Record<string, AtlasConfigValue>;
@@ -24,7 +25,7 @@ export const DEFAULT_CONFIG: Readonly<Record<string, string>> = Object.freeze({
   LastShownUpdateNotesVersion: "",
 });
 
-const DEFAULT_CONFIG_PATH = path.join(__dirname, "config.ini");
+const DEFAULT_CONFIG_PATH = atlasDataPath("src", "config", "config.ini");
 
 export function getConfigPath(): string {
   return DEFAULT_CONFIG_PATH;

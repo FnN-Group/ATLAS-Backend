@@ -3,6 +3,7 @@ import getVersion from "../utils/handlers/getVersion";
 import fs from 'node:fs'
 import path from 'node:path'
 import { readConfig } from "../config/config";
+import { atlasDataPath, atlasInstallPath } from "../config/paths";
 
 export default function () {
     app.get("/api/v1/events/Fortnite/download/:accountId", async (c) => {
@@ -17,13 +18,13 @@ export default function () {
             }
 
             const eventsData = await fs.readFileSync(
-                path.join(__dirname, "..", "..", "static", "events", "events.json"),
+                atlasInstallPath("static", "events", "events.json"),
                 "utf-8",
             );
             const events = JSON.parse(eventsData);
 
             const arenaTemplatesData = await fs.readFileSync(
-                path.join(__dirname, "..", "..", "static", "events", "template.json"),
+                atlasInstallPath("static", "events", "template.json"),
                 "utf-8",
             );
             const arenaTemplates = JSON.parse(arenaTemplatesData);
@@ -38,7 +39,9 @@ export default function () {
             if (saveArenaPoints) {
                 try {
                     const profilePath = path.join(
-                        __dirname, "..", "..", "static", "profiles", accountId, "profile_athena.json"
+                        atlasDataPath("static", "profiles"),
+                        accountId,
+                        "profile_athena.json",
                     );
                     const profileData = fs.readFileSync(profilePath, "utf-8");
                     const profile = JSON.parse(profileData);
@@ -146,7 +149,7 @@ export default function () {
                     const newHype = body.finalScores.Hype;
                     
                     // Load player profile
-                    const profilesDir = path.join(__dirname, "..", "..", "static", "profiles");
+                    const profilesDir = atlasDataPath("static", "profiles");
                     const accountProfilesDir = path.join(profilesDir, accountId);
                     const profilePath = path.join(accountProfilesDir, "profile_athena.json");
                     

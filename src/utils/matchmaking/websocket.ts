@@ -83,9 +83,6 @@ export function startMatchmakingWebSocket(port: number = 5555) {
       close(ws) {
         setStatusMessage(`[MATCHMAKING] Disconnected`);
       },
-      error(ws, error) {
-        console.error(`[Matchmaking] WebSocket error: ${error}`);
-      },
     },
   });
 }

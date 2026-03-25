@@ -4,9 +4,10 @@ import path from "node:path";
 import { v4 as uuidv4 } from "uuid";
 import getVersion from "../utils/handlers/getVersion";
 import { Atlas } from "../utils/handlers/errors";
+import { atlasDataPath } from "../config/paths";
 
 const userpath = new Set();
-const profilesDir = path.join(__dirname, "..", "..", "static", "profiles");
+const profilesDir = atlasDataPath("static", "profiles");
 
 function parseJson(raw: string): any {
   return JSON.parse(raw.replace(/^\uFEFF/, ""));

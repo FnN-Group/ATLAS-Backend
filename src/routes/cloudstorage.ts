@@ -3,6 +3,7 @@ import crypto from "crypto";
 import fs from "node:fs";
 import path from "node:path";
 import getVersion from "../utils/handlers/getVersion";
+import { atlasDataPath, atlasInstallPath } from "../config/paths";
 // Cache for hotfix files to avoid repeated disk reads
 const hotfixCache = new Map<
   string,
@@ -36,7 +37,7 @@ function getBackendVersion(): string {
   }
 
   try {
-    const packageJsonPath = path.join(__dirname, "../../package.json");
+    const packageJsonPath = atlasInstallPath("package.json");
     const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as {
       version?: string;
     };
@@ -145,7 +146,7 @@ function ensureAtlasTextHotfixInFile(filePath: string): void {
 }
 
 function runAtlasTextHotfixMigration(): void {
-  const hotfixesDir = path.join(__dirname, "../../static/hotfixes");
+  const hotfixesDir = atlasDataPath("static", "hotfixes");
   const markerPath = path.join(hotfixesDir, TEXT_HOTFIX_MIGRATION_MARKER);
   const migrationToken = `${TEXT_HOTFIX_MIGRATION_ID}@${getBackendVersion()}`;
 
@@ -177,7 +178,7 @@ export default function () {
   runAtlasTextHotfixMigration();
 
   async function listSystemHotfixFiles() {
-    const hotfixesDir = path.join(__dirname, "../../static/hotfixes");
+    const hotfixesDir = atlasDataPath("static", "hotfixes");
     const csFiles: any[] = [];
 
     // Note: `static/hotfixes` can contain folders (eg "DefaultGame Template") and local backups.
@@ -246,11 +247,7 @@ export default function () {
     try {
       const version = getVersion(c);
       const fileName = c.req.param("file");
-      const filePath = path.join(
-        __dirname,
-        "../../static/hotfixes",
-        fileName
-      );
+      const filePath = atlasDataPath("static", "hotfixes", fileName);
       
       // Revalidate cache using file metadata so runtime edits are picked up.
       const fileStat = await fs.promises.stat(filePath);
@@ -347,11 +344,7 @@ export default function () {
     const accountId = c.req.param("accountId");
     try {
       const clientSettingsPath = path.join(
-        __dirname,
-        "..",
-        "..",
-        "static",
-        "ClientSettings",
+        atlasDataPath("static", "ClientSettings"),
         accountId
       );
       await fs.promises.mkdir(clientSettingsPath, { recursive: true });
@@ -401,11 +394,7 @@ export default function () {
     const accountId = c.req.param("accountId");
 
     const clientSettingsPath = path.join(
-        __dirname,
-        "..",
-        "..",
-        "static",
-        "ClientSettings",
+        atlasDataPath("static", "ClientSettings"),
         accountId
       );
     
@@ -447,11 +436,7 @@ export default function () {
   app.get("/fortnite/api/cloudstorage/user/:accountId/:file", async (c) => {
     const accountId = c.req.param("accountId");
     const clientSettingsPath = path.join(
-        __dirname,
-        "..",
-        "..",
-        "static",
-        "ClientSettings",
+        atlasDataPath("static", "ClientSettings"),
         accountId
       );
     await fs.promises.mkdir(clientSettingsPath, { recursive: true });

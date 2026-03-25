@@ -9,6 +9,11 @@ import prompts from "prompts";
 import fs from "node:fs";
 import { startMatchmakingWebSocket } from "./utils/matchmaking/websocket";
 import { ensureConfigFile, getConfigPath, readConfig, writeConfig } from "./config/config";
+import {
+  atlasDataPath,
+  atlasDataReadPath,
+  ensureAtlasDataLayout,
+} from "./config/paths";
 
 const resolvedPortEnv = process.env.ATLAS_PORT ?? process.env.PORT ?? "3551";
 const parsedPort = Number(resolvedPortEnv);
@@ -17,6 +22,7 @@ const DEFAULT_CURVE_PATH = "/Game/Athena/Balance/DataTables/AthenaGameData";
 export const app = new Hono({ strict: false });
 export default app;
 
+ensureAtlasDataLayout();
 ensureConfigFile();
 ensureCurveDefaults();
 
@@ -52,8 +58,8 @@ function getCurveSignature(curve: any): string {
 }
 
 function ensureCurveDefaults() {
-  const curvesPath = path.join(__dirname, "../responses/curves.json");
-  const defaultsPath = path.join(__dirname, "../responses/curves.defaults.json");
+  const curvesPath = atlasDataPath("responses", "curves.json");
+  const defaultsPath = atlasDataReadPath("responses", "curves.defaults.json");
 
   if (!fs.existsSync(defaultsPath)) {
     return;
@@ -330,8 +336,8 @@ function clearDataTableSections(fileContent: string, includeFixes = false): stri
 // Function to toggle Straight Bloom
 async function toggleStraightBloom() {
   try {
-    const iniPath = path.join(__dirname, '../static/hotfixes/DefaultGame.ini');
-    const sniperPath = path.join(__dirname, '../responses/sniper.json');
+    const iniPath = atlasDataPath("static", "hotfixes", "DefaultGame.ini");
+    const sniperPath = atlasDataPath("responses", "sniper.json");
     
     let content = fs.readFileSync(iniPath, 'utf-8');
     const sniperData = JSON.parse(fs.readFileSync(sniperPath, 'utf-8'));
@@ -470,8 +476,8 @@ async function importCurveTables() {
     }
     
     // Read current backend's DefaultGame.ini and curves.json
-    const iniPath = path.join(__dirname, '../static/hotfixes/DefaultGame.ini');
-    const curvesPath = path.join(__dirname, '../responses/curves.json');
+    const iniPath = atlasDataPath("static", "hotfixes", "DefaultGame.ini");
+    const curvesPath = atlasDataPath("responses", "curves.json");
     let content = fs.readFileSync(iniPath, 'utf-8');
     const curves = JSON.parse(fs.readFileSync(curvesPath, 'utf-8'));
 
@@ -597,7 +603,7 @@ async function importCurveTables() {
     fs.writeFileSync(curvesPath, JSON.stringify(curves, null, 2));
     
     // Delete backup file to set CurveTables toggle to ON state
-    const backupPath = path.join(__dirname, '../responses/modifications-backup.json');
+    const backupPath = atlasDataPath("responses", "modifications-backup.json");
     if (fs.existsSync(backupPath)) {
       fs.unlinkSync(backupPath);
     }
@@ -780,7 +786,7 @@ function copyDirRecursive(src: string, dest: string): void {
 // Function to export data
 async function exportData() {
   try {
-    const exportsDir = path.join(__dirname, '../exports');
+    const exportsDir = atlasDataPath("exports");
     const defaultGameExportDir = path.join(exportsDir, 'DefaultGame');
     const profilesExportDir = path.join(exportsDir, 'Profiles');
     const clientSettingsExportDir = path.join(exportsDir, 'ClientSettings');
@@ -836,7 +842,7 @@ async function exportData() {
     console.log('\x1b[36mExporting data...\x1b[0m');
     
     // Export DefaultGame.ini
-    const iniSourcePath = path.join(__dirname, '../static/hotfixes/DefaultGame.ini');
+    const iniSourcePath = atlasDataPath("static", "hotfixes", "DefaultGame.ini");
     const iniDestPath = path.join(defaultGameExportDir, 'DefaultGame.ini');
     if (fs.existsSync(iniSourcePath)) {
       fs.copyFileSync(iniSourcePath, iniDestPath);
@@ -846,7 +852,7 @@ async function exportData() {
     }
     
     // Export Profiles folders
-    const profilesSourceDir = path.join(__dirname, '../static/profiles');
+    const profilesSourceDir = atlasDataPath("static", "profiles");
     if (fs.existsSync(profilesSourceDir)) {
       const profileItems = fs.readdirSync(profilesSourceDir);
       let profileCount = 0;
@@ -864,7 +870,7 @@ async function exportData() {
     }
     
     // Export ClientSettings folders
-    const clientSettingsSourceDir = path.join(__dirname, '../static/ClientSettings');
+    const clientSettingsSourceDir = atlasDataPath("static", "ClientSettings");
     if (fs.existsSync(clientSettingsSourceDir)) {
       const clientItems = fs.readdirSync(clientSettingsSourceDir);
       let clientCount = 0;
@@ -903,7 +909,7 @@ async function exportData() {
 // Function to import data
 async function importData() {
   try {
-    const exportsDir = path.join(__dirname, '../exports');
+    const exportsDir = atlasDataPath("exports");
     const defaultGameExportDir = path.join(exportsDir, 'DefaultGame');
     const profilesExportDir = path.join(exportsDir, 'Profiles');
     const clientSettingsExportDir = path.join(exportsDir, 'ClientSettings');
@@ -936,7 +942,7 @@ async function importData() {
     console.log('\x1b[36mImporting data...\x1b[0m');
     
     // Import Profiles folders
-    const profilesDestDir = path.join(__dirname, '../static/profiles');
+    const profilesDestDir = atlasDataPath("static", "profiles");
     if (fs.existsSync(profilesExportDir)) {
       const profileItems = fs.readdirSync(profilesExportDir);
       let profileCount = 0;
@@ -954,7 +960,7 @@ async function importData() {
     }
     
     // Import ClientSettings folders
-    const clientSettingsDestDir = path.join(__dirname, '../static/ClientSettings');
+    const clientSettingsDestDir = atlasDataPath("static", "ClientSettings");
     if (fs.existsSync(clientSettingsExportDir)) {
       const clientItems = fs.readdirSync(clientSettingsExportDir);
       let clientCount = 0;
@@ -972,7 +978,7 @@ async function importData() {
     }
     
     // Import CurveTables from DefaultGame.ini if it exists
-    const defaultGameExportPath = path.join(__dirname, '../exports/DefaultGame/DefaultGame.ini');
+    const defaultGameExportPath = atlasDataPath("exports", "DefaultGame", "DefaultGame.ini");
     if (fs.existsSync(defaultGameExportPath)) {
       try {
         const importContent = fs.readFileSync(defaultGameExportPath, 'utf-8');
@@ -1004,8 +1010,8 @@ async function importData() {
           });
           
           // Read current backend's DefaultGame.ini and curves.json
-          const iniPath = path.join(__dirname, '../static/hotfixes/DefaultGame.ini');
-          const curvesPath = path.join(__dirname, '../responses/curves.json');
+          const iniPath = atlasDataPath("static", "hotfixes", "DefaultGame.ini");
+          const curvesPath = atlasDataPath("responses", "curves.json");
           let content = fs.readFileSync(iniPath, 'utf-8');
           const curves = JSON.parse(fs.readFileSync(curvesPath, 'utf-8'));
 
@@ -1122,7 +1128,7 @@ async function importData() {
           fs.writeFileSync(curvesPath, JSON.stringify(curves, null, 2));
           
           // Delete backup file to set CurveTables toggle to ON state
-          const backupPath = path.join(__dirname, '../responses/modifications-backup.json');
+          const backupPath = atlasDataPath("responses", "modifications-backup.json");
           if (fs.existsSync(backupPath)) {
             fs.unlinkSync(backupPath);
           }
@@ -1139,12 +1145,16 @@ async function importData() {
     }
     
     // Import Straight Bloom from DefaultGame.ini if it exists
-    const defaultGameExportPathForBloom = path.join(__dirname, '../exports/DefaultGame/DefaultGame.ini');
+    const defaultGameExportPathForBloom = atlasDataPath(
+      "exports",
+      "DefaultGame",
+      "DefaultGame.ini",
+    );
     if (fs.existsSync(defaultGameExportPathForBloom)) {
       try {
         const importContent = fs.readFileSync(defaultGameExportPathForBloom, 'utf-8');
-        const sniperPath = path.join(__dirname, '../responses/sniper.json');
-        const iniPath = path.join(__dirname, '../static/hotfixes/DefaultGame.ini');
+        const sniperPath = atlasDataPath("responses", "sniper.json");
+        const iniPath = atlasDataPath("static", "hotfixes", "DefaultGame.ini");
         
         if (fs.existsSync(sniperPath)) {
           const sniperData = JSON.parse(fs.readFileSync(sniperPath, 'utf-8'));
@@ -1219,7 +1229,7 @@ function deleteDirRecursive(dirPath: string): void {
 // Function to clear exported data
 async function clearExportedData() {
   try {
-    const exportsDir = path.join(__dirname, '../exports');
+    const exportsDir = atlasDataPath("exports");
     
     console.clear();
     const terminalWidth = process.stdout.columns || 80;
@@ -1277,11 +1287,11 @@ async function clearExportedData() {
 // Function to clear backend data (client settings, profiles, straightbloom, datatables, curvetables)
 async function clearBackendData() {
   try {
-    const staticProfilesDir = path.join(__dirname, '../static/profiles');
-    const staticClientSettingsDir = path.join(__dirname, '../static/ClientSettings');
-    const iniPath = path.join(__dirname, '../static/hotfixes/DefaultGame.ini');
-    const sniperPath = path.join(__dirname, '../responses/sniper.json');
-    const curvesPath = path.join(__dirname, '../responses/curves.json');
+    const staticProfilesDir = atlasDataPath("static", "profiles");
+    const staticClientSettingsDir = atlasDataPath("static", "ClientSettings");
+    const iniPath = atlasDataPath("static", "hotfixes", "DefaultGame.ini");
+    const sniperPath = atlasDataPath("responses", "sniper.json");
+    const curvesPath = atlasDataPath("responses", "curves.json");
     
     console.clear();
     const terminalWidth = process.stdout.columns || 80;
@@ -1427,7 +1437,7 @@ async function clearBackendData() {
       fs.writeFileSync(curvesPath, JSON.stringify(curves, null, 2));
       
       // Create empty backup to set toggle to OFF state
-      const backupPath = path.join(__dirname, '../responses/modifications-backup.json');
+      const backupPath = atlasDataPath("responses", "modifications-backup.json");
       fs.writeFileSync(backupPath, JSON.stringify({ curveTableLines: [] }, null, 2));
       
       if (hadCurves || customEntries.length > 0) {
@@ -1694,7 +1704,7 @@ async function customCosmeticProfilesMenu() {
       }
       
       // Get list of profile directories
-      const profilesDir = path.join(__dirname, '../static/profiles');
+      const profilesDir = atlasDataPath("static", "profiles");
       const profileDirs = fs.readdirSync(profilesDir).filter(item => {
         const itemPath = path.join(profilesDir, item);
         if (!fs.statSync(itemPath).isDirectory()) return false;
@@ -1761,8 +1771,8 @@ async function customCosmeticProfilesMenu() {
 // Function to apply cosmetic preset to all profiles
 async function applyCosmeticPreset(preset: { id: string, name: string, folder: string, version: string }, profileDirs: string[]) {
   try {
-    const profilesDir = path.join(__dirname, '../static/profiles');
-    const presetsDir = path.join(__dirname, '../static/athenaprofiles/Profile Presets');
+    const profilesDir = atlasDataPath("static", "profiles");
+    const presetsDir = atlasDataReadPath("static", "athenaprofiles", "Profile Presets");
     const presetProfilePath = path.join(presetsDir, preset.folder, 'profile_athena.json');
     
     // Check if preset profile exists
@@ -2002,7 +2012,7 @@ async function modifyCurveTables() {
       console.log(`\x1b[36m[BACKEND]\x1b[0m ${lastStatusMessage}`);
     }
     
-    const backupPath = path.join(__dirname, '../responses/modifications-backup.json');
+    const backupPath = atlasDataPath("responses", "modifications-backup.json");
     
     // Check if curvetables are toggled off
     if (fs.existsSync(backupPath)) {
@@ -2010,8 +2020,8 @@ async function modifyCurveTables() {
       return;
     }
     
-    const curvesPath = path.join(__dirname, '../responses/curves.json');
-    const iniPath = path.join(__dirname, '../static/hotfixes/DefaultGame.ini');
+    const curvesPath = atlasDataPath("responses", "curves.json");
+    const iniPath = atlasDataPath("static", "hotfixes", "DefaultGame.ini");
     const curves = JSON.parse(fs.readFileSync(curvesPath, 'utf-8'));
     let content = fs.readFileSync(iniPath, 'utf-8');
     content = normalizeCurveTablePlacement(content);
@@ -2474,8 +2484,8 @@ async function modifyCurveTables() {
 // Function to toggle all curvetable modifications
 async function toggleAllModifications() {
   try {
-    const iniPath = path.join(__dirname, '../static/hotfixes/DefaultGame.ini');
-    const backupPath = path.join(__dirname, '../responses/modifications-backup.json');
+    const iniPath = atlasDataPath("static", "hotfixes", "DefaultGame.ini");
+    const backupPath = atlasDataPath("responses", "modifications-backup.json");
     
     let content = fs.readFileSync(iniPath, 'utf-8');
     
@@ -2523,7 +2533,7 @@ async function toggleAllModifications() {
 // Function to check if modifications are enabled
 function areModificationsEnabled(): boolean {
   try {
-    const backupPath = path.join(__dirname, '../responses/modifications-backup.json');
+    const backupPath = atlasDataPath("responses", "modifications-backup.json");
     return !fs.existsSync(backupPath);
   } catch {
     return true;
@@ -2536,9 +2546,9 @@ async function runInteractiveCLI() {
   
   while (true) {
   
-  const iniPath = path.join(__dirname, '../static/hotfixes/DefaultGame.ini');
-  const sniperPath = path.join(__dirname, '../responses/sniper.json');
-  const backupPath = path.join(__dirname, '../responses/modifications-backup.json');
+  const iniPath = atlasDataPath("static", "hotfixes", "DefaultGame.ini");
+  const sniperPath = atlasDataPath("responses", "sniper.json");
+  const backupPath = atlasDataPath("responses", "modifications-backup.json");
   const content = fs.readFileSync(iniPath, 'utf-8');
   const sniperData = JSON.parse(fs.readFileSync(sniperPath, 'utf-8'));
   const sniperSpreadLines = sniperData.lines;

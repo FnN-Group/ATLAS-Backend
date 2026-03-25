@@ -4,13 +4,11 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:ui';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart';
 import 'package:image/image.dart' as img;
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/gestures.dart';
 import 'package:archive/archive_io.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -37,7 +35,7 @@ Future<void> main() async {
 
   // Check if another instance is already running
   if (!await _acquireInstanceLock()) {
-    print('Another instance of ATLAS Backend is already running.');
+    debugPrint('Another instance of ATLAS Backend is already running.');
     exit(1);
   }
 
@@ -85,6 +83,7 @@ Future<void> _initializeAppDataDirectory() async {
     Directory(joinPath([atlasDataDir.path, 'responses'])),
     Directory(joinPath([atlasDataDir.path, 'exports'])),
     Directory(joinPath([atlasDataDir.path, 'logs'])),
+    Directory(joinPath([atlasDataDir.path, 'src', 'config'])),
   ];
 
   for (final dir in requiredDirs) {
@@ -93,12 +92,86 @@ Future<void> _initializeAppDataDirectory() async {
     }
   }
 
+  await _seedInstalledDataDirectory(atlasDataDir);
   await _migrateLegacyPresetFolders(atlasDataDir);
+}
+
+Future<void> _seedInstalledDataDirectory(Directory atlasDataDir) async {
+  final installRoot = getInstallationRoot();
+  if (_samePath(installRoot, atlasDataDir.path)) {
+    return;
+  }
+
+  final relativeDirs = <List<String>>[
+    ['responses'],
+    ['static', 'hotfixes'],
+    ['static', 'profiles'],
+    ['static', 'ClientSettings', 'config'],
+    ['static', 'athenaprofiles', 'Profile Presets'],
+    ['public', 'gameconfig'],
+    ['public', 'images'],
+    ['public', 'items'],
+    ['public', 'playlists'],
+  ];
+
+  for (final relativeDir in relativeDirs) {
+    final sourceDir = Directory(joinPath([installRoot, ...relativeDir]));
+    final targetDir = Directory(joinPath([atlasDataDir.path, ...relativeDir]));
+    await _copyMissingDirectoryContents(sourceDir, targetDir);
+  }
+}
+
+Future<void> _copyMissingDirectoryContents(
+  Directory source,
+  Directory target,
+) async {
+  if (!await source.exists()) {
+    return;
+  }
+
+  await target.create(recursive: true);
+
+  await for (final entity in source.list(followLinks: false)) {
+    final name = entity.uri.pathSegments.isNotEmpty
+        ? entity.uri.pathSegments.last
+        : '';
+    if (name.isEmpty) continue;
+
+    final targetPath = joinPath([target.path, name]);
+    if (entity is Directory) {
+      await _copyMissingDirectoryContents(entity, Directory(targetPath));
+      continue;
+    }
+
+    if (entity is File) {
+      final targetFile = File(targetPath);
+      if (!await targetFile.exists()) {
+        await targetFile.parent.create(recursive: true);
+        await entity.copy(targetFile.path);
+      }
+    }
+  }
+}
+
+bool _samePath(String a, String b) {
+  String normalize(String input) {
+    return input
+        .replaceAll('/', '\\')
+        .toLowerCase()
+        .replaceAll(RegExp(r'\\+$'), '');
+  }
+
+  return normalize(a) == normalize(b);
 }
 
 Future<void> _migrateLegacyPresetFolders(Directory atlasDataDir) async {
   final presetsDir = Directory(
-    joinPath([atlasDataDir.path, 'static', 'athenaprofiles', 'Profile Presets']),
+    joinPath([
+      atlasDataDir.path,
+      'static',
+      'athenaprofiles',
+      'Profile Presets',
+    ]),
   );
   if (!await presetsDir.exists()) return;
 
@@ -995,7 +1068,7 @@ class _AtlasHomePageState extends State<AtlasHomePage>
           final colorScheme = Theme.of(context).colorScheme;
           final onSurface = colorScheme.onSurface;
           final onSurfaceMuted = onSurface.withOpacity(0.7);
-          final cardFill = colorScheme.surfaceVariant.withOpacity(0.6);
+          final cardFill = colorScheme.surfaceContainerHighest.withOpacity(0.6);
           final cardBorder = onSurface.withOpacity(0.18);
 
           Widget buildStep(int index, List<InlineSpan> spans) {
@@ -1083,7 +1156,8 @@ class _AtlasHomePageState extends State<AtlasHomePage>
                         url,
                         mode: LaunchMode.externalApplication,
                       );
-                      if (!opened && mounted) {
+                      if (!context.mounted) return;
+                      if (!opened) {
                         showAtlasSnackBar(
                           context,
                           const SnackBar(
@@ -1224,7 +1298,7 @@ class _AtlasHomePageState extends State<AtlasHomePage>
     if (_loadingReleaseHistory) return;
     setState(() => _loadingReleaseHistory = true);
     final history = await UpdateService.fetchReleaseHistory();
-    if (!mounted) return;
+    if (!mounted || !anchorContext.mounted) return;
     setState(() {
       if (history.isNotEmpty) {
         _releaseHistory = history;
@@ -1420,6 +1494,7 @@ class _AtlasHomePageState extends State<AtlasHomePage>
 
   Future<void> _showCurrentVersionNotes(BuildContext _) async {
     final currentVersion = await _readBackendVersion();
+    if (!mounted) return;
     if (currentVersion.isEmpty) {
       showAtlasSnackBar(
         context,
@@ -1565,8 +1640,8 @@ class _AtlasHomePageState extends State<AtlasHomePage>
                               info,
                               progress,
                             );
-                            if (!mounted) return;
-                            Navigator.pop(context);
+                            if (!mounted || !dialogContext.mounted) return;
+                            Navigator.of(dialogContext).pop();
                             showAtlasSnackBar(
                               this.context,
                               SnackBar(
@@ -1757,15 +1832,19 @@ class _AtlasHomePageState extends State<AtlasHomePage>
         ],
       ),
     );
-    return WillPopScope(
-      onWillPop: () async => _confirmExit(),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        final confirm = await _confirmExit();
+        if (confirm) {
+          exit(0);
+        }
+      },
       child: Scaffold(
         body: Stack(
           children: [
-            AtlasBackground(
-              showParticles: true,
-              animateParticles: !showIntro,
-            ),
+            AtlasBackground(showParticles: true, animateParticles: !showIntro),
             if (_revealHomeContent)
               Positioned.fill(
                 child: FadeTransition(
@@ -2954,7 +3033,7 @@ class AtlasBackground extends StatelessWidget {
 }
 
 class _AtlasParticleField extends StatefulWidget {
-  const _AtlasParticleField({super.key, required this.opacity});
+  const _AtlasParticleField({required this.opacity});
 
   final double opacity;
 
@@ -3123,13 +3202,11 @@ class _HoverScale extends StatefulWidget {
     required this.child,
     this.enabled = true,
     this.scale = 1.05,
-    this.duration = const Duration(milliseconds: 200),
   });
 
   final Widget child;
   final bool enabled;
   final double scale;
-  final Duration duration;
 
   @override
   State<_HoverScale> createState() => _HoverScaleState();
@@ -3201,7 +3278,6 @@ class _HoverShadow extends StatefulWidget {
     this.blurSigma = 2.5,
     this.baseOffset = const Offset(0, 2),
     this.hoverOffset = const Offset(4, 2),
-    this.duration = const Duration(milliseconds: 200),
     this.hovered,
   });
 
@@ -3210,7 +3286,6 @@ class _HoverShadow extends StatefulWidget {
   final double blurSigma;
   final Offset baseOffset;
   final Offset hoverOffset;
-  final Duration duration;
   final bool? hovered;
 
   @override
@@ -3228,7 +3303,7 @@ class _HoverShadowState extends State<_HoverShadow> {
         begin: widget.baseOffset,
         end: effectiveHovered ? widget.hoverOffset : widget.baseOffset,
       ),
-      duration: widget.duration,
+      duration: const Duration(milliseconds: 200),
       curve: Curves.easeOutCubic,
       builder: (context, offset, child) {
         return _ImageDropShadow(
@@ -3264,7 +3339,7 @@ class _HoverScaleState extends State<_HoverScale> {
       onExit: (_) => setState(() => _hovered = false),
       child: AnimatedScale(
         scale: _hovered ? widget.scale : 1,
-        duration: widget.duration,
+        duration: const Duration(milliseconds: 200),
         curve: Curves.easeOutCubic,
         child: widget.child,
       ),
@@ -3565,7 +3640,9 @@ Future<void> _showCustomCosmeticPresetsInfoDialog(BuildContext context) async {
             final onSurface = colorScheme.onSurface;
             final onSurfaceMuted = onSurface.withOpacity(0.75);
             final accent = colorScheme.secondary;
-            final cardFill = colorScheme.surfaceVariant.withOpacity(0.6);
+            final cardFill = colorScheme.surfaceContainerHighest.withOpacity(
+              0.6,
+            );
             final cardBorder = onSurface.withOpacity(0.18);
 
             return Column(
@@ -3997,6 +4074,7 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     }
 
     if (missing.isNotEmpty) {
+      if (!mounted) return matches.length;
       final inputs = await _promptImportMissingCurves(
         context,
         missing,
@@ -5309,7 +5387,7 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: DropdownButtonFormField<String>(
-              value: _selectedVariantWeaponId,
+              initialValue: _selectedVariantWeaponId,
               decoration: InputDecoration(
                 labelText: 'Variant',
                 border: OutlineInputBorder(
@@ -7756,8 +7834,9 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
           presetFolders.contains(_selectedPreset)) {
         resolvedSelectedPreset = _selectedPreset;
       }
-      resolvedSelectedPreset ??=
-          presets.isNotEmpty ? presets.first.folder : null;
+      resolvedSelectedPreset ??= presets.isNotEmpty
+          ? presets.first.folder
+          : null;
 
       if (!mounted) return;
       setState(() {
@@ -7877,7 +7956,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: selectedPreset,
+                  initialValue: selectedPreset,
                   decoration: const InputDecoration(
                     labelText: 'Preset',
                     border: OutlineInputBorder(),
@@ -7925,10 +8004,12 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                     return;
                   }
                   if (await ProfileService.userExists(name)) {
+                    if (!context.mounted) return;
                     setState(() => errorText = 'That user already exists.');
                     return;
                   }
                   final presetFolder = selectedPreset ?? _presets.first.folder;
+                  if (!context.mounted) return;
                   Navigator.pop(
                     context,
                     _CreateUserResult(
@@ -8099,6 +8180,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     bool deleteProfile = profileFolderExists;
     bool deleteClientSettings = clientSettingsFolderExists;
 
+    if (!mounted) return;
     final result = await _showBlurDialog<Map<String, bool>>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -8362,6 +8444,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       return;
     }
 
+    if (!mounted) return;
     final result = await _showBlurDialog<Map<String, bool>>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -8551,6 +8634,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       }
 
       await _load();
+      if (!mounted) return;
       showAtlasSnackBar(
         context,
         SnackBar(content: Text('Imported ${matched.length} profile(s).')),
@@ -9137,7 +9221,7 @@ class _UserValuesScreenState extends State<UserValuesScreen> {
                       border: Border.all(color: borderColor),
                     ),
                     child: DropdownButtonFormField<String>(
-                      value: _selectedProfile,
+                      initialValue: _selectedProfile,
                       decoration: const InputDecoration(
                         labelText: 'User',
                         border: OutlineInputBorder(),
@@ -10044,8 +10128,8 @@ class ProfilesUiStateService {
       }
 
       final selectedProfileRaw = decoded['lastSelectedProfile'];
-      final selectedProfile = selectedProfileRaw is String &&
-              selectedProfileRaw.trim().isNotEmpty
+      final selectedProfile =
+          selectedProfileRaw is String && selectedProfileRaw.trim().isNotEmpty
           ? selectedProfileRaw
           : null;
 
@@ -10084,26 +10168,7 @@ class ProfilesUiStateService {
   }
 
   static String _statePath() {
-    final appData = Platform.environment['APPDATA'] ?? '';
-    if (appData.isNotEmpty) {
-      return joinPath([appData, 'ATLAS', 'profiles-ui-state.json']);
-    }
-
-    final home =
-        Platform.environment['USERPROFILE'] ??
-        Platform.environment['HOME'] ??
-        '';
-    if (home.isNotEmpty) {
-      return joinPath([
-        home,
-        'AppData',
-        'Roaming',
-        'ATLAS',
-        'profiles-ui-state.json',
-      ]);
-    }
-
-    return joinPath([Directory.current.path, 'profiles-ui-state.json']);
+    return joinPath([getBackendRoot(), 'profiles-ui-state.json']);
   }
 }
 
@@ -10165,7 +10230,7 @@ class UserValuesService {
           }
         }
       } catch (e) {
-        print('Error reading athena profile: $e');
+        debugPrint('Error reading athena profile: $e');
       }
     }
 
@@ -10192,7 +10257,7 @@ class UserValuesService {
           }
         }
       } catch (e) {
-        print('Error reading common_core profile: $e');
+        debugPrint('Error reading common_core profile: $e');
       }
     }
 
@@ -10236,7 +10301,7 @@ class UserValuesService {
           }
         }
       } catch (e) {
-        print('Error saving athena profile: $e');
+        debugPrint('Error saving athena profile: $e');
       }
     }
 
@@ -11313,8 +11378,8 @@ class _CustomGroupEditResult {
   final String? imagePath;
 }
 
-class _CustomCurveEditResult {
-  const _CustomCurveEditResult({
+class CustomCurveEditResult {
+  const CustomCurveEditResult({
     required this.name,
     required this.lines,
     required this.staticValue,
@@ -11676,7 +11741,6 @@ class CurveTableService {
     if (matches.isEmpty) return;
 
     final grouped = <String, List<String>>{};
-    var hasEnabled = false;
     final allNormalized = <String>[];
     for (final match in matches) {
       final pathPart = match.group(1)!.trim();
@@ -11686,9 +11750,6 @@ class CurveTableService {
           ? rawLine.substring(1).trim()
           : rawLine;
       allNormalized.add(normalized);
-      if (!rawLine.startsWith(';')) {
-        hasEnabled = true;
-      }
       final groupKey = '$pathPart|||$key';
       grouped.putIfAbsent(groupKey, () => []).add(normalized);
     }
@@ -11968,7 +12029,7 @@ class CurveTableService {
 
   static Future<void> updateCustomCurve(
     String curveId,
-    _CustomCurveEditResult updated,
+    CustomCurveEditResult updated,
   ) async {
     final curvesFile = File(BackendPaths.curvesJson);
     if (!await curvesFile.exists()) return;
@@ -12331,7 +12392,8 @@ class DataTableService {
 
       final start = i;
       i++;
-      while (i < lines.length && !sectionHeaderRegex.hasMatch(lines[i].trim())) {
+      while (i < lines.length &&
+          !sectionHeaderRegex.hasMatch(lines[i].trim())) {
         existingSectionLines.add(lines[i].trimRight());
         i++;
       }
@@ -13059,18 +13121,7 @@ class ConfigService {
   }
 
   static String _guiConfigPath() {
-    final appData = Platform.environment['APPDATA'] ?? '';
-    if (appData.isNotEmpty) {
-      return joinPath([appData, 'ATLAS', 'gui.ini']);
-    }
-    final home =
-        Platform.environment['USERPROFILE'] ??
-        Platform.environment['HOME'] ??
-        '';
-    if (home.isNotEmpty) {
-      return joinPath([home, 'AppData', 'Roaming', 'ATLAS', 'gui.ini']);
-    }
-    return joinPath([Directory.current.path, 'gui.ini']);
+    return joinPath([getBackendRoot(), 'gui.ini']);
   }
 
   static Future<Map<String, String>> _loadConfigFile(File file) async {
@@ -14070,6 +14121,7 @@ class DataService {
     final profilesDir = Directory(joinPath([exportsRoot.path, 'Profiles']));
     final clientDir = Directory(joinPath([exportsRoot.path, 'ClientSettings']));
     if (await _hasExistingExport(defaultGameDir, profilesDir, clientDir)) {
+      if (!context.mounted) return;
       final confirm = await _confirmDialog(
         context,
         'Exports already exist. Overwrite them?',
@@ -14144,6 +14196,7 @@ class DataService {
       }
       return;
     }
+    if (!context.mounted) return;
     final confirm = await _confirmDialog(
       context,
       'Importing will overwrite existing data. Continue?',
@@ -15420,7 +15473,7 @@ Future<CustomDataTableInput?> _promptCustomDataTable(
                 const SizedBox(height: 12),
                 if (hasDamageFields) ...[
                   DropdownButtonFormField<String>(
-                    value: selectedRarity,
+                    initialValue: selectedRarity,
                     decoration: const InputDecoration(
                       labelText: 'Rarity',
                       border: OutlineInputBorder(),
@@ -15786,7 +15839,7 @@ Future<_CustomGroupEditResult?> _promptEditCustomGroup(
   return result;
 }
 
-Future<_CustomCurveEditResult?> _promptEditCustomCurve(
+Future<CustomCurveEditResult?> _promptEditCustomCurve(
   BuildContext context,
   CurveEntry entry,
   List<CustomCurveGroupInfo> groups,
@@ -15799,7 +15852,7 @@ Future<_CustomCurveEditResult?> _promptEditCustomCurve(
   String selectedGroupId = entry.groupId ?? groups.first.id;
   String? errorText;
 
-  final result = await _showBlurDialog<_CustomCurveEditResult>(
+  final result = await _showBlurDialog<CustomCurveEditResult>(
     context: context,
     builder: (context) => StatefulBuilder(
       builder: (context, setState) => AlertDialog(
@@ -15894,7 +15947,7 @@ Future<_CustomCurveEditResult?> _promptEditCustomCurve(
                 );
                 Navigator.pop(
                   context,
-                  _CustomCurveEditResult(
+                  CustomCurveEditResult(
                     name: name,
                     lines: parsed.lines,
                     staticValue: parsed.staticValue,
@@ -16023,7 +16076,6 @@ Future<List<CustomCurveInput>?> _promptImportMissingCurves(
   List<_ImportCurveDraft> missing,
   List<CustomCurveGroupInfo> groups,
 ) async {
-  String? errorText;
   final groupOptions = [...groups];
   if (!groupOptions.any((group) => group.id == 'other')) {
     groupOptions.add(
@@ -16280,8 +16332,9 @@ class BackendController extends ChangeNotifier {
     notifyListeners();
 
     final backendRoot = getBackendRoot();
-    final bunPath = _resolveBunPath(backendRoot);
-    final bunAvailable = await _checkBunAvailable(backendRoot, bunPath);
+    final installRoot = getInstallationRoot();
+    final bunPath = _resolveBunPath(installRoot);
+    final bunAvailable = await _checkBunAvailable(installRoot, bunPath);
     if (!bunAvailable) {
       _addLog('Bun not found. Install Bun or include tools\\bun\\bun.exe.');
       isStarting = false;
@@ -16290,12 +16343,12 @@ class BackendController extends ChangeNotifier {
       return;
     }
 
-    final nodeModules = Directory('$backendRoot/node_modules');
+    final nodeModules = Directory(joinPath([installRoot, 'node_modules']));
     if (!nodeModules.existsSync()) {
       _addLog('Installing dependencies (bun install)...');
       final install = await Process.run(bunPath ?? 'bun', [
         'install',
-      ], workingDirectory: backendRoot);
+      ], workingDirectory: installRoot);
       if (install.exitCode != 0) {
         _addLog('Dependency install failed: ${install.stderr}');
         isStarting = false;
@@ -16311,12 +16364,14 @@ class BackendController extends ChangeNotifier {
     if (config.disableBackendUpdateCheck) {
       env['ATLAS_DISABLE_UPDATE_CHECK'] = '1';
     }
+    env['ATLAS_DATA_ROOT'] = backendRoot;
+    env['ATLAS_INSTALL_ROOT'] = installRoot;
 
     try {
       _process = await Process.start(
         bunPath ?? 'bun',
         ['run', 'src/index.ts'],
-        workingDirectory: backendRoot,
+        workingDirectory: installRoot,
         environment: env,
         mode: ProcessStartMode.detachedWithStdio,
       );

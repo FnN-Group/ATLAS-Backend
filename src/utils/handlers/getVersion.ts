@@ -2,6 +2,7 @@ import app from "../..";
 import fs from "node:fs";
 import path from "node:path";
 import logger from "../logger/logger";
+import { atlasDataPath } from "../../config/paths";
 
 interface Version {
   season: number;
@@ -31,7 +32,7 @@ export default function getVersion(c: any): Version {
       ver.lobby = `LobbySeason${ver.season}`;
     } else {
       try {
-        const logDir = path.join(__dirname, "../../../logs");
+        const logDir = atlasDataPath("logs");
         if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
         logger.debug(`Missing Release- in user-agent: ${userAgent}`);
         fs.appendFileSync(
@@ -44,7 +45,7 @@ export default function getVersion(c: any): Version {
     }
   } else {
     try {
-      const logDir = path.join(__dirname, "../../../logs");
+      const logDir = atlasDataPath("logs");
       if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
       logger.debug("Missing user-agent header");
       fs.appendFileSync(
