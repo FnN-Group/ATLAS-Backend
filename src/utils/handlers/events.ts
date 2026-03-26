@@ -8,12 +8,35 @@ function createEvent(eventType: any) {
   };
 }
 
+function normalizeWaterLevel(rawConfig: Record<string, any>) {
+  const zeroIndexed =
+    String(rawConfig.WaterLevelZeroIndexed ?? "").toLowerCase() === "true";
+  const parsedLevel = parseInt(String(rawConfig.WaterLevel ?? ""), 10);
+  const storedLevel = Number.isFinite(parsedLevel)
+    ? parsedLevel
+    : zeroIndexed
+      ? 0
+      : 1;
+  if (zeroIndexed) {
+    return Math.max(0, Math.min(8, storedLevel));
+  }
+
+  const guiLevel = Math.max(1, Math.min(8, storedLevel));
+
+  // Level 4 and above intentionally use the next more-flooded state.
+  if (guiLevel >= 4) {
+    return guiLevel;
+  }
+
+  return guiLevel - 1;
+}
+
 function getEvents(ver: any) {
   // Reload config on each call to get the latest values
   const rawConfig = readConfig();
   const config = {
     RufusStage: parseInt(String(rawConfig.RufusStage ?? ""), 10) || 1,
-    WaterLevel: parseInt(String(rawConfig.WaterLevel ?? ""), 10) || 1,
+    WaterLevel: normalizeWaterLevel(rawConfig),
     UseWaterStorm: rawConfig.UseWaterStorm === 'true' || rawConfig.UseWaterStorm === 'True' || rawConfig.UseWaterStorm === true,
     SaveArenaPoints: rawConfig.SaveArenaPoints === 'true' || rawConfig.SaveArenaPoints === 'True' || rawConfig.SaveArenaPoints === true,
   };
@@ -191,30 +214,7 @@ function getEvents(ver: any) {
   }
 
   if (ver.season == 13) {
-    if (config.WaterLevel == 1) {
-      events.push(createEvent("WL1"));
-    }
-    if (config.WaterLevel == 2) {
-      events.push(createEvent("WL2"));
-    }
-    if (config.WaterLevel == 3) {
-      events.push(createEvent("WL3"));
-    }
-    if (config.WaterLevel == 4) {
-      events.push(createEvent("WL4"));
-    }
-    if (config.WaterLevel == 5) {
-      events.push(createEvent("WL5"));
-    }
-    if (config.WaterLevel == 6) {
-      events.push(createEvent("WL6"));
-    }
-    if (config.WaterLevel == 7) {
-      events.push(createEvent("WL7"));
-    }
-    if (config.WaterLevel == 8) {
-      events.push(createEvent("WL8"));
-    }
+    events.push(createEvent(`WL${config.WaterLevel}`));
   }
 
   if (ver.build == 12.61) {

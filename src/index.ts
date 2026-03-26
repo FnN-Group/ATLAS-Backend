@@ -1495,7 +1495,13 @@ async function gameConfigurationMenu() {
       const configPath = getConfigPath();
       const config = readConfig(configPath);
       const rufusStage = config.RufusStage || '1';
-      const waterLevel = config.WaterLevel || '1';
+      const parsedWaterLevel = parseInt(String(config.WaterLevel ?? ''), 10);
+      const storedWaterLevel = Number.isFinite(parsedWaterLevel) ? parsedWaterLevel : 1;
+      const waterLevelZeroIndexed = String(config.WaterLevelZeroIndexed ?? '').toLowerCase() === 'true';
+      const waterLevel = Math.max(
+        1,
+        Math.min(8, waterLevelZeroIndexed ? storedWaterLevel + 1 : storedWaterLevel),
+      );
       const shouldUseWaterStorm = config.UseWaterStorm === 'True' || config.UseWaterStorm === true;
       const waterStormStatus = shouldUseWaterStorm ? '\x1b[32m[ON]\x1b[0m' : '\x1b[31m[OFF]\x1b[0m';
       
@@ -1558,6 +1564,7 @@ async function gameConfigurationMenu() {
         
         if (levelResponse.level) {
           config.WaterLevel = levelResponse.level;
+          delete config.WaterLevelZeroIndexed;
           writeConfig(config, configPath);
           lastStatusMessage = `\x1b[32m✓ Water Level set to ${levelResponse.level}!\x1b[0m`;
         }
