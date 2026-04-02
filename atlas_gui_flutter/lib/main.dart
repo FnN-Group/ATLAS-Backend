@@ -74,6 +74,7 @@ Future<void> _initializeAppDataDirectory() async {
     Directory(joinPath([atlasDataDir.path, 'static', 'profiles'])),
     Directory(joinPath([atlasDataDir.path, 'static', 'ClientSettings'])),
     Directory(joinPath([atlasDataDir.path, 'static', 'athenaprofiles'])),
+    Directory(joinPath([atlasDataDir.path, 'static', 'battlepass'])),
     Directory(joinPath([atlasDataDir.path, 'static', 'shop'])),
     Directory(joinPath([atlasDataDir.path, 'static', 'discovery'])),
     Directory(joinPath([atlasDataDir.path, 'static', 'hotfixes'])),
@@ -134,6 +135,7 @@ Future<void> _seedInstalledDataDirectory(Directory atlasDataDir) async {
 
   final runtimeAssetDirs = <List<String>>[
     ['static', 'assets'],
+    ['static', 'battlepass'],
     ['static', 'cms'],
     ['static', 'discovery'],
     ['static', 'events'],
@@ -145,6 +147,12 @@ Future<void> _seedInstalledDataDirectory(Directory atlasDataDir) async {
     final targetDir = Directory(joinPath([atlasDataDir.path, ...relativeDir]));
     await _copyDirectoryContentsReplacingFiles(sourceDir, targetDir);
   }
+
+  // Always sync shipped config files that live alongside user-mutable data.
+  await _copyFileReplacingIfDifferent(
+    File(joinPath([installRoot, 'static', 'athenaprofiles', 'presets.json'])),
+    File(joinPath([atlasDataDir.path, 'static', 'athenaprofiles', 'presets.json'])),
+  );
 }
 
 Future<void> _copyMissingDirectoryContents(
