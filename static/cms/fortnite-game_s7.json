@@ -10,7 +10,7 @@
         {
           "_type": "CommonUI Simple Message Base",
           "title": "ATLAS",
-          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm",
+          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm\nClick (F8) and type \"open 127.0.0.1\" to join.",
           "hidden": false,
           "spotlight": false,
           "subgame": "br"
@@ -30,7 +30,7 @@
         {
           "_type": "CommonUI Emergency Notice Base",
           "title": "ATLAS",
-          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm",
+          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm\nClick (F8) and type \"open 127.0.0.1\" to join.",
           "hidden": false
         }
       ]
@@ -48,7 +48,7 @@
           "id": "AtlasNewsBR",
           "entryType": "Website",
           "title": "ATLAS",
-          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm",
+          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm\nClick (F8) and type \"open 127.0.0.1\" to join.",
           "tabTitleOverride": "ATLAS",
           "sortingPriority": 90,
           "image": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/images/ATLAS-Backend-Banner.png",

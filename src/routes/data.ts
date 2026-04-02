@@ -3,25 +3,9 @@ import axios from "axios";
 import getVersion from "../utils/handlers/getVersion";
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 import logger from "../utils/logger/logger";
-import { atlasDataPath, atlasInstallPath } from "../config/paths";
-
-const cmsDir = atlasInstallPath("static", "cms");
-const legacyCms = JSON.parse(
-  fs.readFileSync(path.join(cmsDir, "fortnite-game_s6.json"), "utf8")
-);
-const s7ContentPages = JSON.parse(
-  fs.readFileSync(path.join(cmsDir, "contentpages_s7.json"), "utf8")
-);
-const s10ContentPages = JSON.parse(
-  fs.readFileSync(path.join(cmsDir, "contentpages_s10.json"), "utf8")
-);
-const s15ContentPages = JSON.parse(
-  fs.readFileSync(path.join(cmsDir, "contentpages_s15.json"), "utf8")
-);
-const s15Motd = JSON.parse(
-  fs.readFileSync(path.join(cmsDir, "fortnite-game_s15.json"), "utf8")
-);
+import { atlasDataPath, atlasDataReadPath } from "../config/paths";
 
 interface CmsVersionInfo {
   season: number;
@@ -100,8 +84,184 @@ function getResolvedMinor(version: CmsVersionInfo, userAgent: string): number {
   return Math.round(fractional * 100);
 }
 
-function cloneCmsContent<T>(content: T): T {
-  return JSON.parse(JSON.stringify(content));
+function readCmsJson<T = any>(fileName: string): T {
+  return JSON.parse(
+    fs.readFileSync(atlasDataReadPath("static", "cms", fileName), "utf8")
+  ) as T;
+}
+
+const atlasDiscordUrl = "https://discord.gg/GqgakxU6bm";
+const atlasBannerImage =
+  "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/main/public/images/ATLAS-Backend-Banner.png";
+const atlasBannerSlimImage =
+  "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/main/public/images/ATLAS-Backend-Banner-Slim.png";
+const atlasNoticeBody =
+  '@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm\nClick (F8) and type "open 127.0.0.1" to join.';
+const atlasNewsBody = "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm\nClick (F8) and type \"open 127.0.0.1\" to join.";
+
+function createDynamicMotdCollection(targetIslandCode: string): any {
+  const contentId = "atlas-br-motd-item";
+  const tcId = "atlas-br-motd-tc";
+  const contentFields = {
+    Buttons: [
+      {
+        Action: {
+          _type: "MotdDiscoveryAction",
+          category: targetIslandCode,
+          islandCode: targetIslandCode,
+          shouldOpen: true,
+        },
+        Style: "0",
+        Text: "Play Now",
+        _type: "Button",
+      },
+    ],
+    FullScreenBackground: {
+      Image: [
+        {
+          width: 1920,
+          height: 1080,
+          url: atlasBannerImage,
+        },
+        {
+          width: 960,
+          height: 540,
+          url: atlasBannerImage,
+        },
+      ],
+      _type: "FullScreenBackground",
+    },
+    FullScreenBody: atlasNewsBody,
+    FullScreenTitle: "ATLAS",
+    FullScreenBackgroundImageLink: atlasBannerImage,
+    TeaserBackground: {
+      Image: [
+        {
+          width: 1024,
+          height: 512,
+          url: atlasBannerSlimImage,
+        },
+      ],
+      _type: "TeaserBackground",
+    },
+    TeaserBackgroundImageLink: atlasBannerSlimImage,
+    TeaserTitle: "ATLAS",
+    VerticalTextLayout: false,
+  };
+
+  const contentHash = crypto
+    .createHash("sha256")
+    .update(JSON.stringify(contentFields))
+    .digest("hex");
+
+  return {
+    contentType: "collection",
+    contentId: "fortnite-br-br-motd-collection",
+    tcId: "atlas-br-motd-collection-tc",
+    contentMeta: JSON.stringify({ [contentHash]: [contentId] }),
+    contentItems: [
+      {
+        contentType: "content-item",
+        contentId,
+        tcId,
+        contentFields,
+        contentSchemaName: "DynamicMotd",
+        contentHash,
+      },
+    ],
+  };
+}
+
+function applyAtlasLobbyMessaging(content: any): void {
+  content.emergencynotice = {
+    news: {
+      _type: "Battle Royale News",
+      platform_messages: [],
+      messages: [
+        {
+          _type: "CommonUI Simple Message Base",
+          title: "ATLAS",
+          body: atlasNoticeBody,
+          hidden: false,
+          spotlight: false,
+          subgame: "br",
+        },
+      ],
+    },
+    _title: "emergencynotice",
+    _noIndex: false,
+    alwaysShow: true,
+    _activeDate: "1970-01-01T00:00:00.000Z",
+    lastModified: "9999-12-31T23:59:59.999Z",
+    _locale: "en-US",
+  };
+
+  content.emergencynoticev2 = {
+    "jcr:isCheckedOut": true,
+    _title: "emergencynoticev2",
+    _noIndex: false,
+    emergencynotices: {
+      _type: "Emergency Notices",
+      emergencynotices: [
+        {
+          _type: "CommonUI Emergency Notice Base",
+          title: "ATLAS",
+          body: atlasNoticeBody,
+          hidden: false,
+          gamemodes: [],
+        },
+      ],
+    },
+    _activeDate: "1970-01-01T00:00:00.000Z",
+    lastModified: "9999-12-31T23:59:59.999Z",
+    _locale: "en-US",
+  };
+
+  const battleroyalenewsv2 = { ...(content.battleroyalenewsv2 ?? {}) };
+  const battleroyalenewsv2News = { ...(battleroyalenewsv2.news ?? {}) };
+  const battleroyalenewsv2Motds = Array.isArray(battleroyalenewsv2News.motds)
+    ? battleroyalenewsv2News.motds
+    : [];
+  const existingBattleroyalev2Motd =
+    battleroyalenewsv2Motds.length > 0
+      ? { ...battleroyalenewsv2Motds[0] }
+      : {};
+  battleroyalenewsv2News._type = "Battle Royale News v2";
+  battleroyalenewsv2News.platform_messages = [];
+  battleroyalenewsv2News.platform_motds = [];
+  battleroyalenewsv2News.motds = [
+    {
+      _type: "CommonUI Simple Message MOTD",
+      id: existingBattleroyalev2Motd.id ?? "AtlasNewsBRv2",
+      entryType: "Website",
+      title: "ATLAS",
+      body: atlasNewsBody,
+      tabTitleOverride: "ATLAS",
+      sortingPriority: 0,
+      image: atlasBannerImage,
+      tileImage: atlasBannerSlimImage,
+      hidden: false,
+      spotlight: false,
+      videoMute: false,
+      videoLoop: false,
+      videoStreamingEnabled: false,
+      videoAutoplay: false,
+      videoFullscreen: false,
+      websiteButtonText: "Join our discord",
+      websiteURL: atlasDiscordUrl,
+    },
+  ];
+  battleroyalenewsv2.news = battleroyalenewsv2News;
+  battleroyalenewsv2["jcr:isCheckedOut"] = true;
+  battleroyalenewsv2._title = "battleroyalenewsv2";
+  battleroyalenewsv2.header = battleroyalenewsv2.header ?? "";
+  battleroyalenewsv2.style = "None";
+  battleroyalenewsv2._noIndex = false;
+  battleroyalenewsv2.alwaysShow = false;
+  battleroyalenewsv2._activeDate = "1970-01-01T00:00:00.000Z";
+  battleroyalenewsv2.lastModified = "9999-12-31T23:59:59.999Z";
+  battleroyalenewsv2._locale = "en-US";
+  content.battleroyalenewsv2 = battleroyalenewsv2;
 }
 
 function setCmsNoCacheHeaders(c: any): void {
@@ -352,7 +512,10 @@ function applySeasonSpecificBackground(
       }
       return;
     case 30:
-      setPrimary("season3000", "");
+      setPrimary(
+        "season3000",
+        "https://cdn2.unrealengine.com/ch5s3-lobby-3030-4096x2048-eecf04243faa.jpg"
+      );
       return;
     case 31:
       setPrimary(
@@ -375,20 +538,27 @@ export default function () {
     );
 
     if (season > 0 && season <= 6) {
-      return sendCmsResponse(c, cloneCmsContent(legacyCms), version, userAgent, "legacy-s6");
+      return sendCmsResponse(
+        c,
+        readCmsJson("fortnite-game_s6.json"),
+        version,
+        userAgent,
+        "legacy-s6"
+      );
     }
     if (season === 7) {
-      const content = cloneCmsContent(s7ContentPages);
+      const content = readCmsJson("contentpages_s7.json");
       applySeasonSpecificBackground(content, version, userAgent);
       return sendCmsResponse(c, content, version, userAgent, "contentpages-s7");
     }
     if (season === 10) {
-      const content = cloneCmsContent(s10ContentPages);
+      const content = readCmsJson("contentpages_s10.json");
       applySeasonSpecificBackground(content, version, userAgent);
       return sendCmsResponse(c, content, version, userAgent, "contentpages-s10");
     }
     if (season === 15) {
-      const content = cloneCmsContent(s15ContentPages);
+      const content = readCmsJson("contentpages_s15.json");
+      applyAtlasLobbyMessaging(content);
       applySeasonSpecificBackground(content, version, userAgent);
       return sendCmsResponse(c, content, version, userAgent, "contentpages-s15");
     }
@@ -411,7 +581,7 @@ export default function () {
                 hidden: false,
                 _type: "CommonUI Simple Message Base",
                 subgame: "br",
-                body: "@cipherfps \nDiscord: https://discord.gg/GqgakxU6bm",
+                body: "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm\nClick (F8) and type \"open 127.0.0.1\" to join.",
                 title: "ATLAS",
                 spotlight: false,
               },
@@ -440,7 +610,7 @@ export default function () {
                 hidden: false,
                 _type: "CommonUI Emergency Notice Base",
                 title: "ATLAS",
-                body: "@cipherfps \nDiscord: https://discord.gg/GqgakxU6bm",
+                body: "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm\nClick (F8) and type \"open 127.0.0.1\" to join.",
               },
             ],
           },
@@ -454,15 +624,19 @@ export default function () {
               {
                 entryType: "Website",
                 image:
-                  "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/images/ATLAS-Backend-Banner.png",
+                  "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/main/public/images/ATLAS-Backend-Banner.png",
+                imageURL:
+                  "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/main/public/images/ATLAS-Backend-Banner.png",
                 tileImage:
-                  "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/images/ATLAS-Backend-Banner-Slim.png",
+                  "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/main/public/images/ATLAS-Backend-Banner-Slim.png",
+                tileImageURL:
+                  "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/main/public/images/ATLAS-Backend-Banner-Slim.png",
                 videoMute: false,
                 hidden: false,
                 tabTitleOverride: "ATLAS",
                 _type: "CommonUI Simple Message MOTD",
                 title: "ATLAS",
-                body: "@cipherfps \nDiscord: https://discord.gg/GqgakxU6bm",
+                body: "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm\nClick (F8) and type \"open 127.0.0.1\" to join.",
                 videoLoop: false,
                 videoStreamingEnabled: false,
                 sortingPriority: 0,
@@ -551,6 +725,7 @@ export default function () {
       }
     }
 
+    applyAtlasLobbyMessaging(content);
     applySeasonSpecificBackground(content, version, userAgent);
 
     return sendCmsResponse(c, content, version, userAgent, "live-fortnite-game");
@@ -565,20 +740,27 @@ export default function () {
     );
 
     if (season > 0 && season <= 6) {
-      return sendCmsResponse(c, cloneCmsContent(legacyCms), version, userAgent, "wildcard-legacy-s6");
+      return sendCmsResponse(
+        c,
+        readCmsJson("fortnite-game_s6.json"),
+        version,
+        userAgent,
+        "wildcard-legacy-s6"
+      );
     }
     if (season === 7) {
-      const content = cloneCmsContent(s7ContentPages);
+      const content = readCmsJson("contentpages_s7.json");
       applySeasonSpecificBackground(content, version, userAgent);
       return sendCmsResponse(c, content, version, userAgent, "wildcard-contentpages-s7");
     }
     if (season === 10) {
-      const content = cloneCmsContent(s10ContentPages);
+      const content = readCmsJson("contentpages_s10.json");
       applySeasonSpecificBackground(content, version, userAgent);
       return sendCmsResponse(c, content, version, userAgent, "wildcard-contentpages-s10");
     }
     if (season === 15) {
-      const content = cloneCmsContent(s15ContentPages);
+      const content = readCmsJson("contentpages_s15.json");
+      applyAtlasLobbyMessaging(content);
       applySeasonSpecificBackground(content, version, userAgent);
       return sendCmsResponse(c, content, version, userAgent, "wildcard-contentpages-s15");
     }
@@ -587,6 +769,7 @@ export default function () {
       "https://fortnitecontent-website-prod07.ol.epicgames.com/content/api/pages/fortnite-game"
     );
     const content: any = game.data;
+    applyAtlasLobbyMessaging(content);
     applySeasonSpecificBackground(content, version, userAgent);
     return sendCmsResponse(c, content, version, userAgent, "wildcard-live");
   });
@@ -595,9 +778,10 @@ export default function () {
     const version = getVersion(c);
     const userAgent = c.req.header("user-agent") ?? "";
     const season = getResolvedSeason(version, userAgent);
+    const targetIslandCode = "set_br_playlists";
 
     if (season === 15) {
-      const motd = JSON.parse(JSON.stringify(s15Motd));
+      const motd = readCmsJson("fortnite-game_s15.json");
       const body = await c.req.json().catch(() => ({} as any));
       const tags = body?.tags ?? body?.parameters?.tags ?? [];
 
@@ -617,66 +801,7 @@ export default function () {
       return c.json(motd);
     }
 
-    return c.json({
-      contentType: "collection",
-      contentId: "fortnite-br-br-motd-collection",
-      tcId: "8784961a-44e7-4fd5-82a6-8ef11e8c211d",
-      contentMeta:
-        '{"c93adbc7a8a9f94a916de62aa443e2d6":["93eff180-1465-496e-9be4-c02ef810ad82"]}',
-      contentItems: [
-        {
-          contentType: "content-item",
-          contentId: "93eff180-1465-496e-9be4-c02ef810ad82",
-          tcId: "5085a6fa-108c-4f0c-abdd-3259c6406890",
-          contentFields: {
-            Buttons: [
-              {
-                Action: {
-                  _type: "MotdDiscoveryAction",
-                  category: "set_br_playlists",
-                  islandCode: "set_br_playlists",
-                  shouldOpen: true,
-                },
-                Style: "0",
-                Text: "Play Now",
-                _type: "Button",
-              },
-            ],
-            FullScreenBackground: {
-              Image: [
-                {
-                  width: 1920,
-                  height: 1080,
-                  url: "https://cdn1.epicgames.com/offer/fn/Blade_2560x1440_2560x1440-95718a8046a942675a0bc4d27560e2bb",
-                },
-                {
-                  width: 960,
-                  height: 540,
-                  url: "https://cdn1.epicgames.com/offer/fn/Blade_2560x1440_2560x1440-95718a8046a942675a0bc4d27560e2bb",
-                },
-              ],
-              _type: "FullScreenBackground",
-            },
-            FullScreenBody:
-              "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm",
-            FullScreenTitle: "ATLAS",
-            TeaserBackground: {
-              Image: [
-                {
-                  width: 1024,
-                  height: 512,
-                  url: "https://cdn1.epicgames.com/offer/fn/Blade_2560x1440_2560x1440-95718a8046a942675a0bc4d27560e2bb",
-                },
-              ],
-              _type: "TeaserBackground",
-            },
-            TeaserTitle: "ATLAS",
-            VerticalTextLayout: false,
-          },
-          contentSchemaName: "DynamicMotd",
-          contentHash: "c93adbc7a8a9f94a916de62aa443e2d6",
-        },
-      ],
-    });
+    setCmsNoCacheHeaders(c);
+    return c.json(createDynamicMotdCollection(targetIslandCode));
   });
 }

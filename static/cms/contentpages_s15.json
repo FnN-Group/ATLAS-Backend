@@ -11,7 +11,7 @@
           "id": "AtlasNewsBR",
           "entryType": "Website",
           "title": "ATLAS",
-          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm",
+          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm\nClick (F8) and type \"open 127.0.0.1\" to join.",
           "tabTitleOverride": "ATLAS",
           "sortingPriority": 90,
           "image": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/images/ATLAS-Backend-Banner.png",
@@ -28,6 +28,14 @@
         }
       ],
       "messages": [
+        {
+          "_type": "CommonUI Simple Message Base",
+          "title": "ATLAS",
+          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm\nClick (F8) and type \"open 127.0.0.1\" to join.",
+          "image": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/images/ATLAS-Backend-Banner.png",
+          "hidden": false,
+          "spotlight": false
+        },
         {
           "_type": "CommonUI Simple Message Base",
           "title": "Join our Discord server!",
@@ -58,7 +66,7 @@
           "id": "AtlasNewsBRv2",
           "entryType": "Website",
           "title": "ATLAS",
-          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm",
+          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm\nClick (F8) and type \"open 127.0.0.1\" to join.",
           "tabTitleOverride": "ATLAS",
           "sortingPriority": 90,
           "image": "https://fortnite-public-service-prod11.ol.epicgames.com/images/motd.png",
@@ -86,13 +94,15 @@
   "emergencynotice": {
     "news": {
       "_type": "Battle Royale News",
+      "platform_messages": [],
       "messages": [
         {
           "_type": "CommonUI Simple Message Base",
           "title": "ATLAS",
-          "body": "Emergency Notice: ATLAS\n@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm",
+          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm\nClick (F8) and type \"open 127.0.0.1\" to join.",
           "hidden": false,
-          "spotlight": true
+          "spotlight": false,
+          "subgame": "br"
         }
       ]
     },
@@ -113,7 +123,7 @@
         {
           "_type": "CommonUI Emergency Notice Base",
           "title": "ATLAS",
-          "body": "Emergency Notice: ATLAS\n@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm",
+          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm\nClick (F8) and type \"open 127.0.0.1\" to join.",
           "hidden": false,
           "gamemodes": []
         }

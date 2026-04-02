@@ -1,0 +1,62 @@
+{
+  "presets": [
+    {
+      "name": "Default Profile",
+      "folder": "Default Profile",
+      "versionTag": null,
+      "pinned": "top"
+    },
+    {
+      "name": "Empty Profile",
+      "folder": "Empty Profile",
+      "versionTag": null,
+      "pinned": "top"
+    },
+    {
+      "name": "Pulse Profile",
+      "folder": "Pulse Profile",
+      "versionTag": "v9.10",
+      "pinned": null
+    },
+    {
+      "name": "Stellar Profile",
+      "folder": "Stellar Profile",
+      "versionTag": "v12.41",
+      "pinned": null
+    },
+    {
+      "name": "Tozo Profile",
+      "folder": "Tozo Profile",
+      "versionTag": "v12.41",
+      "pinned": null
+    },
+    {
+      "name": "Eon Profile",
+      "folder": "Eon Profile",
+      "versionTag": "v12.41",
+      "pinned": null
+    },
+    {
+      "name": "Retrac Profile",
+      "folder": "Retrac Profile",
+      "versionTag": "v14.40",
+      "pinned": null
+    },
+    {
+      "name": "Twine Profile",
+      "folder": "Twine Profile",
+      "versionTag": "v14.40",
+      "pinned": null
+    }
+  ],
+  "hidden": [],
+  "migrations": [
+    { "from": "Blank Profile", "to": "Empty Profile" },
+    { "from": "Blank", "to": "Empty Profile" },
+    { "from": "Reboot X Pulse Profile", "to": "Pulse Profile" },
+    { "from": "Reboot X Stellar Profile", "to": "Stellar Profile" },
+    { "from": "Reboot X Tozo Profile", "to": "Tozo Profile" },
+    { "from": "Reboot X Retrac Profile", "to": "Retrac Profile" },
+    { "from": "Reboot X Twine Profile", "to": "Twine Profile" }
+  ]
+}

@@ -10,11 +10,11 @@
 ## ATLAS Backend
 
 ATLAS is a Fortnite backend for all versions of fortnite designed for ease-of-use!
+The current GUI and installer workflow are Windows-only.
 This backend has features such as the following:
 
-### 1. Clean GUI (and CLI)
+### 1. Clean GUI
 - A well sorted and clean GUI with ease of access to all features
-- CLI version still exists under the old branch
 
 ### 2. Straight Bloom
 - Toggle Straight Bloom (Straight Sniper Bullets)
@@ -24,19 +24,20 @@ This backend has features such as the following:
 - CurveTable Editor
 - CurveTable Importer
 
-### **4. DataTables**
+### 4. DataTables
 - Customizable Gun Properties
 - You can set values for things like Damage, Environment Damage, Clip Size, Reload Time, etc.
 
 ### 5. Importing/Exporting Data
-- Bulk Importing/Exporting Client Settings, Profiles
+- Bulk Importing/Exporting Client Settings, Profiles, etc.
 
 ### 6. Other Features
 - Arena Playlist/Points (22.40 and under)
 - Arena Points Saving (Unfinished)
 - Arena Point Leaderboard with all Profiles
-- Game Configuration (GUI Rufus/Water Stage Editor/Water Storm Toggle)
-- Custom Cosmetic Profiles (Reboot x Retrac, Stellar, Tozo, Pulse)
+- Game Configuration (Rufus, Water Stage Editor, Water Storm Toggle)
+- Custom Cosmetic Profiles (Retrac, Stellar, etc.)
+- Custom Cosmetic Athena Importer
 
 If you want to contribute just fork this repository and make a pull request!
 
@@ -48,11 +49,11 @@ If you want to contribute just fork this repository and make a pull request!
 
 ## Quick Start (Windows)
 
-### First Time Setup (For CLI Version)
+### First Time Setup
 
-1. **Run the installer MSI file** (recommended):
+1. **Run the installer EXE file** (recommended):
    ```bat
-   ATLAS-Backend-X.X.X.msi
+   ATLAS Backend Setup-X.X.X.exe
    ```
 
 2. **Launch ATLAS as it is now a dedicated app**:

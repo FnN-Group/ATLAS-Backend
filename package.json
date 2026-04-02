@@ -1,13 +1,13 @@
 {
   "name": "atlas",
-  "version": "1.5.5",
+  "version": "1.5.6",
   "module": "src/index.ts",
   "type": "module",
   "scripts": {
     "setup": "bun install",
     "dev": "bun --watch src/index.ts",
     "start": "bun run src/index.ts",
-    "build:stage": "powershell -NoProfile -ExecutionPolicy Bypass -File ./installer/build_installer.ps1 -SkipMsi",
+    "build:stage": "powershell -NoProfile -ExecutionPolicy Bypass -File ./installer/build_installer.ps1 -SkipInnoCompile",
     "build:setup": "powershell -NoProfile -ExecutionPolicy Bypass -File ./installer/build_installer.ps1",
     "build": "bun run build:setup"
   },
@@ -29,7 +29,6 @@
     "crypto": "^1.0.1",
     "hono": "^4.4.6",
     "jsonwebtoken": "^9.0.2",
-    "prompts": "^2.4.2",
     "uuid": "^10.0.0"
   }
 }

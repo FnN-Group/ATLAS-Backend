@@ -170,11 +170,6 @@ dist
 # IntelliJ based IDEs
 .idea
 
-# Finder (MacOS) folder config
-.DS_Store
-
-
-
 # Atlas
 tools/bun/
 src/config/config.ini
@@ -186,9 +181,13 @@ profiles
 !static/profiles/profile_athena.json
 !static/athenaprofiles/Profile Presets/
 !static/athenaprofiles/Profile Presets/**
+static/athenaprofiles/custom-presets.json
 exports/*
 !exports/.gitkeep
 responses/modifications-backup.json
+responses/user-toggle-states.json
 flutter/
 static/hotfixes/*.bak
 static/hotfixes/.atlas_text_hotfix_migration
+temp/
+logs/

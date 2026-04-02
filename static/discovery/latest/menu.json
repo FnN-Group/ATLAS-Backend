@@ -205,13 +205,13 @@
                 "es-419": "Arena",
                 "tr": "Arena"
             },
-            "image_url": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/main/public/playlists/Late-Game-Arena.png",
+            "image_url": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/playlists/Late-Game-Arena.png",
             "product_tag": "Product.BR.Build.Arena",
             "image_urls": {
-                "url_s": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/main/public/playlists/Late-Game-Arena.png",
-                "url_xs": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/main/public/playlists/Late-Game-Arena.png",
-                "url_m": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/main/public/playlists/Late-Game-Arena.png",
-                "url": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/main/public/playlists/Late-Game-Arena.png"
+                "url_s": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/playlists/Late-Game-Arena.png",
+                "url_xs": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/playlists/Late-Game-Arena.png",
+                "url_m": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/playlists/Late-Game-Arena.png",
+                "url": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/playlists/Late-Game-Arena.png"
             },
             "matchmaking": {
                 "override_playlist": "playlist_showdownalt_solo"
@@ -451,12 +451,12 @@
         "es-419": "Entra a la Arena para poner a prueba tus habilidades en el modo competitivo clasificado de Fortnite. Cada eliminación y posición cuentan mientras ganas Hype y avanzas hacia la Liga de Campeones.",
         "tr": "Fortnite’ın dereceli rekabetçi modunda yeteneklerini test etmek için Arena’ya gir. Her eleme ve sıralama önemlidir; Hype kazanarak Şampiyonlar Ligi’ne doğru yükselirsin."
         },
-        "image_url": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/main/public/playlists/Late-Game-Arena.png",
+        "image_url": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/playlists/Late-Game-Arena.png",
         "image_urls": {
-        "url_s": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/main/public/playlists/Late-Game-Arena.png",
-        "url_xs": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/main/public/playlists/Late-Game-Arena.png",
-        "url_m": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/main/public/playlists/Late-Game-Arena.png",
-        "url": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/main/public/playlists/Late-Game-Arena.png"
+        "url_s": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/playlists/Late-Game-Arena.png",
+        "url_xs": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/playlists/Late-Game-Arena.png",
+        "url_m": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/playlists/Late-Game-Arena.png",
+        "url": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/playlists/Late-Game-Arena.png"
         },
         "tagline": "Step into Arena to test your skill in Fortnite’s ranked competitive mode. Every elimination and placement matters as you earn Hype and climb toward Champion League.",
         "matchmaking": {

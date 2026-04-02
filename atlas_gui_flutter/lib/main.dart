@@ -10,7 +10,6 @@ import 'package:flutter_acrylic/flutter_acrylic.dart';
 import 'package:image/image.dart' as img;
 import 'package:file_picker/file_picker.dart';
 import 'package:archive/archive_io.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:markdown/markdown.dart' as md;
 
@@ -20,8 +19,10 @@ final ValueNotifier<double> appBackgroundBlur = ValueNotifier(15);
 final ValueNotifier<double> appBackgroundParticlesOpacity = ValueNotifier(1.0);
 final ValueNotifier<bool> appDialogBlurEnabled = ValueNotifier(true);
 final ValueNotifier<bool> appStartupAnimationEnabled = ValueNotifier(true);
+final ValueNotifier<int> userToggleStatesRevision = ValueNotifier(0);
 
 const _fallbackAcrylicColor = Color(0x260A0E14);
+const _legacyMsiResetMarkerFileName = '.legacy-msi-reset';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,6 +33,7 @@ Future<void> main() async {
 
   // Initialize app data directory structure if running from installed location
   await _initializeAppDataDirectory();
+  UserToggleStatesService.startWatching();
 
   // Check if another instance is already running
   if (!await _acquireInstanceLock()) {
@@ -39,15 +41,13 @@ Future<void> main() async {
     exit(1);
   }
 
-  if (Platform.isWindows) {
-    await Window.initialize();
-    await Window.setEffect(
-      effect: WindowEffect.acrylic,
-      color: _fallbackAcrylicColor,
-    );
-    await Window.makeTitlebarTransparent();
-    await Window.enableFullSizeContentView();
-  }
+  await Window.initialize();
+  await Window.setEffect(
+    effect: WindowEffect.acrylic,
+    color: _fallbackAcrylicColor,
+  );
+  await Window.makeTitlebarTransparent();
+  await Window.enableFullSizeContentView();
   runApp(const AtlasApp());
 }
 
@@ -69,12 +69,17 @@ Future<void> _initializeAppDataDirectory() async {
   final atlasDataDir = Directory(getBackendRoot());
   final requiredDirs = [
     atlasDataDir,
+    Directory(joinPath([atlasDataDir.path, 'static', 'assets'])),
+    Directory(joinPath([atlasDataDir.path, 'static', 'cms'])),
     Directory(joinPath([atlasDataDir.path, 'static', 'profiles'])),
     Directory(joinPath([atlasDataDir.path, 'static', 'ClientSettings'])),
     Directory(joinPath([atlasDataDir.path, 'static', 'athenaprofiles'])),
     Directory(joinPath([atlasDataDir.path, 'static', 'shop'])),
     Directory(joinPath([atlasDataDir.path, 'static', 'discovery'])),
     Directory(joinPath([atlasDataDir.path, 'static', 'hotfixes'])),
+    Directory(
+      joinPath([atlasDataDir.path, 'static', 'hotfixes', 'DefaultGame Data']),
+    ),
     Directory(joinPath([atlasDataDir.path, 'static', 'events'])),
     Directory(joinPath([atlasDataDir.path, 'public', 'gameconfig'])),
     Directory(joinPath([atlasDataDir.path, 'public', 'images'])),
@@ -92,8 +97,14 @@ Future<void> _initializeAppDataDirectory() async {
     }
   }
 
+  await _restoreInstallerMigrationData(atlasDataDir);
   await _seedInstalledDataDirectory(atlasDataDir);
+  await _syncInstalledRuntimeSourceDirectory(atlasDataDir);
+  await _syncInstalledRuntimeDependencyFiles(atlasDataDir);
+  await _synchronizeInstalledMutableDataFiles(atlasDataDir);
   await _migrateLegacyPresetFolders(atlasDataDir);
+  await UserToggleStatesService.applySavedStateIfPresent();
+  await UserToggleStatesService.syncFromCurrentState();
 }
 
 Future<void> _seedInstalledDataDirectory(Directory atlasDataDir) async {
@@ -102,9 +113,10 @@ Future<void> _seedInstalledDataDirectory(Directory atlasDataDir) async {
     return;
   }
 
-  final relativeDirs = <List<String>>[
+  final missingOnlyDirs = <List<String>>[
     ['responses'],
     ['static', 'hotfixes'],
+    ['static', 'hotfixes', 'DefaultGame Data'],
     ['static', 'profiles'],
     ['static', 'ClientSettings', 'config'],
     ['static', 'athenaprofiles', 'Profile Presets'],
@@ -114,10 +126,24 @@ Future<void> _seedInstalledDataDirectory(Directory atlasDataDir) async {
     ['public', 'playlists'],
   ];
 
-  for (final relativeDir in relativeDirs) {
+  for (final relativeDir in missingOnlyDirs) {
     final sourceDir = Directory(joinPath([installRoot, ...relativeDir]));
     final targetDir = Directory(joinPath([atlasDataDir.path, ...relativeDir]));
     await _copyMissingDirectoryContents(sourceDir, targetDir);
+  }
+
+  final runtimeAssetDirs = <List<String>>[
+    ['static', 'assets'],
+    ['static', 'cms'],
+    ['static', 'discovery'],
+    ['static', 'events'],
+    ['static', 'shop'],
+  ];
+
+  for (final relativeDir in runtimeAssetDirs) {
+    final sourceDir = Directory(joinPath([installRoot, ...relativeDir]));
+    final targetDir = Directory(joinPath([atlasDataDir.path, ...relativeDir]));
+    await _copyDirectoryContentsReplacingFiles(sourceDir, targetDir);
   }
 }
 
@@ -132,9 +158,7 @@ Future<void> _copyMissingDirectoryContents(
   await target.create(recursive: true);
 
   await for (final entity in source.list(followLinks: false)) {
-    final name = entity.uri.pathSegments.isNotEmpty
-        ? entity.uri.pathSegments.last
-        : '';
+    final name = _entityName(entity);
     if (name.isEmpty) continue;
 
     final targetPath = joinPath([target.path, name]);
@@ -153,6 +177,140 @@ Future<void> _copyMissingDirectoryContents(
   }
 }
 
+Future<void> _syncInstalledRuntimeSourceDirectory(
+  Directory atlasDataDir,
+) async {
+  final installRoot = getInstallationRoot();
+  if (_samePath(installRoot, atlasDataDir.path)) {
+    return;
+  }
+
+  await _copyDirectoryContentsReplacingFiles(
+    Directory(joinPath([installRoot, 'src'])),
+    Directory(joinPath([atlasDataDir.path, 'src'])),
+  );
+}
+
+Future<void> _syncInstalledRuntimeDependencyFiles(
+  Directory atlasDataDir,
+) async {
+  final installRoot = getInstallationRoot();
+  if (_samePath(installRoot, atlasDataDir.path)) {
+    return;
+  }
+
+  final installPackageJson = File(joinPath([installRoot, 'package.json']));
+  final runtimePackageJson = File(
+    joinPath([atlasDataDir.path, 'package.json']),
+  );
+  final installLockfile = File(joinPath([installRoot, 'bun.lockb']));
+  final runtimeLockfile = File(joinPath([atlasDataDir.path, 'bun.lockb']));
+  final installNodeModules = Directory(joinPath([installRoot, 'node_modules']));
+  final runtimeNodeModules = Directory(
+    joinPath([atlasDataDir.path, 'node_modules']),
+  );
+
+  final dependenciesChanged =
+      await _filesDiffer(installPackageJson, runtimePackageJson) ||
+      await _filesDiffer(installLockfile, runtimeLockfile) ||
+      !await _directoryHasEntries(runtimeNodeModules);
+
+  await _copyFileReplacingIfDifferent(installPackageJson, runtimePackageJson);
+  await _copyFileReplacingIfDifferent(installLockfile, runtimeLockfile);
+
+  if (dependenciesChanged) {
+    await _copyDirectoryContentsReplacingFiles(
+      installNodeModules,
+      runtimeNodeModules,
+    );
+  }
+}
+
+Future<void> _copyDirectoryContentsReplacingFiles(
+  Directory source,
+  Directory target,
+) async {
+  if (!await source.exists()) {
+    return;
+  }
+
+  await target.create(recursive: true);
+
+  await for (final entity in source.list(followLinks: false)) {
+    final name = _entityName(entity);
+    if (name.isEmpty) continue;
+
+    final targetPath = joinPath([target.path, name]);
+    if (entity is Directory) {
+      await _copyDirectoryContentsReplacingFiles(entity, Directory(targetPath));
+      continue;
+    }
+
+    if (entity is File) {
+      final targetFile = File(targetPath);
+      await targetFile.parent.create(recursive: true);
+      if (await targetFile.exists()) {
+        await targetFile.delete();
+      }
+      await entity.copy(targetFile.path);
+    }
+  }
+}
+
+Future<bool> _directoryHasEntries(Directory directory) async {
+  if (!await directory.exists()) {
+    return false;
+  }
+
+  await for (final _ in directory.list(followLinks: false)) {
+    return true;
+  }
+
+  return false;
+}
+
+Future<bool> _filesDiffer(File source, File target) async {
+  if (!await source.exists()) {
+    return false;
+  }
+
+  if (!await target.exists()) {
+    return true;
+  }
+
+  final sourceStat = await source.stat();
+  final targetStat = await target.stat();
+  if (sourceStat.size != targetStat.size) {
+    return true;
+  }
+
+  final sourceBytes = await source.readAsBytes();
+  final targetBytes = await target.readAsBytes();
+  if (sourceBytes.length != targetBytes.length) {
+    return true;
+  }
+
+  for (var i = 0; i < sourceBytes.length; i++) {
+    if (sourceBytes[i] != targetBytes[i]) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+Future<void> _copyFileReplacingIfDifferent(File source, File target) async {
+  if (!await _filesDiffer(source, target)) {
+    return;
+  }
+
+  await target.parent.create(recursive: true);
+  if (await target.exists()) {
+    await target.delete();
+  }
+  await source.copy(target.path);
+}
+
 bool _samePath(String a, String b) {
   String normalize(String input) {
     return input
@@ -162,6 +320,16 @@ bool _samePath(String a, String b) {
   }
 
   return normalize(a) == normalize(b);
+}
+
+String _pathFileName(String path) {
+  final normalized = path.replaceAll('\\', '/');
+  final segments = normalized.split('/').where((segment) => segment.isNotEmpty);
+  return segments.isEmpty ? '' : segments.last;
+}
+
+String _entityName(FileSystemEntity entity) {
+  return _pathFileName(entity.path);
 }
 
 Future<void> _migrateLegacyPresetFolders(Directory atlasDataDir) async {
@@ -175,16 +343,49 @@ Future<void> _migrateLegacyPresetFolders(Directory atlasDataDir) async {
   );
   if (!await presetsDir.exists()) return;
 
-  await _migratePresetFolderName(
-    presetsDir: presetsDir,
-    legacyFolderName: 'Blank Profile',
-    canonicalFolderName: 'Empty Profile',
+  final configFile = File(
+    joinPath([
+      atlasDataDir.path,
+      'static',
+      'athenaprofiles',
+      'presets.json',
+    ]),
   );
-  await _migratePresetFolderName(
-    presetsDir: presetsDir,
-    legacyFolderName: 'Blank',
-    canonicalFolderName: 'Empty Profile',
-  );
+  List<Map<String, dynamic>> migrations = [];
+  if (await configFile.exists()) {
+    try {
+      final contents = await configFile.readAsString();
+      final config = jsonDecode(contents) as Map<String, dynamic>;
+      final migrationsList = config['migrations'] as List<dynamic>? ?? [];
+      for (final m in migrationsList) {
+        migrations.add(m as Map<String, dynamic>);
+      }
+    } catch (_) {}
+  }
+
+  if (migrations.isEmpty) {
+    // Hardcoded fallback if presets.json is missing or invalid
+    migrations = [
+      {'from': 'Blank Profile', 'to': 'Empty Profile'},
+      {'from': 'Blank', 'to': 'Empty Profile'},
+      {'from': 'Reboot X Pulse Profile', 'to': 'Pulse Profile'},
+      {'from': 'Reboot X Stellar Profile', 'to': 'Stellar Profile'},
+      {'from': 'Reboot X Tozo Profile', 'to': 'Tozo Profile'},
+      {'from': 'Reboot X Retrac Profile', 'to': 'Retrac Profile'},
+      {'from': 'Reboot X Twine Profile', 'to': 'Twine Profile'},
+    ];
+  }
+
+  for (final migration in migrations) {
+    final from = migration['from'] as String?;
+    final to = migration['to'] as String?;
+    if (from == null || to == null) continue;
+    await _migratePresetFolderName(
+      presetsDir: presetsDir,
+      legacyFolderName: from,
+      canonicalFolderName: to,
+    );
+  }
 }
 
 Future<void> _migratePresetFolderName({
@@ -211,6 +412,403 @@ Future<void> _migratePresetFolderName({
   } catch (_) {}
 }
 
+String _resolveInstallerMigrationRoot() {
+  final localAppData = Platform.environment['LOCALAPPDATA'];
+  final base = localAppData ?? Directory.systemTemp.path;
+  return joinPath([base, 'ATLAS', 'installer-migration']);
+}
+
+Future<void> _restoreInstallerMigrationData(Directory atlasDataDir) async {
+  final migrationRoot = Directory(_resolveInstallerMigrationRoot());
+  if (!await migrationRoot.exists()) {
+    return;
+  }
+
+  try {
+    final legacyMsiResetMarker = File(
+      joinPath([migrationRoot.path, _legacyMsiResetMarkerFileName]),
+    );
+    if (await legacyMsiResetMarker.exists()) {
+      await _resetAtlasDataRootForLegacyMsiMigration(atlasDataDir);
+      await migrationRoot.delete(recursive: true);
+      return;
+    }
+
+    await _mergeInstallerMigrationData(
+      migrationRoot: migrationRoot,
+      atlasDataDir: atlasDataDir,
+    );
+    await migrationRoot.delete(recursive: true);
+  } catch (_) {
+    // Leave the staged data in place so the next launch can retry recovery.
+  }
+}
+
+Future<void> _resetAtlasDataRootForLegacyMsiMigration(
+  Directory atlasDataDir,
+) async {
+  if (await atlasDataDir.exists()) {
+    await atlasDataDir.delete(recursive: true);
+  }
+  await atlasDataDir.create(recursive: true);
+}
+
+Future<void> _mergeInstallerMigrationData({
+  required Directory migrationRoot,
+  required Directory atlasDataDir,
+}) async {
+  Future<File> targetFile(List<String> relativeParts) async {
+    final file = File(joinPath([atlasDataDir.path, ...relativeParts]));
+    await file.parent.create(recursive: true);
+    return file;
+  }
+
+  File sourceFile(List<String> relativeParts) {
+    return File(joinPath([migrationRoot.path, ...relativeParts]));
+  }
+
+  Directory sourceDir(List<String> relativeParts) {
+    return Directory(joinPath([migrationRoot.path, ...relativeParts]));
+  }
+
+  // Treat the installer-staged files as the authoritative pre-update user data.
+  // New release additions are merged later from the install root.
+  await _restoreFileFromInstallerMigration(
+    sourceFile(['gui.ini']),
+    await targetFile(['gui.ini']),
+  );
+  await _restoreFileFromInstallerMigration(
+    sourceFile(['profiles-ui-state.json']),
+    await targetFile(['profiles-ui-state.json']),
+  );
+  await _restoreFileFromInstallerMigration(
+    sourceFile(['responses', 'curvetables-state.json']),
+    await targetFile(['responses', 'curvetables-state.json']),
+  );
+  await _restoreFileFromInstallerMigration(
+    sourceFile(['responses', 'datatables-ui.json']),
+    await targetFile(['responses', 'datatables-ui.json']),
+  );
+  await _restoreFileFromInstallerMigration(
+    sourceFile(['responses', 'epic-settings.json']),
+    await targetFile(['responses', 'epic-settings.json']),
+  );
+  await _restoreFileFromInstallerMigration(
+    sourceFile(['responses', 'straight-bloom-state.json']),
+    await targetFile(['responses', 'straight-bloom-state.json']),
+  );
+  await _restoreFileFromInstallerMigration(
+    sourceFile(['responses', 'user-toggle-states.json']),
+    await targetFile(['responses', 'user-toggle-states.json']),
+  );
+  await _restoreFileFromInstallerMigration(
+    sourceFile(['responses', 'modifications-backup.json']),
+    await targetFile(['responses', 'modifications-backup.json']),
+  );
+  await _restoreFileFromInstallerMigration(
+    sourceFile(['static', 'hotfixes', 'DefaultGame Data', 'StraightBloom.ini']),
+    await targetFile([
+      'static',
+      'hotfixes',
+      'DefaultGame Data',
+      'StraightBloom.ini',
+    ]),
+  );
+  await _restoreFileFromInstallerMigration(
+    sourceFile(['static', 'hotfixes', 'DefaultGame Data', 'Fixes.ini']),
+    await targetFile(['static', 'hotfixes', 'DefaultGame Data', 'Fixes.ini']),
+  );
+  await _restoreFileFromInstallerMigration(
+    sourceFile(['static', 'hotfixes', 'DefaultGame Data', 'CurveTables.ini']),
+    await targetFile([
+      'static',
+      'hotfixes',
+      'DefaultGame Data',
+      'CurveTables.ini',
+    ]),
+  );
+  await _restoreFileFromInstallerMigration(
+    sourceFile(['static', 'hotfixes', 'DefaultGame Data', 'DataTables.ini']),
+    await targetFile([
+      'static',
+      'hotfixes',
+      'DefaultGame Data',
+      'DataTables.ini',
+    ]),
+  );
+  await _restoreFileFromInstallerMigration(
+    sourceFile(['responses', 'user-curvetables.ini']),
+    await targetFile(['responses', 'user-curvetables.ini']),
+  );
+  await _restoreFileFromInstallerMigration(
+    sourceFile(['responses', 'user-datatables.ini']),
+    await targetFile(['responses', 'user-datatables.ini']),
+  );
+  await _restoreFileFromInstallerMigration(
+    sourceFile(['src', 'config', 'config.ini']),
+    await targetFile(['src', 'config', 'config.ini']),
+  );
+  await _restoreFileFromInstallerMigration(
+    sourceFile(['static', 'hotfixes', 'DefaultGame.ini']),
+    await targetFile(['static', 'hotfixes', 'DefaultGame.ini']),
+  );
+  await _restoreFileFromInstallerMigration(
+    sourceFile(['static', 'hotfixes', 'DefaultEngine.ini']),
+    await targetFile(['static', 'hotfixes', 'DefaultEngine.ini']),
+  );
+
+  await _mergeCustomCurvesJson(
+    sourceFile(['responses', 'curves.json']),
+    await targetFile(['responses', 'curves.json']),
+  );
+  await _mergeCustomDataTablesJson(
+    sourceFile(['responses', 'datatables.json']),
+    await targetFile(['responses', 'datatables.json']),
+  );
+
+  await _restoreDirectoryContentsFromInstallerMigration(
+    sourceDir(['static', 'athenaprofiles', 'Profile Presets']),
+    Directory(
+      joinPath([
+        atlasDataDir.path,
+        'static',
+        'athenaprofiles',
+        'Profile Presets',
+      ]),
+    ),
+  );
+  await _restoreFileFromInstallerMigration(
+    sourceFile(['static', 'athenaprofiles', 'custom-presets.json']),
+    await targetFile(['static', 'athenaprofiles', 'custom-presets.json']),
+  );
+  await _restoreDirectoryContentsFromInstallerMigration(
+    sourceDir(['static', 'ClientSettings']),
+    Directory(joinPath([atlasDataDir.path, 'static', 'ClientSettings'])),
+  );
+  await _restoreDirectoryContentsFromInstallerMigration(
+    sourceDir(['static', 'profiles']),
+    Directory(joinPath([atlasDataDir.path, 'static', 'profiles'])),
+  );
+  await _restoreDirectoryContentsFromInstallerMigration(
+    sourceDir(['exports']),
+    Directory(joinPath([atlasDataDir.path, 'exports'])),
+  );
+  await _restoreDirectoryContentsFromInstallerMigration(
+    sourceDir(['public', 'items', 'custom-groups']),
+    Directory(
+      joinPath([atlasDataDir.path, 'public', 'items', 'custom-groups']),
+    ),
+  );
+  await _restoreMatchingFilesFromInstallerMigration(
+    sourceDir(['public', 'items']),
+    Directory(joinPath([atlasDataDir.path, 'public', 'items'])),
+    (name) => name.toLowerCase().startsWith('custom_'),
+  );
+
+  await DataTableService.ensureAtlasTextHotfixInDefaultGame();
+}
+
+Future<void> _restoreFileFromInstallerMigration(
+  File source,
+  File target,
+) async {
+  if (!await source.exists()) {
+    return;
+  }
+
+  await target.parent.create(recursive: true);
+  await target.writeAsBytes(await source.readAsBytes(), flush: true);
+}
+
+Future<void> _restoreDirectoryContentsFromInstallerMigration(
+  Directory source,
+  Directory target,
+) async {
+  if (!await source.exists()) {
+    return;
+  }
+
+  await target.create(recursive: true);
+
+  await for (final entity in source.list(followLinks: false)) {
+    final name = _entityName(entity);
+    if (name.isEmpty) continue;
+
+    final targetPath = joinPath([target.path, name]);
+    if (entity is Directory) {
+      await _restoreDirectoryContentsFromInstallerMigration(
+        entity,
+        Directory(targetPath),
+      );
+      continue;
+    }
+
+    if (entity is File) {
+      final targetFile = File(targetPath);
+      await targetFile.parent.create(recursive: true);
+      await targetFile.writeAsBytes(await entity.readAsBytes(), flush: true);
+    }
+  }
+}
+
+Future<void> _restoreMatchingFilesFromInstallerMigration(
+  Directory source,
+  Directory target,
+  bool Function(String name) shouldCopy,
+) async {
+  if (!await source.exists()) {
+    return;
+  }
+
+  await target.create(recursive: true);
+
+  await for (final entity in source.list(followLinks: false)) {
+    if (entity is! File) continue;
+    final name = _entityName(entity);
+    if (name.isEmpty || !shouldCopy(name)) continue;
+
+    final targetFile = File(joinPath([target.path, name]));
+    await targetFile.parent.create(recursive: true);
+    await targetFile.writeAsBytes(await entity.readAsBytes(), flush: true);
+  }
+}
+
+Future<Map<String, dynamic>?> _readJsonObject(File file) async {
+  if (!await file.exists()) {
+    return null;
+  }
+
+  try {
+    final decoded = jsonDecode(await file.readAsString());
+    if (decoded is Map<String, dynamic>) {
+      return decoded;
+    }
+    if (decoded is Map) {
+      return decoded.map((key, value) => MapEntry('$key', value));
+    }
+  } catch (_) {}
+
+  return null;
+}
+
+Future<void> _mergeCustomDataTablesJson(File source, File target) async {
+  final sourceMap = await _readJsonObject(source);
+  if (sourceMap == null || sourceMap.isEmpty) {
+    return;
+  }
+
+  if (!await target.exists()) {
+    await target.parent.create(recursive: true);
+    await source.copy(target.path);
+    return;
+  }
+
+  final targetMap = await _readJsonObject(target);
+  if (targetMap == null) {
+    return;
+  }
+
+  var changed = false;
+  for (final entry in sourceMap.entries) {
+    if (!entry.key.startsWith('custom-')) {
+      continue;
+    }
+    if (targetMap.containsKey(entry.key)) {
+      continue;
+    }
+    targetMap[entry.key] = entry.value;
+    changed = true;
+  }
+
+  if (!changed) {
+    return;
+  }
+
+  await target.writeAsString(
+    const JsonEncoder.withIndent('  ').convert(targetMap),
+  );
+}
+
+Future<void> _mergeCustomCurvesJson(File source, File target) async {
+  final sourceMap = await CurveTableService._readCurveMap(source);
+  if (sourceMap == null || sourceMap.isEmpty) {
+    return;
+  }
+
+  if (!await target.exists()) {
+    await target.parent.create(recursive: true);
+    await source.copy(target.path);
+    return;
+  }
+
+  final targetMap = await CurveTableService._readCurveMap(target);
+  if (targetMap == null) {
+    return;
+  }
+
+  final existingSignatures = <String>{};
+  for (final value in targetMap.values) {
+    if (value is! Map) continue;
+    final signature = CurveTableService._curveSignature(
+      Map<String, dynamic>.from(value),
+    );
+    if (signature.isNotEmpty) {
+      existingSignatures.add(signature);
+    }
+  }
+
+  var maxId = 0;
+  for (final id in targetMap.keys) {
+    final parsed = int.tryParse(id);
+    if (parsed != null && parsed > maxId) {
+      maxId = parsed;
+    }
+  }
+
+  var changed = false;
+  final sourceEntries = sourceMap.entries.toList()
+    ..sort((a, b) {
+      final aId = int.tryParse(a.key) ?? (1 << 30);
+      final bId = int.tryParse(b.key) ?? (1 << 30);
+      return aId.compareTo(bId);
+    });
+
+  for (final entry in sourceEntries) {
+    if (entry.value is! Map) {
+      continue;
+    }
+
+    final curveData = Map<String, dynamic>.from(entry.value);
+    final isRelevant =
+        curveData['isCustom'] == true ||
+        (curveData['groupImagePath']?.toString().contains('custom-groups/') ??
+            false);
+    if (!isRelevant) {
+      continue;
+    }
+
+    final signature = CurveTableService._curveSignature(curveData);
+    if (signature.isNotEmpty && existingSignatures.contains(signature)) {
+      continue;
+    }
+
+    maxId += 1;
+    targetMap['$maxId'] = jsonDecode(jsonEncode(curveData));
+    if (signature.isNotEmpty) {
+      existingSignatures.add(signature);
+    }
+    changed = true;
+  }
+
+  if (!changed) {
+    return;
+  }
+
+  await target.writeAsString(
+    const JsonEncoder.withIndent('  ').convert(targetMap),
+  );
+}
+
 class AtlasApp extends StatefulWidget {
   const AtlasApp({super.key});
 
@@ -230,7 +828,7 @@ class _AtlasAppState extends State<AtlasApp> {
 
   Future<void> _loadTheme() async {
     final config = await ConfigService.load();
-    appThemeMode.value = config.useDarkMode ? ThemeMode.dark : ThemeMode.light;
+    appThemeMode.value = ThemeMode.dark;
     appBackgroundPath.value = config.backgroundImagePath;
     appBackgroundBlur.value = config.backgroundBlur;
     appBackgroundParticlesOpacity.value = config.backgroundParticlesOpacity;
@@ -246,7 +844,6 @@ class _AtlasAppState extends State<AtlasApp> {
   }
 
   void _scheduleAcrylicUpdate() {
-    if (!Platform.isWindows) return;
     final token = ++_acrylicToken;
     _applyAcrylicForBackground(appBackgroundPath.value).then((_) {
       if (!mounted || token != _acrylicToken) return;
@@ -400,11 +997,10 @@ class _AtlasScrollBehavior extends MaterialScrollBehavior {
 
   @override
   Set<PointerDeviceKind> get dragDevices => {
-    PointerDeviceKind.mouse,
+    // Keep mouse drag selection available inside text inputs on desktop.
     PointerDeviceKind.touch,
     PointerDeviceKind.trackpad,
     PointerDeviceKind.stylus,
-    PointerDeviceKind.unknown,
   };
 }
 
@@ -775,7 +1371,6 @@ class _AtlasHomePageState extends State<AtlasHomePage>
   late final BackendController _controller;
   bool _exitInProgress = false;
   bool _checkingUpdate = false;
-  bool _showingShareDialog = false;
   bool _loadingReleaseHistory = false;
   List<ReleaseInfo> _releaseHistory = const [];
   String _backendVersionLabel = '1.0.0';
@@ -1147,7 +1742,7 @@ class _AtlasHomePageState extends State<AtlasHomePage>
                   if (href == null) return;
                   final url = Uri.tryParse(href);
                   if (url == null) return;
-                  await launchUrl(url, mode: LaunchMode.externalApplication);
+                  await _openUrl(url.toString());
                 },
               ),
             ),
@@ -1163,257 +1758,6 @@ class _AtlasHomePageState extends State<AtlasHomePage>
         ],
       ),
     );
-  }
-
-  Future<void> _showShareDialog() async {
-    if (_showingShareDialog) return;
-    _showingShareDialog = true;
-    try {
-      String vpnIp = 'Detecting...';
-      bool isLoading = true;
-      bool hasError = false;
-
-      try {
-        vpnIp = await VpnService.getVpnIpAddress();
-        hasError = vpnIp.startsWith('Error:');
-        isLoading = false;
-      } catch (e) {
-        vpnIp = 'Error: $e';
-        hasError = true;
-        isLoading = false;
-      }
-
-      if (!mounted) return;
-
-      final widget = StatefulBuilder(
-        builder: (context, setState) {
-          final colorScheme = Theme.of(context).colorScheme;
-          final onSurface = colorScheme.onSurface;
-          final onSurfaceMuted = onSurface.withOpacity(0.7);
-          final cardFill = colorScheme.surfaceContainerHighest.withOpacity(0.6);
-          final cardBorder = onSurface.withOpacity(0.18);
-
-          Widget buildStep(int index, List<InlineSpan> spans) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 22,
-                    height: 22,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: onSurface.withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: onSurface.withOpacity(0.2)),
-                    ),
-                    child: Text(
-                      '$index',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: onSurface,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: RichText(
-                      text: TextSpan(
-                        style: TextStyle(
-                          fontSize: 15,
-                          color: onSurface.withOpacity(0.9),
-                          fontWeight: FontWeight.w600,
-                          height: 1.22,
-                        ),
-                        children: spans,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          return AlertDialog(
-            title: const Text('Share Connection Details'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Radmin VPN IP for Reboot Launcher:'),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: cardFill,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: cardBorder),
-                  ),
-                  child: SelectableText(
-                    isLoading ? 'Detecting...' : vpnIp,
-                    style: TextStyle(
-                      fontFamily: 'Courier',
-                      fontSize: hasError ? 15 : 19,
-                      fontWeight: FontWeight.w700,
-                      color: onSurface,
-                    ),
-                  ),
-                ),
-                if (hasError) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'Make sure Radmin VPN is installed and running',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.redAccent.withOpacity(0.8),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton.icon(
-                    onPressed: () async {
-                      final url = Uri.parse('https://www.radmin-vpn.com/');
-                      final opened = await launchUrl(
-                        url,
-                        mode: LaunchMode.externalApplication,
-                      );
-                      if (!context.mounted) return;
-                      if (!opened) {
-                        showAtlasSnackBar(
-                          context,
-                          const SnackBar(
-                            content: Text('Unable to open download link.'),
-                          ),
-                        );
-                      }
-                    },
-                    icon: const Icon(Icons.open_in_new),
-                    label: const Text('Download Radmin VPN'),
-                  ),
-                ],
-                if (!isLoading && !hasError) ...[
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: cardFill,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: cardBorder),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.school_rounded,
-                              size: 18,
-                              color: onSurfaceMuted,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Quick setup in Reboot Launcher for others',
-                              style: TextStyle(
-                                fontSize: 13.5,
-                                fontWeight: FontWeight.w700,
-                                color: onSurface.withOpacity(0.92),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        buildStep(1, const [
-                          TextSpan(text: 'Open '),
-                          TextSpan(
-                            text: 'Reboot Launcher',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          TextSpan(text: '.'),
-                        ]),
-                        buildStep(2, const [
-                          TextSpan(text: 'Go to '),
-                          TextSpan(
-                            text: 'Backend',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          TextSpan(text: ' and switch '),
-                          TextSpan(
-                            text: 'Embedded',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          TextSpan(text: ' to '),
-                          TextSpan(
-                            text: 'Remote',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          TextSpan(text: '.'),
-                        ]),
-                        buildStep(3, const [
-                          TextSpan(text: 'Paste the Host IP into the '),
-                          TextSpan(
-                            text: 'Host',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          TextSpan(text: ' field.'),
-                        ]),
-                        buildStep(4, const [
-                          TextSpan(text: 'Click '),
-                          TextSpan(
-                            text: 'Start Backend',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          TextSpan(text: '.'),
-                        ]),
-                        buildStep(5, const [
-                          TextSpan(text: 'Confirm you see '),
-                          TextSpan(
-                            text: '“The backend was started successfully”',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          TextSpan(text: ' then launch your game!'),
-                        ]),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Close'),
-              ),
-              if (!isLoading && !hasError)
-                ElevatedButton.icon(
-                  onPressed: () {
-                    Clipboard.setData(ClipboardData(text: 'open $vpnIp'));
-                    Navigator.pop(context);
-                    if (mounted) {
-                      showAtlasSnackBar(
-                        context,
-                        const SnackBar(
-                          content: Text('VPN IP copied to clipboard!'),
-                        ),
-                      );
-                    }
-                  },
-                  icon: const Icon(Icons.copy),
-                  label: const Text('Copy'),
-                ),
-            ],
-          );
-        },
-      );
-
-      await _showBlurDialog<void>(
-        context: context,
-        barrierDismissible: !isLoading,
-        builder: (_) => widget,
-      );
-    } finally {
-      _showingShareDialog = false;
-    }
   }
 
   Future<void> _showVersionHistoryMenu(BuildContext anchorContext) async {
@@ -1650,6 +1994,7 @@ class _AtlasHomePageState extends State<AtlasHomePage>
     final progress = ValueNotifier<double>(0);
     bool updating = false;
     String? error;
+    final notes = info.notes?.trim() ?? '';
     Future<void> restartApp() async {
       final exePath = Platform.resolvedExecutable;
       if (exePath.isNotEmpty) {
@@ -1669,126 +2014,282 @@ class _AtlasHomePageState extends State<AtlasHomePage>
       barrierDismissible: !updating,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setState) {
-          final tagRow = Row(
-            children: [
-              _VersionTag(label: info.currentLabel, color: Colors.redAccent),
-              const SizedBox(width: 8),
-              Text('—', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(width: 8),
-              _VersionTag(label: info.latestLabel, color: Colors.greenAccent),
-            ],
-          );
-          return AlertDialog(
-            title: Text(title),
-            content: SizedBox(
-              width: 420,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  tagRow,
-                  const SizedBox(height: 12),
-                  if (info.notes != null && info.notes!.isNotEmpty)
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 220),
-                      child: SingleChildScrollView(
-                        child: MarkdownBody(
-                          data: info.notes!,
-                          styleSheet: MarkdownStyleSheet.fromTheme(
-                            Theme.of(context),
-                          ).copyWith(p: Theme.of(context).textTheme.bodySmall),
-                          blockSyntaxes: _roundedHrBlockSyntaxes,
-                          inlineSyntaxes: _roundedHrInlineSyntaxes,
-                          builders: {
-                            'rounded-hr': _MarkdownHrBuilder(
-                              color: _onSurface(context, 0.18),
-                              thickness: 0.6,
-                              verticalPadding: 8,
-                            ),
-                          },
+          Widget buildVersionTag({
+            required String label,
+            required Color accent,
+          }) {
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(999),
+                color: accent.withOpacity(0.2),
+                border: Border.all(color: accent.withOpacity(0.55)),
+              ),
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: _onSurface(context, 0.96),
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                ),
+              ),
+            );
+          }
+
+          return Material(
+            type: MaterialType.transparency,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 620),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: _dialogSurfaceColor(context),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: _onSurface(context, 0.1)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _dialogShadowColor(context),
+                      blurRadius: 30,
+                      offset: const Offset(0, 16),
+                    ),
+                  ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 20, 22, 16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 25,
+                          fontWeight: FontWeight.w700,
+                          color: _onSurface(context, 0.95),
                         ),
                       ),
-                    ),
-                  if (updating) ...[
-                    const SizedBox(height: 16),
-                    ValueListenableBuilder<double>(
-                      valueListenable: progress,
-                      builder: (context, value, _) {
-                        final pct = (value.clamp(0.0, 1.0) * 100)
-                            .toStringAsFixed(0);
-                        return Column(
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          buildVersionTag(
+                            label: info.currentLabel,
+                            accent: const Color(0xFFDC3545),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'to',
+                            style: TextStyle(
+                              color: _onSurface(context, 0.7),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          buildVersionTag(
+                            label: info.latestLabel,
+                            accent: const Color(0xFF16C47F),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          color: _adaptiveScrimColor(
+                            context,
+                            darkAlpha: 0.08,
+                            lightAlpha: 0.18,
+                          ),
+                          border: Border.all(color: _onSurface(context, 0.1)),
+                        ),
+                        child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            LinearProgressIndicator(
-                              value: value > 0 && value < 1 ? value : null,
+                            Icon(
+                              Icons.info_outline_rounded,
+                              size: 18,
+                              color: _onSurface(context, 0.82),
                             ),
-                            const SizedBox(height: 6),
-                            Text('Downloading... $pct%'),
-                          ],
-                        );
-                      },
-                    ),
-                  ],
-                  if (error != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      error!,
-                      style: const TextStyle(color: Colors.redAccent),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            actions: [
-              _HoverScale(
-                child: TextButton(
-                  onPressed: updating ? null : () => Navigator.pop(context),
-                  child: const Text('Later'),
-                ),
-              ),
-              _HoverScale(
-                child: ElevatedButton(
-                  onPressed: updating
-                      ? null
-                      : () async {
-                          setState(() {
-                            updating = true;
-                            error = null;
-                          });
-                          try {
-                            await _controller.stopBackend();
-                            await UpdateBackupService.backupBeforeUpdate();
-                            await UpdateService.downloadAndApply(
-                              info,
-                              progress,
-                            );
-                            if (!mounted || !dialogContext.mounted) return;
-                            Navigator.of(dialogContext).pop();
-                            showAtlasSnackBar(
-                              this.context,
-                              SnackBar(
-                                content: Text(
-                                  'Updated to ${info.latestLabel}. Restarting...',
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                info.isInstaller
+                                    ? 'ATLAS Backend will download the latest setup and launch it. The backend will close so the update can install.'
+                                    : 'ATLAS Backend will download the latest update package, apply it, and restart automatically.',
+                                style: TextStyle(
+                                  color: _onSurface(context, 0.78),
+                                  fontWeight: FontWeight.w600,
+                                  height: 1.3,
                                 ),
                               ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (notes.isNotEmpty) ...[
+                        const SizedBox(height: 14),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 260),
+                          child: SingleChildScrollView(
+                            child: MarkdownBody(
+                              data: notes,
+                              styleSheet:
+                                  MarkdownStyleSheet.fromTheme(
+                                    Theme.of(context),
+                                  ).copyWith(
+                                    p: TextStyle(
+                                      color: _onSurface(context, 0.9),
+                                      height: 1.35,
+                                    ),
+                                    horizontalRuleDecoration: BoxDecoration(
+                                      border: Border(
+                                        top: BorderSide(
+                                          width: 2.0,
+                                          color: _onSurface(context, 0.12),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              onTapLink: (text, href, title) async {
+                                if (href == null || href.trim().isEmpty) return;
+                                await _openUrl(href);
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                      if (updating) ...[
+                        const SizedBox(height: 14),
+                        ValueListenableBuilder<double>(
+                          valueListenable: progress,
+                          builder: (context, value, _) {
+                            final clamped = value.clamp(0.0, 1.0);
+                            final isIndeterminate =
+                                clamped <= 0 || clamped >= 1;
+                            final pct = (clamped * 100).toStringAsFixed(0);
+                            final status = clamped >= 1
+                                ? (info.isInstaller
+                                      ? 'Launching installer...'
+                                      : 'Applying update...')
+                                : clamped > 0
+                                ? (info.isInstaller
+                                      ? 'Downloading latest setup... $pct%'
+                                      : 'Downloading update package... $pct%')
+                                : 'Preparing download...';
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                LinearProgressIndicator(
+                                  value: isIndeterminate ? null : clamped,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  status,
+                                  style: TextStyle(
+                                    color: _onSurface(context, 0.82),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
                             );
-                            await Future<void>.delayed(
-                              const Duration(milliseconds: 600),
-                            );
-                            await restartApp();
-                          } catch (err) {
-                            setState(() {
-                              error = 'Update failed: $err';
-                              updating = false;
-                            });
-                          } finally {
-                            progress.value = 0;
-                          }
-                        },
-                  child: Text(updating ? 'Updating...' : actionLabel),
+                          },
+                        ),
+                      ],
+                      if (error != null) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          error!,
+                          style: const TextStyle(
+                            color: Color(0xFFDC3545),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 14),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          _HoverScale(
+                            child: TextButton(
+                              onPressed: updating
+                                  ? null
+                                  : () => Navigator.of(dialogContext).pop(),
+                              child: const Text('Later'),
+                            ),
+                          ),
+                          if (notes.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            _HoverScale(
+                              child: TextButton(
+                                onPressed: updating
+                                    ? null
+                                    : () => _showUpdateNotesDialog(
+                                        info.latestVersion,
+                                        notes,
+                                        UpdateNotesService._defaultStyle,
+                                      ),
+                                child: const Text('Update notes'),
+                              ),
+                            ),
+                          ],
+                          const SizedBox(width: 8),
+                          _HoverScale(
+                            child: FilledButton(
+                              onPressed: updating
+                                  ? null
+                                  : () async {
+                                      setState(() {
+                                        updating = true;
+                                        error = null;
+                                      });
+                                      try {
+                                        await _controller.stopBackend();
+                                        await UpdateBackupService.backupBeforeUpdate();
+                                        await UpdateService.downloadAndApply(
+                                          info,
+                                          progress,
+                                        );
+                                        if (!mounted ||
+                                            !dialogContext.mounted) {
+                                          return;
+                                        }
+                                        Navigator.of(dialogContext).pop();
+                                        showAtlasSnackBar(
+                                          this.context,
+                                          SnackBar(
+                                            content: Text(
+                                              'Updated to ${info.latestLabel}. Restarting...',
+                                            ),
+                                          ),
+                                        );
+                                        await Future<void>.delayed(
+                                          const Duration(milliseconds: 600),
+                                        );
+                                        await restartApp();
+                                      } catch (err) {
+                                        setState(() {
+                                          error = 'Update failed: $err';
+                                          updating = false;
+                                        });
+                                      } finally {
+                                        progress.value = 0;
+                                      }
+                                    },
+                              child: Text(
+                                updating ? 'Updating...' : actionLabel,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ],
+            ),
           );
         },
       ),
@@ -1933,7 +2434,6 @@ class _AtlasHomePageState extends State<AtlasHomePage>
                 context,
               ).push(_buildRoute(const SettingsScreen())),
               onCheckUpdates: () => _checkForUpdates(silent: false),
-              onShowShareDialog: _showShareDialog,
               height: 110,
             ),
           ),
@@ -2431,7 +2931,6 @@ class _TopBar extends StatelessWidget {
     required this.onVersionPressed,
     required this.onSettingsPressed,
     required this.onCheckUpdates,
-    required this.onShowShareDialog,
     required this.height,
   });
 
@@ -2442,7 +2941,6 @@ class _TopBar extends StatelessWidget {
   final void Function(BuildContext context)? onVersionPressed;
   final VoidCallback onSettingsPressed;
   final VoidCallback? onCheckUpdates;
-  final VoidCallback onShowShareDialog;
   final double height;
 
   @override
@@ -2504,19 +3002,6 @@ class _TopBar extends StatelessWidget {
                   ),
           ),
           const Spacer(),
-          SizedBox(
-            width: 40,
-            child: _HoverScale(
-              child: IconButton(
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                onPressed: onShowShareDialog,
-                icon: const Icon(Icons.share_rounded),
-                tooltip: 'Share VPN Connection',
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
           SizedBox(
             width: 40,
             child: _HoverScale(
@@ -2633,6 +3118,31 @@ class _VersionTag extends StatelessWidget {
         label,
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
           color: color,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+class _AtlasTagPill extends StatelessWidget {
+  const _AtlasTagPill({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0E3F73),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFF2F9CFF).withOpacity(0.45)),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: const Color(0xFF7FC4FF),
           fontWeight: FontWeight.w600,
         ),
       ),
@@ -2882,7 +3392,7 @@ class _SidePanel extends StatelessWidget {
               label: 'Close Fortnite',
               icon: Icons.sports_esports,
               color: const Color(0xFFFFB86B),
-              onPressed: Platform.isWindows ? controller.closeFortnite : null,
+              onPressed: controller.closeFortnite,
             ),
             const SizedBox(height: 12),
             _ActionButton(
@@ -3746,7 +4256,6 @@ Color _adaptiveScrimColor(
 }
 
 Future<void> _applyAcrylicForBackground(String path) async {
-  if (!Platform.isWindows) return;
   final color = await _computeAcrylicTint(path);
   await Window.setEffect(effect: WindowEffect.acrylic, color: color);
 }
@@ -4130,16 +4639,13 @@ Future<void> _showCustomCosmeticPresetsInfoDialog(BuildContext context) async {
   );
 }
 
-Future<void> _openUrl(String url) async {
+Future<bool> _openUrl(String url) async {
   try {
-    if (Platform.isWindows) {
-      await Process.start('cmd', ['/c', 'start', '', url]);
-    } else if (Platform.isMacOS) {
-      await Process.start('open', [url]);
-    } else if (Platform.isLinux) {
-      await Process.start('xdg-open', [url]);
-    }
-  } catch (_) {}
+    await Process.start('cmd', ['/c', 'start', '', url]);
+    return true;
+  } catch (_) {
+    return false;
+  }
 }
 
 class _ModificationsScreenSnapshot {
@@ -4449,7 +4955,15 @@ class _UserValuesWarmupCache {
     if (resolvedAccountId == null) {
       final profilesSnapshot = await _ProfilesScreenCache.warm();
       if (profilesSnapshot.profiles.isEmpty) return null;
-      resolvedAccountId = profilesSnapshot.profiles.first.accountId;
+      final profileIds = {
+        for (final profile in profilesSnapshot.profiles) profile.accountId,
+      };
+      final savedSelectedProfile = profilesSnapshot.uiState.lastSelectedProfile;
+      resolvedAccountId =
+          savedSelectedProfile != null &&
+              profileIds.contains(savedSelectedProfile)
+          ? savedSelectedProfile
+          : profilesSnapshot.profiles.first.accountId;
     }
 
     final values = await UserValuesService.loadUserValues(resolvedAccountId);
@@ -4965,18 +5479,25 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
 
   _ModificationsTab _tab = _ModificationsTab.curveTables;
 
+  void _handleExternalToggleStateChanged() {
+    if (!mounted) return;
+    unawaited(_load(forceRefresh: true));
+  }
+
   @override
   void initState() {
     super.initState();
+    userToggleStatesRevision.addListener(_handleExternalToggleStateChanged);
     _scheduleDeferredScreenLoad(
       this,
-      () => _load(forceRefresh: false),
+      () => _load(forceRefresh: true),
       delay: Duration.zero,
     );
   }
 
   @override
   void dispose() {
+    userToggleStatesRevision.removeListener(_handleExternalToggleStateChanged);
     for (final controller in _valueControllers.values) {
       controller.dispose();
     }
@@ -5109,6 +5630,62 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     return null;
   }
 
+  String? _defaultVariantWeaponIdForWeapon(DataTableWeapon weapon) {
+    final variants = weapon.variants;
+    if (variants == null || variants.isEmpty) return null;
+    return _weaponVariantSelections[weapon.id] ?? variants.first.weaponId;
+  }
+
+  Future<void> _selectDataTableWeapon(DataTableWeapon weapon) async {
+    final variantWeaponId = _defaultVariantWeaponIdForWeapon(weapon);
+    final settings = await DataTableService.getWeaponSettings(
+      weapon,
+      variantWeaponId: variantWeaponId,
+    );
+    if (!mounted) return;
+    setState(() {
+      _selectedWeaponId = weapon.id;
+      _selectedVariantWeaponId = variantWeaponId;
+      _selectedWeaponSettings = settings;
+    });
+  }
+
+  void _selectFirstDataTableWeapon({bool loadSettings = true}) {
+    if (_weapons.isEmpty) {
+      setState(() {
+        _selectedWeaponId = null;
+        _selectedVariantWeaponId = null;
+        _selectedWeaponSettings = null;
+      });
+      return;
+    }
+
+    final firstWeapon = _weapons.first;
+    final variantWeaponId = _defaultVariantWeaponIdForWeapon(firstWeapon);
+    setState(() {
+      _selectedWeaponId = firstWeapon.id;
+      _selectedVariantWeaponId = variantWeaponId;
+      _selectedWeaponSettings = null;
+    });
+
+    if (loadSettings && _dataTablesEnabled) {
+      unawaited(_loadSelectedWeaponSettings());
+    }
+  }
+
+  void _handleModificationsTabSelected(_ModificationsTab tab) {
+    if (tab == _ModificationsTab.dataTables) {
+      if (_tab != tab) {
+        setState(() => _tab = tab);
+      }
+      _selectFirstDataTableWeapon();
+      return;
+    }
+
+    if (_tab == tab) return;
+    setState(() => _tab = tab);
+  }
+
   Future<void> _loadSelectedWeaponSettings() async {
     if (!_dataTablesEnabled) return;
     final weapon = _currentSelectedWeapon();
@@ -5126,6 +5703,155 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
       return;
     }
     setState(() => _selectedWeaponSettings = settings);
+  }
+
+  bool _isValidNumericInput(String value) =>
+      RegExp(r'^[+-]?(?:\d+\.?\d*|\.\d+)$').hasMatch(value.trim());
+
+  TextEditingController _dataTableValueController(String key, String value) {
+    final controller = _dataTableControllers.putIfAbsent(
+      key,
+      () => TextEditingController(),
+    );
+    if (controller.text != value) {
+      controller.text = value;
+    }
+    return controller;
+  }
+
+  Future<void> _applySelectedWeaponSettings(
+    DataTableWeapon weapon,
+    DataTableSettings settings,
+  ) async {
+    final selectedWeaponId = weapon.id;
+    final selectedVariantWeaponId = _selectedVariantWeaponId;
+    await DataTableService.applyWeaponSettings(
+      weapon,
+      settings,
+      variantWeaponId: selectedVariantWeaponId,
+    );
+    final updated = await DataTableService.getWeaponSettings(
+      weapon,
+      variantWeaponId: selectedVariantWeaponId,
+    );
+    if (!mounted) return;
+    if (_selectedWeaponId != selectedWeaponId ||
+        _selectedVariantWeaponId != selectedVariantWeaponId) {
+      return;
+    }
+    setState(() => _selectedWeaponSettings = updated);
+  }
+
+  Future<void> _updateSelectedWeaponSimpleValue({
+    required DataTableWeapon weapon,
+    required DataTableSettings settings,
+    required String field,
+    required String value,
+  }) async {
+    final trimmed = value.trim();
+    if (!_isValidNumericInput(trimmed)) {
+      if (!mounted) return;
+      showAtlasSnackBar(
+        context,
+        const SnackBar(content: Text('Enter a valid numeric value.')),
+      );
+      return;
+    }
+
+    late final DataTableSettings newSettings;
+    switch (field) {
+      case 'damage':
+        newSettings = settings.copyWith(damageValue: trimmed);
+        break;
+      case 'envDamage':
+        newSettings = settings.copyWith(envDamageValue: trimmed);
+        break;
+      case 'clipSize':
+        newSettings = settings.copyWith(clipSizeValue: trimmed);
+        break;
+      case 'reloadTime':
+        newSettings = settings.copyWith(reloadTimeValue: trimmed);
+        break;
+      default:
+        return;
+    }
+
+    await _applySelectedWeaponSettings(weapon, newSettings);
+  }
+
+  Future<void> _toggleSelectedWeaponSimpleField({
+    required DataTableWeapon weapon,
+    required DataTableSettings settings,
+    required String field,
+    required String label,
+    required bool enabled,
+    required String defaultValue,
+    bool promptOnEnable = true,
+  }) async {
+    var resolvedValue = () {
+      switch (field) {
+        case 'damage':
+          return settings.damageValue.trim().isNotEmpty
+              ? settings.damageValue
+              : defaultValue;
+        case 'envDamage':
+          return settings.envDamageValue.trim().isNotEmpty
+              ? settings.envDamageValue
+              : defaultValue;
+        case 'clipSize':
+          return settings.clipSizeValue.trim().isNotEmpty
+              ? settings.clipSizeValue
+              : defaultValue;
+        case 'reloadTime':
+          return settings.reloadTimeValue.trim().isNotEmpty
+              ? settings.reloadTimeValue
+              : defaultValue;
+        default:
+          return defaultValue;
+      }
+    }();
+
+    if (enabled && promptOnEnable) {
+      final promptedValue = await _promptValue(
+        context,
+        label,
+        defaultValue: resolvedValue,
+      );
+      if (promptedValue == null) return;
+      resolvedValue = promptedValue;
+    }
+
+    late final DataTableSettings newSettings;
+    switch (field) {
+      case 'damage':
+        newSettings = settings.copyWith(
+          damageEnabled: enabled,
+          damageValue: resolvedValue,
+        );
+        break;
+      case 'envDamage':
+        newSettings = settings.copyWith(
+          envDamageEnabled: enabled,
+          envDamageValue: resolvedValue,
+        );
+        break;
+      case 'clipSize':
+        newSettings = settings.copyWith(
+          clipSizeEnabled: enabled,
+          clipSizeValue: resolvedValue,
+        );
+        break;
+      case 'reloadTime':
+        newSettings = settings.copyWith(
+          reloadTimeEnabled: enabled,
+          reloadTimeValue: resolvedValue,
+        );
+        break;
+      default:
+        return;
+    }
+
+    await _applySelectedWeaponSettings(weapon, newSettings);
   }
 
   Future<void> _refreshCurveStatesAfterGlobalToggle() async {
@@ -5293,12 +6019,14 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
   Future<int> _importCurvesFromIniContent(
     String importContent, {
     bool showSummary = true,
+    bool enableImportedState = true,
     void Function(
       Map<String, List<String>> grouped,
       List<_ImportCurveDraft> missing,
     )?
     onSummary,
   }) async {
+    final curvesWereEnabled = await CurveTableService.areGlobalEnabled();
     final regex = RegExp(
       '^\\+CurveTable=(.+?);RowUpdate;(.+?);(\\d+);(.+)\$',
       multiLine: true,
@@ -5358,6 +6086,11 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
       }
     }
 
+    if (enableImportedState && matches.isNotEmpty && !curvesWereEnabled) {
+      await CurveTableService._writeGlobalEnabledState(true);
+      await ManagedHotfixService.rebuildDefaultGame();
+    }
+
     await _load();
     if (!mounted) return matches.length;
     onSummary?.call(grouped, missing);
@@ -5370,7 +6103,7 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
   Future<void> _restoreDefaultGameIniFromTemplate() async {
     final confirm = await DataService._confirmDialog(
       context,
-      'Repair DefaultGame.ini from template? This will overwrite your current DefaultGame.ini in static/hotfixes.',
+      'Repair DefaultGame.ini from template? This will overwrite your current DefaultGame.ini in static/hotfixes, then rebuild it from your current managed data.',
     );
     if (!confirm) return;
 
@@ -5418,11 +6151,9 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
       }
       await templateFile.copy(targetFile.path);
 
-      // Reset Modifications toggles to a clean template state.
-      await DataTableService.setUIEnabledState(false);
-      final curveBackup = File(BackendPaths.modificationsBackup);
-      await curveBackup.parent.create(recursive: true);
-      await curveBackup.writeAsString(jsonEncode({'curveTableLines': []}));
+      // Rebuild from the current managed source files instead of clearing them.
+      // Repair INI should be non-destructive and preserve the user's live state.
+      await ManagedHotfixService.rebuildDefaultGame();
 
       await _load();
       if (!mounted) return;
@@ -5562,13 +6293,6 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     await _load();
   }
 
-  Future<void> _addCustomDataTable() async {
-    final input = await _promptCustomDataTable(context);
-    if (input == null) return;
-    await DataTableService.addCustomWeapon(input);
-    await _load();
-  }
-
   Future<void> _importDataTablesINI() async {
     final picked = await FilePicker.platform.pickFiles(
       dialogTitle: 'Import DefaultGame.ini',
@@ -5588,13 +6312,23 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     String importContent, {
     bool showNoEntriesSnackBar = true,
     bool showImportedSnackBar = true,
+    bool enableImportedState = true,
+    void Function(int fixesLines)? onFixesDetected,
   }) async {
-    // Only import DataTable entries inside the "# DataTables" block, and stop
-    // once we reach "# Fixes" (users don't want fix entries imported as normal
-    // DataTables toggles). If the file doesn't contain those markers, fall
-    // back to importing all +DataTable= lines.
-    final lines = _extractDataTableLinesFromIniContent(importContent);
-    if (lines.isEmpty) {
+    final dataTablesWereEnabled = await DataTableService.getUIEnabledState();
+    final knownFixLines = await ManagedHotfixService.readLines(
+      File(BackendPaths.fixesLinesIni),
+    );
+    final knownStraightBloomLines =
+        await StraightBloomService._readConfiguredLines();
+    final imported = extractImportedDataTableAndFixLines(
+      content: importContent,
+      knownFixLines: knownFixLines,
+      knownStraightBloomLines: knownStraightBloomLines,
+    );
+    final lines = imported.dataTableLines;
+    final fixesLines = imported.fixesLines;
+    if (lines.isEmpty && fixesLines.isEmpty) {
       if (showNoEntriesSnackBar) {
         if (!mounted) return 0;
         showAtlasSnackBar(
@@ -5605,55 +6339,85 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
       return 0;
     }
 
-    await DataTableService.importDataTableLines(lines);
-    await _load();
+    if (lines.isNotEmpty) {
+      await DataTableService.importDataTableLines(lines);
+    }
+    if (enableImportedState && lines.isNotEmpty && !dataTablesWereEnabled) {
+      await DataTableService.setUIEnabledState(true);
+    }
+    if (lines.isNotEmpty) {
+      await _load();
+    }
 
+    onFixesDetected?.call(fixesLines.length);
     if (!mounted) return lines.length;
     if (showImportedSnackBar) {
+      final summaryParts = <String>[];
+      if (lines.isNotEmpty) {
+        summaryParts.add(
+          '${lines.length} DataTable ${lines.length == 1 ? 'entry' : 'entries'}',
+        );
+      }
+      if (fixesLines.isNotEmpty) {
+        summaryParts.add(
+          '${fixesLines.length} ${fixesLines.length == 1 ? 'Fixes line' : 'Fixes lines'} detected (current Fixes.ini kept)',
+        );
+      }
       showAtlasSnackBar(
         context,
-        SnackBar(content: Text('Imported ${lines.length} DataTable entries')),
+        SnackBar(content: Text('Imported ${summaryParts.join(' and ')}')),
       );
     }
     return lines.length;
   }
 
-  List<String> _extractDataTableLinesFromIniContent(String importContent) {
-    final rawLines = importContent.split(RegExp(r'\r?\n'));
-    final dataTablesHeader = RegExp(
-      r'^\s*#\s*data\s*tables\b',
-      caseSensitive: false,
+  Future<int> _importStraightBloomFromIniContent(
+    String importContent, {
+    bool showNoEntriesSnackBar = true,
+    bool showImportedSnackBar = true,
+    bool enableImportedState = true,
+  }) async {
+    final configuredLines = await StraightBloomService._readConfiguredLines();
+    final imported = extractImportedDataTableAndFixLines(
+      content: importContent,
+      knownStraightBloomLines: configuredLines,
     );
-    final fixesHeader = RegExp(r'^\s*#\s*fixes\b', caseSensitive: false);
-    final dataTableLine = RegExp(r'^\s*\+DataTable=.+$');
-
-    var start = 0;
-    for (var i = 0; i < rawLines.length; i++) {
-      if (dataTablesHeader.hasMatch(rawLines[i])) {
-        start = i + 1;
-        break;
+    final lines = imported.straightBloomLines;
+    if (lines.isEmpty) {
+      if (showNoEntriesSnackBar) {
+        if (!mounted) return 0;
+        showAtlasSnackBar(
+          context,
+          const SnackBar(
+            content: Text('No Straight Bloom entries found in file'),
+          ),
+        );
       }
+      return 0;
     }
 
-    var end = rawLines.length;
-    for (var i = start; i < rawLines.length; i++) {
-      if (fixesHeader.hasMatch(rawLines[i])) {
-        end = i;
-        break;
-      }
+    if (enableImportedState) {
+      await StraightBloomService.setEnabled(
+        imported.hasActiveStraightBloomLines,
+      );
     }
+    await _load();
 
-    final seen = <String>{};
-    final extracted = <String>[];
-    for (var i = start; i < end; i++) {
-      final line = rawLines[i].trim();
-      if (line.isEmpty) continue;
-      if (!dataTableLine.hasMatch(line)) continue;
-      if (seen.add(line)) {
-        extracted.add(line);
-      }
+    if (!mounted) return lines.length;
+    if (showImportedSnackBar) {
+      final stateLabel = imported.hasActiveStraightBloomLines
+          ? 'enabled'
+          : 'left off';
+      showAtlasSnackBar(
+        context,
+        SnackBar(
+          content: Text(
+            'Detected ${lines.length} Straight Bloom ${lines.length == 1 ? 'line' : 'lines'} ($stateLabel, current StraightBloom.ini kept)',
+          ),
+        ),
+      );
     }
-    return extracted;
+    return lines.length;
   }
 
   Future<void> _importIniInModifications() async {
@@ -5669,51 +6433,62 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     if (!await source.exists()) return;
     final importContent = await source.readAsString();
 
-    final attemptCurves = _curveTablesEnabled;
-    final attemptDataTables = _dataTablesEnabled;
     int curveLines = 0;
+    int straightBloomLines = 0;
     int dataTableLines = 0;
+    int fixesLines = 0;
     Map<String, List<String>> curveGrouped = const {};
     List<_ImportCurveDraft> curveMissing = const [];
 
-    if (attemptCurves) {
-      curveLines = await _importCurvesFromIniContent(
-        importContent,
-        showSummary: false,
-        onSummary: (grouped, missing) {
-          curveGrouped = grouped;
-          curveMissing = missing;
-        },
-      );
-    }
-    if (attemptDataTables) {
-      dataTableLines = await _importDataTablesFromIniContent(
-        importContent,
-        showNoEntriesSnackBar: false,
-        showImportedSnackBar: false,
-      );
-    }
+    curveLines = await _importCurvesFromIniContent(
+      importContent,
+      showSummary: false,
+      onSummary: (grouped, missing) {
+        curveGrouped = grouped;
+        curveMissing = missing;
+      },
+    );
+    straightBloomLines = await _importStraightBloomFromIniContent(
+      importContent,
+      showNoEntriesSnackBar: false,
+      showImportedSnackBar: false,
+    );
+    dataTableLines = await _importDataTablesFromIniContent(
+      importContent,
+      showNoEntriesSnackBar: false,
+      showImportedSnackBar: false,
+      onFixesDetected: (count) => fixesLines = count,
+    );
 
     if (!mounted) return;
 
-    if (curveLines == 0 && dataTableLines == 0) {
-      final message = (attemptCurves && attemptDataTables)
-          ? 'No CurveTable or DataTable entries found in file'
-          : attemptCurves
-          ? 'No CurveTable entries found in file'
-          : 'No DataTable entries found in file';
+    if (curveLines == 0 &&
+        straightBloomLines == 0 &&
+        dataTableLines == 0 &&
+        fixesLines == 0) {
+      const message =
+          'No CurveTable, Straight Bloom, DataTable, or Fixes entries found in file';
       showAtlasSnackBar(context, SnackBar(content: Text(message)));
       return;
     }
 
+    // Always rebuild after import so developer-managed Fixes.ini lines are
+    // fully materialized back into DefaultGame.ini even if the imported file
+    // was missing some of them.
+    await ManagedHotfixService.rebuildDefaultGame();
+    await _load();
+    if (!mounted) return;
+
     await _showModificationsIniImportSummary(
       context,
-      attemptedCurves: attemptCurves,
-      attemptedDataTables: attemptDataTables,
+      attemptedCurves: true,
+      attemptedDataTables: true,
       curveGrouped: curveGrouped,
       curveMissing: curveMissing,
       curveLines: curveLines,
+      straightBloomLines: straightBloomLines,
       dataTableLines: dataTableLines,
+      fixesLines: fixesLines,
     );
   }
 
@@ -5788,19 +6563,9 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                   'static',
                   'hotfixes',
                 ]);
-                if (Platform.isWindows) {
-                  try {
-                    await Process.start('explorer', [hotfixesPath]);
-                  } catch (_) {}
-                } else if (Platform.isMacOS) {
-                  try {
-                    await Process.start('open', [hotfixesPath]);
-                  } catch (_) {}
-                } else if (Platform.isLinux) {
-                  try {
-                    await Process.start('xdg-open', [hotfixesPath]);
-                  } catch (_) {}
-                }
+                try {
+                  await Process.start('explorer', [hotfixesPath]);
+                } catch (_) {}
               },
               icon: const Icon(Icons.folder_open),
               label: const Text('Open Folder'),
@@ -5808,12 +6573,9 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
           ),
           const SizedBox(width: 10),
           _HoverScale(
-            enabled: !_isLoading && (_curveTablesEnabled || _dataTablesEnabled),
+            enabled: !_isLoading,
             child: OutlinedButton.icon(
-              onPressed:
-                  (!_isLoading && (_curveTablesEnabled || _dataTablesEnabled))
-                  ? _importIniInModifications
-                  : null,
+              onPressed: !_isLoading ? _importIniInModifications : null,
               icon: const Icon(Icons.file_upload_outlined),
               label: const Text('Import INI'),
             ),
@@ -5916,26 +6678,7 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
             );
 
             Widget versionTag(String label) {
-              return Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 2,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0E3F73),
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(
-                    color: const Color(0xFF2F9CFF).withOpacity(0.45),
-                  ),
-                ),
-                child: Text(
-                  label,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: const Color(0xFF7FC4FF),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              );
+              return _AtlasTagPill(label: label);
             }
 
             final backendInfiniteRenderSwitch = SwitchListTile(
@@ -6002,7 +6745,7 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                       ? accent.withOpacity(0.55)
                       : Colors.transparent;
                   return GestureDetector(
-                    onTap: () => setState(() => _tab = tab),
+                    onTap: () => _handleModificationsTabSelected(tab),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 160),
                       curve: Curves.easeOutCubic,
@@ -6502,33 +7245,9 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                                                 );
                                             return GestureDetector(
                                               onTap: () async {
-                                                final hasVariants =
-                                                    weapon.variants != null &&
-                                                    weapon.variants!.isNotEmpty;
-                                                // Check if we've previously selected a variant for this weapon
-                                                String? variantWeaponId;
-                                                if (hasVariants) {
-                                                  variantWeaponId =
-                                                      _weaponVariantSelections[weapon
-                                                          .id] ??
-                                                      weapon
-                                                          .variants!
-                                                          .first
-                                                          .weaponId;
-                                                }
-                                                final settings =
-                                                    await DataTableService.getWeaponSettings(
-                                                      weapon,
-                                                      variantWeaponId:
-                                                          variantWeaponId,
-                                                    );
-                                                setState(() {
-                                                  _selectedWeaponId = weapon.id;
-                                                  _selectedVariantWeaponId =
-                                                      variantWeaponId;
-                                                  _selectedWeaponSettings =
-                                                      settings;
-                                                });
+                                                await _selectDataTableWeapon(
+                                                  weapon,
+                                                );
                                               },
                                               child: _HoverRegion(
                                                 builder: (context, hovered) => AnimatedScale(
@@ -6741,6 +7460,30 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     final hasReloadTime = hasVariants
         ? (currentVariant?.reloadTime != null)
         : false;
+    final damageController = hasDamageFields
+        ? _dataTableValueController(
+            '${weapon.id}::$variantKey::damage',
+            settings.damageValue,
+          )
+        : null;
+    final envDamageController = hasEnvDamageFields
+        ? _dataTableValueController(
+            '${weapon.id}::$variantKey::envDamage',
+            settings.envDamageValue,
+          )
+        : null;
+    final clipSizeController = hasClipSize
+        ? _dataTableValueController(
+            '${weapon.id}::$variantKey::clipSize',
+            settings.clipSizeValue,
+          )
+        : null;
+    final reloadTimeController = hasReloadTime
+        ? _dataTableValueController(
+            '${weapon.id}::$variantKey::reloadTime',
+            settings.reloadTimeValue,
+          )
+        : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -6769,17 +7512,6 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                     _HoverScale(
                       enabled: _dataTablesEnabled,
                       child: OutlinedButton.icon(
-                        onPressed: _addCustomDataTable,
-                        icon: const Icon(Icons.add_circle_outline),
-                        label: const Text('Add Custom DataTable'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF1E88E5),
-                        ),
-                      ),
-                    ),
-                    _HoverScale(
-                      enabled: _dataTablesEnabled,
-                      child: OutlinedButton.icon(
                         onPressed: () async {
                           final confirm = await DataService._confirmDialog(
                             context,
@@ -6804,396 +7536,158 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
         ),
         const SizedBox(height: 12),
         if (hasVariants) ...[
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: DropdownButtonFormField<String>(
-              initialValue: _selectedVariantWeaponId,
-              decoration: InputDecoration(
-                labelText: 'Variant',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
+          DropdownButtonFormField<String>(
+            initialValue: _selectedVariantWeaponId,
+            decoration: InputDecoration(
+              labelText: 'Variant',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
               ),
-              items: weapon.variants!.map((variant) {
-                return DropdownMenuItem(
-                  value: variant.weaponId,
-                  child: Text(variant.name),
-                );
-              }).toList(),
-              onChanged: (value) async {
-                if (value != null) {
-                  final newSettings = await DataTableService.getWeaponSettings(
-                    weapon,
-                    variantWeaponId: value,
-                  );
-                  setState(() {
-                    _selectedVariantWeaponId = value;
-                    _selectedWeaponSettings = newSettings;
-                    _weaponVariantSelections[weapon.id] =
-                        value; // Remember this selection
-                  });
-                }
-              },
             ),
+            items: weapon.variants!.map((variant) {
+              return DropdownMenuItem(
+                value: variant.weaponId,
+                child: Text(variant.name),
+              );
+            }).toList(),
+            onChanged: (value) async {
+              if (value != null) {
+                final newSettings = await DataTableService.getWeaponSettings(
+                  weapon,
+                  variantWeaponId: value,
+                );
+                setState(() {
+                  _selectedVariantWeaponId = value;
+                  _selectedWeaponSettings = newSettings;
+                  _weaponVariantSelections[weapon.id] =
+                      value; // Remember this selection
+                });
+              }
+            },
           ),
           const SizedBox(height: 12),
         ],
         if (hasDamageFields)
-          SwitchListTile(
-            value: settings.damageEnabled,
-            onChanged: (value) async {
-              if (value) {
-                // Prompt for damage value
-                final promptedValue = await _promptValue(
-                  context,
-                  'Damage',
-                  defaultValue: displayDefaultDamage,
-                );
-                if (promptedValue == null) return;
-                final newSettings = settings.copyWith(
-                  damageEnabled: value,
-                  damageValue: promptedValue,
-                );
-                await DataTableService.applyWeaponSettings(
-                  weapon,
-                  newSettings,
-                  variantWeaponId: _selectedVariantWeaponId,
-                );
-                final updated = await DataTableService.getWeaponSettings(
-                  weapon,
-                  variantWeaponId: _selectedVariantWeaponId,
-                );
-                setState(() => _selectedWeaponSettings = updated);
-              } else {
-                final newSettings = settings.copyWith(damageEnabled: value);
-                await DataTableService.applyWeaponSettings(
-                  weapon,
-                  newSettings,
-                  variantWeaponId: _selectedVariantWeaponId,
-                );
-                final updated = await DataTableService.getWeaponSettings(
-                  weapon,
-                  variantWeaponId: _selectedVariantWeaponId,
-                );
-                setState(() => _selectedWeaponSettings = updated);
-              }
-            },
-            title: const Text('Damage'),
-            subtitle: settings.damageEnabled && !settings.advancedMode
-                ? Text('Current value: ${settings.damageValue}')
-                : const Text('Enable custom damage values'),
-          ),
-        if (hasDamageFields)
-          _menuToggleReveal(
-            context,
-            revealKey: 'weapon-damage-$variantKey',
-            visible: settings.damageEnabled && !settings.advancedMode,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 4,
-                  ),
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      final promptedValue = await _promptValue(
-                        context,
-                        'Damage',
-                        defaultValue: displayDefaultDamage,
-                      );
-                      if (promptedValue == null) return;
-                      final newSettings = settings.copyWith(
-                        damageValue: promptedValue,
-                      );
-                      await DataTableService.applyWeaponSettings(
-                        weapon,
-                        newSettings,
-                        variantWeaponId: _selectedVariantWeaponId,
-                      );
-                      final updated = await DataTableService.getWeaponSettings(
-                        weapon,
-                        variantWeaponId: _selectedVariantWeaponId,
-                      );
-                      setState(() => _selectedWeaponSettings = updated);
-                    },
-                    icon: const Icon(Icons.edit),
-                    label: const Text('Edit Damage Value'),
-                  ),
-                ),
-                const SizedBox(height: 8),
-              ],
+          _DataTableSettingTile(
+            title: 'Damage',
+            subtitle: settings.damageEnabled
+                ? (settings.advancedMode
+                      ? 'Managed by advanced settings'
+                      : 'Custom damage value')
+                : 'Enable custom damage values',
+            isEnabled: settings.damageEnabled,
+            enabled: _dataTablesEnabled,
+            showValueField: settings.damageEnabled && !settings.advancedMode,
+            valueController: damageController,
+            onSubmitted: (value) => _updateSelectedWeaponSimpleValue(
+              weapon: weapon,
+              settings: settings,
+              field: 'damage',
+              value: value,
             ),
+            onToggle: (value) async {
+              await _toggleSelectedWeaponSimpleField(
+                weapon: weapon,
+                settings: settings,
+                field: 'damage',
+                label: 'Damage',
+                enabled: value,
+                defaultValue: displayDefaultDamage,
+                promptOnEnable: !settings.advancedMode,
+              );
+            },
           ),
         if (hasEnvDamageFields)
-          SwitchListTile(
-            value: settings.envDamageEnabled,
-            onChanged: (value) async {
-              if (value) {
-                // Prompt for environmental damage value
-                final promptedValue = await _promptValue(
-                  context,
-                  'Environmental Damage',
-                  defaultValue: displayDefaultEnvDamage,
-                );
-                if (promptedValue == null) return;
-                final newSettings = settings.copyWith(
-                  envDamageEnabled: value,
-                  envDamageValue: promptedValue,
-                );
-                await DataTableService.applyWeaponSettings(
-                  weapon,
-                  newSettings,
-                  variantWeaponId: _selectedVariantWeaponId,
-                );
-                final updated = await DataTableService.getWeaponSettings(
-                  weapon,
-                  variantWeaponId: _selectedVariantWeaponId,
-                );
-                setState(() => _selectedWeaponSettings = updated);
-              } else {
-                final newSettings = settings.copyWith(envDamageEnabled: value);
-                await DataTableService.applyWeaponSettings(
-                  weapon,
-                  newSettings,
-                  variantWeaponId: _selectedVariantWeaponId,
-                );
-                final updated = await DataTableService.getWeaponSettings(
-                  weapon,
-                  variantWeaponId: _selectedVariantWeaponId,
-                );
-                setState(() => _selectedWeaponSettings = updated);
-              }
-            },
-            title: const Text('Environmental Damage'),
-            subtitle: settings.envDamageEnabled && !settings.advancedMode
-                ? Text('Current value: ${settings.envDamageValue}')
-                : const Text('Enable custom environmental damage'),
-          ),
-        if (hasEnvDamageFields)
-          _menuToggleReveal(
-            context,
-            revealKey: 'weapon-env-damage-$variantKey',
-            visible: settings.envDamageEnabled && !settings.advancedMode,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 4,
-                  ),
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      final promptedValue = await _promptValue(
-                        context,
-                        'Environmental Damage',
-                        defaultValue: displayDefaultEnvDamage,
-                      );
-                      if (promptedValue == null) return;
-                      final newSettings = settings.copyWith(
-                        envDamageValue: promptedValue,
-                      );
-                      await DataTableService.applyWeaponSettings(
-                        weapon,
-                        newSettings,
-                        variantWeaponId: _selectedVariantWeaponId,
-                      );
-                      final updated = await DataTableService.getWeaponSettings(
-                        weapon,
-                        variantWeaponId: _selectedVariantWeaponId,
-                      );
-                      setState(() => _selectedWeaponSettings = updated);
-                    },
-                    icon: const Icon(Icons.edit),
-                    label: const Text('Edit Environmental Damage Value'),
-                  ),
-                ),
-                const SizedBox(height: 8),
-              ],
+          _DataTableSettingTile(
+            title: 'Environmental Damage',
+            subtitle: settings.envDamageEnabled
+                ? (settings.advancedMode
+                      ? 'Managed by advanced settings'
+                      : 'Custom environmental damage value')
+                : 'Enable custom environmental damage',
+            isEnabled: settings.envDamageEnabled,
+            enabled: _dataTablesEnabled,
+            showValueField: settings.envDamageEnabled && !settings.advancedMode,
+            valueController: envDamageController,
+            onSubmitted: (value) => _updateSelectedWeaponSimpleValue(
+              weapon: weapon,
+              settings: settings,
+              field: 'envDamage',
+              value: value,
             ),
+            onToggle: (value) async {
+              await _toggleSelectedWeaponSimpleField(
+                weapon: weapon,
+                settings: settings,
+                field: 'envDamage',
+                label: 'Environmental Damage',
+                enabled: value,
+                defaultValue: displayDefaultEnvDamage,
+                promptOnEnable: !settings.advancedMode,
+              );
+            },
           ),
         if (hasClipSize)
-          SwitchListTile(
-            value: settings.clipSizeEnabled,
-            onChanged: (value) async {
-              if (value) {
-                // Prompt for clip size value
-                final promptedValue = await _promptValue(
-                  context,
-                  'Clip Size',
-                  defaultValue: displayDefaultClipSize,
-                );
-                if (promptedValue == null) return;
-                final newSettings = settings.copyWith(
-                  clipSizeEnabled: value,
-                  clipSizeValue: promptedValue,
-                );
-                await DataTableService.applyWeaponSettings(
-                  weapon,
-                  newSettings,
-                  variantWeaponId: _selectedVariantWeaponId,
-                );
-                final updated = await DataTableService.getWeaponSettings(
-                  weapon,
-                  variantWeaponId: _selectedVariantWeaponId,
-                );
-                setState(() => _selectedWeaponSettings = updated);
-              } else {
-                final newSettings = settings.copyWith(clipSizeEnabled: value);
-                await DataTableService.applyWeaponSettings(
-                  weapon,
-                  newSettings,
-                  variantWeaponId: _selectedVariantWeaponId,
-                );
-                final updated = await DataTableService.getWeaponSettings(
-                  weapon,
-                  variantWeaponId: _selectedVariantWeaponId,
-                );
-                setState(() => _selectedWeaponSettings = updated);
-              }
-            },
-            title: const Text('Clip Size'),
+          _DataTableSettingTile(
+            title: 'Clip Size',
             subtitle: settings.clipSizeEnabled
-                ? Text('Current value: ${settings.clipSizeValue}')
-                : const Text('Enable custom clip size'),
-          ),
-        if (hasClipSize)
-          _menuToggleReveal(
-            context,
-            revealKey: 'weapon-clip-size-$variantKey',
-            visible: settings.clipSizeEnabled,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 4,
-                  ),
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      final promptedValue = await _promptValue(
-                        context,
-                        'Clip Size',
-                        defaultValue: displayDefaultClipSize,
-                      );
-                      if (promptedValue == null) return;
-                      final newSettings = settings.copyWith(
-                        clipSizeValue: promptedValue,
-                      );
-                      await DataTableService.applyWeaponSettings(
-                        weapon,
-                        newSettings,
-                        variantWeaponId: _selectedVariantWeaponId,
-                      );
-                      final updated = await DataTableService.getWeaponSettings(
-                        weapon,
-                        variantWeaponId: _selectedVariantWeaponId,
-                      );
-                      setState(() => _selectedWeaponSettings = updated);
-                    },
-                    icon: const Icon(Icons.edit),
-                    label: const Text('Edit Clip Size Value'),
-                  ),
-                ),
-                const SizedBox(height: 8),
-              ],
+                ? 'Custom clip size value'
+                : 'Enable custom clip size',
+            isEnabled: settings.clipSizeEnabled,
+            enabled: _dataTablesEnabled,
+            showValueField: settings.clipSizeEnabled,
+            valueController: clipSizeController,
+            onSubmitted: (value) => _updateSelectedWeaponSimpleValue(
+              weapon: weapon,
+              settings: settings,
+              field: 'clipSize',
+              value: value,
             ),
-          ),
-        if (hasReloadTime)
-          SwitchListTile(
-            value: settings.reloadTimeEnabled,
-            onChanged: (value) async {
-              if (value) {
-                // Prompt for reload time value
-                final promptedValue = await _promptValue(
-                  context,
-                  'Reload Time',
-                  defaultValue: displayDefaultReloadTime,
-                );
-                if (promptedValue == null) return;
-                final newSettings = settings.copyWith(
-                  reloadTimeEnabled: value,
-                  reloadTimeValue: promptedValue,
-                );
-                await DataTableService.applyWeaponSettings(
-                  weapon,
-                  newSettings,
-                  variantWeaponId: _selectedVariantWeaponId,
-                );
-                final updated = await DataTableService.getWeaponSettings(
-                  weapon,
-                  variantWeaponId: _selectedVariantWeaponId,
-                );
-                setState(() => _selectedWeaponSettings = updated);
-              } else {
-                final newSettings = settings.copyWith(reloadTimeEnabled: value);
-                await DataTableService.applyWeaponSettings(
-                  weapon,
-                  newSettings,
-                  variantWeaponId: _selectedVariantWeaponId,
-                );
-                final updated = await DataTableService.getWeaponSettings(
-                  weapon,
-                  variantWeaponId: _selectedVariantWeaponId,
-                );
-                setState(() => _selectedWeaponSettings = updated);
-              }
+            onToggle: (value) async {
+              await _toggleSelectedWeaponSimpleField(
+                weapon: weapon,
+                settings: settings,
+                field: 'clipSize',
+                label: 'Clip Size',
+                enabled: value,
+                defaultValue: displayDefaultClipSize,
+              );
             },
-            title: const Text('Reload Time'),
-            subtitle: settings.reloadTimeEnabled
-                ? Text('Current value: ${settings.reloadTimeValue}')
-                : const Text('Enable custom reload time'),
           ),
         if (hasReloadTime)
-          _menuToggleReveal(
-            context,
-            revealKey: 'weapon-reload-time-$variantKey',
-            visible: settings.reloadTimeEnabled,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 4,
-                  ),
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      final promptedValue = await _promptValue(
-                        context,
-                        'Reload Time',
-                        defaultValue: displayDefaultReloadTime,
-                      );
-                      if (promptedValue == null) return;
-                      final newSettings = settings.copyWith(
-                        reloadTimeValue: promptedValue,
-                      );
-                      await DataTableService.applyWeaponSettings(
-                        weapon,
-                        newSettings,
-                        variantWeaponId: _selectedVariantWeaponId,
-                      );
-                      final updated = await DataTableService.getWeaponSettings(
-                        weapon,
-                        variantWeaponId: _selectedVariantWeaponId,
-                      );
-                      setState(() => _selectedWeaponSettings = updated);
-                    },
-                    icon: const Icon(Icons.edit),
-                    label: const Text('Edit Reload Time Value'),
-                  ),
-                ),
-                const SizedBox(height: 8),
-              ],
+          _DataTableSettingTile(
+            title: 'Reload Time',
+            subtitle: settings.reloadTimeEnabled
+                ? 'Custom reload time value'
+                : 'Enable custom reload time',
+            isEnabled: settings.reloadTimeEnabled,
+            enabled: _dataTablesEnabled,
+            showValueField: settings.reloadTimeEnabled,
+            valueController: reloadTimeController,
+            onSubmitted: (value) => _updateSelectedWeaponSimpleValue(
+              weapon: weapon,
+              settings: settings,
+              field: 'reloadTime',
+              value: value,
             ),
+            onToggle: (value) async {
+              await _toggleSelectedWeaponSimpleField(
+                weapon: weapon,
+                settings: settings,
+                field: 'reloadTime',
+                label: 'Reload Time',
+                enabled: value,
+                defaultValue: displayDefaultReloadTime,
+              );
+            },
           ),
         if (hasDamageFields || hasEnvDamageFields)
-          SwitchListTile(
-            value: settings.advancedMode,
-            onChanged: (value) async {
+          _DataTableSettingTile(
+            title: 'Advanced Settings',
+            subtitle: 'Customize each damage field individually',
+            isEnabled: settings.advancedMode,
+            enabled: _dataTablesEnabled,
+            onToggle: (value) async {
               if (value) {
                 // Collect all relevant fields
                 final allFields = <String>[];
@@ -7263,8 +7757,6 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
                 setState(() => _selectedWeaponSettings = updated);
               }
             },
-            title: const Text('Advanced Settings'),
-            subtitle: const Text('Customize each damage field individually'),
           ),
         if (hasDamageFields || hasEnvDamageFields)
           _menuToggleReveal(
@@ -7351,14 +7843,21 @@ class _CurveTablesScreenState extends State<CurveTablesScreen> {
   String _search = '';
   final Map<String, TextEditingController> _valueControllers = {};
 
+  void _handleExternalToggleStateChanged() {
+    if (!mounted) return;
+    unawaited(_load());
+  }
+
   @override
   void initState() {
     super.initState();
+    userToggleStatesRevision.addListener(_handleExternalToggleStateChanged);
     _scheduleDeferredScreenLoad(this, _load);
   }
 
   @override
   void dispose() {
+    userToggleStatesRevision.removeListener(_handleExternalToggleStateChanged);
     for (final controller in _valueControllers.values) {
       controller.dispose();
     }
@@ -7615,46 +8114,11 @@ class _CurveTablesScreenState extends State<CurveTablesScreen> {
                             ),
                             if (enabled && canEdit && value != null) ...[
                               const SizedBox(width: 12),
-                              Container(
-                                width: 140,
-                                height: 42,
-                                decoration: BoxDecoration(
-                                  color: const Color(
-                                    0xFF6BE7FF,
-                                  ).withOpacity(0.08),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: const Color(
-                                      0xFF6BE7FF,
-                                    ).withOpacity(0.4),
-                                    width: 1.5,
-                                  ),
-                                ),
-                                child: TextField(
-                                  controller: controller,
-                                  enabled: _globalEnabled,
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontFamily: 'monospace',
-                                    color: Color(0xFF6BE7FF),
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                  decoration: const InputDecoration(
-                                    contentPadding: EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 10,
-                                    ),
-                                    border: InputBorder.none,
-                                    hintText: 'Value...',
-                                    hintStyle: TextStyle(
-                                      color: Color(0xFF6BE7FF),
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                  textAlign: TextAlign.center,
-                                  onSubmitted: (newValue) =>
-                                      _updateCurveValue(entry, newValue),
-                                ),
+                              _CurveValueField(
+                                controller: controller,
+                                enabled: _globalEnabled,
+                                onSubmitted: (newValue) =>
+                                    _updateCurveValue(entry, newValue),
                               ),
                             ],
                             const SizedBox(width: 8),
@@ -7737,10 +8201,22 @@ class _ArenaScreenState extends State<ArenaScreen> {
   bool _leaderboardLoading = true;
   List<ArenaEntry> _leaderboard = [];
 
+  void _handleExternalToggleStateChanged() {
+    if (!mounted) return;
+    unawaited(_load());
+  }
+
   @override
   void initState() {
     super.initState();
+    userToggleStatesRevision.addListener(_handleExternalToggleStateChanged);
     _scheduleDeferredScreenLoad(this, _load);
+  }
+
+  @override
+  void dispose() {
+    userToggleStatesRevision.removeListener(_handleExternalToggleStateChanged);
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -8715,14 +9191,21 @@ class _GameConfigurationScreenState extends State<GameConfigurationScreen> {
   _GameConfigPreview _preview = _GameConfigPreview.none;
   Timer? _saveDebounce;
 
+  void _handleExternalToggleStateChanged() {
+    if (!mounted) return;
+    unawaited(_load());
+  }
+
   @override
   void initState() {
     super.initState();
+    userToggleStatesRevision.addListener(_handleExternalToggleStateChanged);
     _scheduleDeferredScreenLoad(this, _load);
   }
 
   @override
   void dispose() {
+    userToggleStatesRevision.removeListener(_handleExternalToggleStateChanged);
     _saveDebounce?.cancel();
     super.dispose();
   }
@@ -9080,6 +9563,89 @@ class _CurveEntryResolvedState {
   final String? value;
 }
 
+class _CurveValueField extends StatelessWidget {
+  const _CurveValueField({
+    required this.controller,
+    required this.enabled,
+    required this.onSubmitted,
+  });
+
+  final TextEditingController controller;
+  final bool enabled;
+  final ValueChanged<String> onSubmitted;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const accent = Color(0xFF6BE7FF);
+    final fillColor = isDark
+        ? const Color(0xFF141A24).withOpacity(0.65)
+        : const Color(0xFFF7F9FC).withOpacity(0.65);
+    final borderColor = _onSurface(context, enabled ? 0.14 : 0.08);
+    final focusedBorderColor = accent.withOpacity(isDark ? 0.42 : 0.34);
+    final textColor = enabled
+        ? _onSurface(context, 0.92)
+        : _onSurface(context, 0.42);
+
+    return SizedBox(
+      width: 138,
+      child: TextField(
+        controller: controller,
+        enabled: enabled,
+        onSubmitted: onSubmitted,
+        keyboardType: const TextInputType.numberWithOptions(
+          signed: true,
+          decimal: true,
+        ),
+        inputFormatters: [
+          FilteringTextInputFormatter.allow(RegExp(r'[0-9+\-.]')),
+        ],
+        textAlign: TextAlign.center,
+        textAlignVertical: TextAlignVertical.center,
+        cursorColor: accent,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.1,
+          color: textColor,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
+        decoration: InputDecoration(
+          isDense: true,
+          filled: true,
+          fillColor: fillColor,
+          hintText: 'Value',
+          hintStyle: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: _onSurface(context, 0.34),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 12,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: borderColor),
+          ),
+          disabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: _onSurface(context, 0.08)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: focusedBorderColor, width: 1.3),
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: borderColor),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _CurveEntryTile extends StatelessWidget {
   const _CurveEntryTile({
     required this.entry,
@@ -9155,44 +9721,10 @@ class _CurveEntryTile extends StatelessWidget {
             ),
             if (isEnabled && canEdit) ...[
               const SizedBox(width: 12),
-              Container(
-                width: 140,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF6BE7FF).withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: const Color(0xFF6BE7FF).withOpacity(0.4),
-                    width: 1.5,
-                  ),
-                ),
-                child: TextField(
-                  controller: valueController,
-                  enabled: enabled,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontFamily: 'monospace',
-                    color: Color(0xFF6BE7FF),
-                    fontWeight: FontWeight.w500,
-                  ),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9+\-.]')),
-                  ],
-                  decoration: const InputDecoration(
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                    border: InputBorder.none,
-                    hintText: 'Value...',
-                    hintStyle: TextStyle(
-                      color: Color(0xFF6BE7FF),
-                      fontSize: 12,
-                    ),
-                  ),
-                  textAlign: TextAlign.center,
-                  onSubmitted: onSubmit,
-                ),
+              _CurveValueField(
+                controller: valueController,
+                enabled: enabled,
+                onSubmitted: onSubmit,
               ),
             ],
             const SizedBox(width: 8),
@@ -9217,6 +9749,86 @@ class _CurveEntryTile extends StatelessWidget {
                 ),
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DataTableSettingTile extends StatelessWidget {
+  const _DataTableSettingTile({
+    required this.title,
+    required this.subtitle,
+    required this.isEnabled,
+    required this.enabled,
+    required this.onToggle,
+    this.showValueField = false,
+    this.valueController,
+    this.onSubmitted,
+  });
+
+  final String title;
+  final String subtitle;
+  final bool isEnabled;
+  final bool enabled;
+  final bool showValueField;
+  final TextEditingController? valueController;
+  final ValueChanged<bool> onToggle;
+  final ValueChanged<String>? onSubmitted;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isEnabled
+              ? const Color(0xFF6BE7FF).withOpacity(0.3)
+              : _onSurface(context, 0.12),
+          width: 1,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: _onSurface(context, 0.75),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (showValueField &&
+                valueController != null &&
+                onSubmitted != null) ...[
+              const SizedBox(width: 12),
+              _CurveValueField(
+                controller: valueController!,
+                enabled: enabled,
+                onSubmitted: onSubmitted!,
+              ),
+            ],
+            const SizedBox(width: 8),
+            Switch(value: isEnabled, onChanged: enabled ? onToggle : null),
           ],
         ),
       ),
@@ -9309,7 +9921,7 @@ class _DataManagementPanelState extends State<DataManagementPanel> {
               const _SectionTitle(title: 'Files'),
               ListTile(
                 title: const Text('View Internal Files'),
-                subtitle: const Text('Open the backend folder on disk'),
+                subtitle: const Text('Open ATLAS Backend folder on disk'),
                 trailing: _HoverScale(
                   enabled: !_busy,
                   child: ElevatedButton.icon(
@@ -9322,7 +9934,7 @@ class _DataManagementPanelState extends State<DataManagementPanel> {
               const SizedBox(height: 8),
               ListTile(
                 title: const Text('Open Exports Folder'),
-                subtitle: const Text('View exported data on disk'),
+                subtitle: const Text('View your Exported Data on Disk'),
                 trailing: _HoverScale(
                   enabled: !_busy,
                   child: ElevatedButton.icon(
@@ -9347,7 +9959,7 @@ class _DataManagementPanelState extends State<DataManagementPanel> {
               ListTile(
                 title: const Text('Export Backend Settings'),
                 subtitle: const Text(
-                  'Write Profile, Client Settings, and DefaultGame.ini data to exports/',
+                  'Exports all important data in ATLAS Backend for reimporting or transfer to the folder exports/',
                 ),
                 trailing: _HoverScale(
                   enabled: !_busy,
@@ -9363,7 +9975,7 @@ class _DataManagementPanelState extends State<DataManagementPanel> {
               ListTile(
                 title: const Text('Import Backend Settings'),
                 subtitle: const Text(
-                  'Load data from exports/ into the backend',
+                  'Load exported data stored within ATLAS Backend from exports/',
                 ),
                 trailing: _HoverScale(
                   enabled: !_busy,
@@ -9379,7 +9991,7 @@ class _DataManagementPanelState extends State<DataManagementPanel> {
               ListTile(
                 title: const Text('Clear Exported Data'),
                 subtitle: const Text(
-                  'Remove Profile, Client Setting, and DefaultGame.ini data from exports/',
+                  'Completely clear all of your exported data contained in the exports/ folder',
                 ),
                 trailing: _HoverScale(
                   enabled: !_busy,
@@ -9408,7 +10020,7 @@ class _DataManagementPanelState extends State<DataManagementPanel> {
               ListTile(
                 title: const Text('Clear Backend Data'),
                 subtitle: const Text(
-                  'Clear All Profile, Client Setting, DataTable, CurveTable, and Straight Bloom data from the backend',
+                  'Clear All ATLAS Backend data as if you were starting fresh',
                 ),
                 trailing: _HoverScale(
                   enabled: !_busy,
@@ -9453,7 +10065,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   @override
   void initState() {
     super.initState();
-    _scheduleDeferredScreenLoad(this, () => _load(forceRefresh: false));
+    _scheduleDeferredScreenLoad(this, () => _load(forceRefresh: true));
   }
 
   Future<void> _load({bool forceRefresh = true}) async {
@@ -9827,6 +10439,357 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
         SnackBar(
           content: Text('Failed to apply preset to all profiles: $error'),
         ),
+      );
+    }
+  }
+
+  Future<void> _createCustomPreset() async {
+    final nameController = TextEditingController();
+    final versionController = TextEditingController();
+    final filePathController = TextEditingController();
+    String? pickedFilePath;
+    String? nameError;
+    String? fileError;
+
+    final result = await _showBlurDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Create Profile Preset'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  decoration: InputDecoration(
+                    labelText: 'Preset name',
+                    hintText: 'e.g. My Custom Build',
+                    errorText: nameError,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: versionController,
+                  decoration: const InputDecoration(
+                    labelText: 'Version tag (optional)',
+                    hintText: 'e.g. v14.40',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: filePathController,
+                        style: TextStyle(
+                          color: _onSurface(context, 0.92),
+                        ),
+                        onChanged: (value) {
+                          final trimmed = value.trim();
+                          if (trimmed.isEmpty) {
+                            setState(() {
+                              pickedFilePath = null;
+                              fileError = null;
+                            });
+                            return;
+                          }
+                          final name = trimmed.split(RegExp(r'[\\/]')).last.toLowerCase();
+                          if (name != 'profile_athena.json' && name != 'athena.json') {
+                            setState(() {
+                              pickedFilePath = null;
+                              fileError = 'File must be profile_athena.json or athena.json.';
+                            });
+                          } else {
+                            setState(() {
+                              pickedFilePath = trimmed;
+                              fileError = null;
+                            });
+                          }
+                        },
+                        decoration: InputDecoration(
+                          hintText: 'Select profile_athena.json',
+                          hintStyle: TextStyle(
+                            color: _onSurface(context, 0.48),
+                          ),
+                          prefixIcon: Icon(
+                            Icons.description_rounded,
+                            color: _onSurface(context, 0.78),
+                          ),
+                          filled: true,
+                          fillColor: _adaptiveScrimColor(
+                            context,
+                            darkAlpha: 0.1,
+                            lightAlpha: 0.2,
+                          ),
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 13,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(
+                              color: _onSurface(context, 0.12),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(
+                              color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.95),
+                              width: 1.2,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    _HoverScale(
+                      child: OutlinedButton(
+                        onPressed: () async {
+                          final picked = await FilePicker.platform.pickFiles(
+                            dialogTitle: 'Select profile_athena.json or athena.json',
+                            type: FileType.custom,
+                            allowedExtensions: ['json'],
+                          );
+                          if (picked == null || picked.files.single.path == null) return;
+                          final fileName = picked.files.single.name.toLowerCase();
+                          if (fileName != 'profile_athena.json' && fileName != 'athena.json') {
+                            setState(() {
+                              fileError = 'File must be profile_athena.json or athena.json.';
+                            });
+                            return;
+                          }
+                          setState(() {
+                            pickedFilePath = picked.files.single.path!;
+                            filePathController.text = picked.files.single.path!;
+                            fileError = null;
+                          });
+                        },
+                        style: OutlinedButton.styleFrom(
+                          shape: const StadiumBorder(),
+                          padding: const EdgeInsets.symmetric(horizontal: 18),
+                          fixedSize: const Size(86, 42),
+                          foregroundColor: _onSurface(context, 0.92),
+                          backgroundColor: _adaptiveScrimColor(
+                            context,
+                            darkAlpha: 0.08,
+                            lightAlpha: 0.16,
+                          ),
+                          side: BorderSide(
+                            color: _onSurface(context, 0.14),
+                          ),
+                        ),
+                        child: const Text('Browse'),
+                      ),
+                    ),
+                  ],
+                ),
+                if (fileError != null) ...[                  
+                  const SizedBox(height: 6),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4),
+                    child: Text(
+                      fileError!,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    _HoverScale(
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _HoverScale(
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          final name = nameController.text.trim();
+                          if (name.isEmpty) {
+                            setState(() => nameError = 'Name cannot be empty.');
+                            return;
+                          }
+                          if (pickedFilePath == null) {
+                            setState(() => fileError = 'Please select a JSON file.');
+                            return;
+                          }
+                          setState(() {
+                            nameError = null;
+                            fileError = null;
+                          });
+                          if (!context.mounted) return;
+                          Navigator.pop(context, true);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          shape: const StadiumBorder(),
+                          padding: const EdgeInsets.symmetric(horizontal: 18),
+                          fixedSize: const Size(86, 42),
+                        ),
+                        child: const Text('Create'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: const [],
+          actionsPadding: EdgeInsets.zero,
+        ),
+      ),
+    );
+
+    if (result != true) return;
+
+    final name = nameController.text.trim();
+    final versionTag = versionController.text.trim();
+
+    try {
+      await ProfileService.createCustomPreset(
+        name: name,
+        sourceFilePath: pickedFilePath!,
+        versionTag: versionTag.isNotEmpty ? versionTag : null,
+      );
+      _ProfilesScreenCache._snapshot = null;
+      await _load(forceRefresh: true);
+      if (!mounted) return;
+      showAtlasSnackBar(
+        context,
+        SnackBar(content: Text('Created preset "$name".')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      showAtlasSnackBar(
+        context,
+        SnackBar(content: Text('Failed to create preset: $error')),
+      );
+    }
+  }
+
+  Future<void> _deleteCustomPreset() async {
+    final customConfig = await ProfileService._loadCustomPresetsConfig();
+    final customList = customConfig['presets'] as List<dynamic>? ?? [];
+    if (customList.isEmpty) {
+      if (!mounted) return;
+      showAtlasSnackBar(
+        context,
+        const SnackBar(content: Text('No custom presets to delete.')),
+      );
+      return;
+    }
+
+    final customPresets = <ProfilePreset>[];
+    for (final p in customList) {
+      final map = p as Map<String, dynamic>;
+      customPresets.add(ProfilePreset(
+        name: map['name'] as String? ?? map['folder'] as String? ?? '',
+        folder: map['folder'] as String? ?? '',
+        versionTag: map['versionTag'] as String?,
+      ));
+    }
+
+    String? selectedFolder = customPresets.first.folder;
+
+    final confirmed = await _showBlurDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Delete Custom Preset'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  initialValue: selectedFolder,
+                  decoration: const InputDecoration(
+                    labelText: 'Custom preset',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: customPresets
+                      .map(
+                        (preset) => DropdownMenuItem(
+                          value: preset.folder,
+                          child: _PresetLabel(
+                            name: preset.name,
+                            tag: preset.versionTag,
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  selectedItemBuilder: (context) => customPresets
+                      .map(
+                        (preset) => _PresetLabel(
+                          name: preset.name,
+                          tag: preset.versionTag,
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) => setState(() => selectedFolder = value),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'This will permanently delete the preset folder and its profile.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.redAccent,
+                      ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            _HoverScale(
+              child: TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+            ),
+            _HoverScale(
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.redAccent,
+                ),
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Delete'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true || selectedFolder == null) return;
+
+    final presetName = customPresets
+        .firstWhere((p) => p.folder == selectedFolder,
+            orElse: () => ProfilePreset(name: selectedFolder!, folder: selectedFolder!))
+        .name;
+
+    try {
+      await ProfileService.deleteCustomPreset(selectedFolder!);
+      _ProfilesScreenCache._snapshot = null;
+      if (_selectedPreset == selectedFolder) {
+        _selectedPreset = null;
+      }
+      await _load(forceRefresh: true);
+      if (!mounted) return;
+      showAtlasSnackBar(
+        context,
+        SnackBar(content: Text('Deleted preset "$presetName".')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      showAtlasSnackBar(
+        context,
+        SnackBar(content: Text('Failed to delete preset: $error')),
       );
     }
   }
@@ -10500,9 +11463,13 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                           _HoverScale(
                             child: ElevatedButton.icon(
                               onPressed: () {
-                                Navigator.of(
-                                  context,
-                                ).push(_buildRoute(const UserValuesScreen()));
+                                Navigator.of(context).push(
+                                  _buildRoute(
+                                    UserValuesScreen(
+                                      initialProfile: _selectedProfile,
+                                    ),
+                                  ),
+                                );
                               },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(
@@ -10686,6 +11653,40 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(color: _onSurface(context, 0.6)),
                         ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _HoverScale(
+                                child: ElevatedButton.icon(
+                                  onPressed: _createCustomPreset,
+                                  icon: const Icon(Icons.add_rounded),
+                                  label: const Text('Create profile preset'),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _HoverScale(
+                                child: ElevatedButton.icon(
+                                  onPressed: _deleteCustomPreset,
+                                  icon: const Icon(Icons.delete_outline),
+                                  label: const Text('Delete profile preset'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.redAccent,
+                                    foregroundColor: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Create or delete custom profile presets.',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: _onSurface(context, 0.6)),
+                        ),
                       ],
                     ),
                   ),
@@ -10807,7 +11808,9 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
 }
 
 class UserValuesScreen extends StatefulWidget {
-  const UserValuesScreen({super.key});
+  const UserValuesScreen({super.key, this.initialProfile});
+
+  final String? initialProfile;
 
   @override
   State<UserValuesScreen> createState() => _UserValuesScreenState();
@@ -10844,21 +11847,32 @@ class _UserValuesScreenState extends State<UserValuesScreen> {
   }
 
   Future<void> _load() async {
+    final profilesSnapshot = _ProfilesScreenCache.snapshot;
     final profiles =
-        _ProfilesScreenCache.snapshot?.profiles ??
-        await ProfileService.listProfiles();
+        profilesSnapshot?.profiles ?? await ProfileService.listProfiles();
+    final profileIds = {for (final profile in profiles) profile.accountId};
+    final savedSelectedProfile =
+        profilesSnapshot?.uiState.lastSelectedProfile ??
+        (await ProfilesUiStateService.load()).lastSelectedProfile;
     if (!mounted) return;
     final resolvedSelectedProfile =
-        _selectedProfile ??
-        (profiles.isNotEmpty ? profiles.first.accountId : null);
+        widget.initialProfile != null &&
+            profileIds.contains(widget.initialProfile)
+        ? widget.initialProfile
+        : _selectedProfile != null && profileIds.contains(_selectedProfile)
+        ? _selectedProfile
+        : savedSelectedProfile != null &&
+              profileIds.contains(savedSelectedProfile)
+        ? savedSelectedProfile
+        : profiles.isNotEmpty
+        ? profiles.first.accountId
+        : null;
     final warmedValues = _UserValuesWarmupCache.snapshot;
     setState(() {
       _profiles = profiles;
       _loadProgress = 1.0;
       _loading = false;
-      if (_profiles.isNotEmpty && _selectedProfile == null) {
-        _selectedProfile = resolvedSelectedProfile;
-      }
+      _selectedProfile = resolvedSelectedProfile;
       if (warmedValues != null &&
           warmedValues.accountId == resolvedSelectedProfile) {
         _applyUserValuesToControllers(warmedValues.values);
@@ -11340,26 +12354,11 @@ class _SectionTitleWithTag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = Theme.of(context).colorScheme.secondary;
     return Row(
       children: [
         Text(title, style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: accent.withOpacity(0.18),
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: accent.withOpacity(0.45)),
-          ),
-          child: Text(
-            tag,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: accent,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
+        _AtlasTagPill(label: tag),
       ],
     );
   }
@@ -11373,7 +12372,6 @@ class _PresetLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = Theme.of(context).colorScheme.secondary;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -11383,21 +12381,7 @@ class _PresetLabel extends StatelessWidget {
         ),
         if (tag != null) ...[
           const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: accent.withOpacity(0.18),
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: accent.withOpacity(0.45)),
-            ),
-            child: Text(
-              tag!,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: accent,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
+          _AtlasTagPill(label: tag!),
         ],
       ],
     );
@@ -11461,7 +12445,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   double _loadProgress = 0.0;
   bool _startBackendOnLaunch = false;
   bool _disableBackendUpdateCheck = false;
-  bool _useDarkMode = true;
   String _backgroundImagePath = '';
   double _backgroundBlur = 15;
   double _backgroundParticlesOpacity = 1.0;
@@ -11469,11 +12452,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _startupAnimationEnabled = true;
   late final VoidCallback _backgroundPathListener;
   late final VoidCallback _backgroundBlurListener;
+  late final VoidCallback _externalToggleStateListener;
 
   @override
   void initState() {
     super.initState();
     _scheduleDeferredScreenLoad(this, _load);
+    _externalToggleStateListener = () {
+      if (!mounted) return;
+      unawaited(_load());
+    };
     _backgroundPathListener = () {
       if (!mounted) return;
       setState(() => _backgroundImagePath = appBackgroundPath.value);
@@ -11484,12 +12472,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     };
     appBackgroundPath.addListener(_backgroundPathListener);
     appBackgroundBlur.addListener(_backgroundBlurListener);
+    userToggleStatesRevision.addListener(_externalToggleStateListener);
   }
 
   @override
   void dispose() {
     appBackgroundPath.removeListener(_backgroundPathListener);
     appBackgroundBlur.removeListener(_backgroundBlurListener);
+    userToggleStatesRevision.removeListener(_externalToggleStateListener);
     super.dispose();
   }
 
@@ -11499,7 +12489,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _startBackendOnLaunch = config.startBackendOnLaunch;
       _disableBackendUpdateCheck = config.disableBackendUpdateCheck;
-      _useDarkMode = config.useDarkMode;
       _backgroundImagePath = config.backgroundImagePath;
       _backgroundBlur = config.backgroundBlur;
       _backgroundParticlesOpacity = config.backgroundParticlesOpacity;
@@ -11508,13 +12497,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _loadProgress = 1.0;
       _loading = false;
     });
-  }
-
-  Future<void> _updateTheme(bool value) async {
-    setState(() => _useDarkMode = value);
-    appThemeMode.value = value ? ThemeMode.dark : ThemeMode.light;
-    final existing = await ConfigService.load();
-    await ConfigService.save(existing.copyWith(useDarkMode: value));
   }
 
   Future<void> _pickBackgroundImage() async {
@@ -11680,15 +12662,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   children: [
                     _SectionTitle(title: title),
                     const SizedBox(height: 16),
-                    SwitchListTile(
-                      value: _useDarkMode,
-                      onChanged: _updateTheme,
-                      title: const Text('Dark mode'),
-                      subtitle: const Text(
-                        'Toggle between dark and light themes.',
-                      ),
-                    ),
-                    const SizedBox(height: 8),
                     SwitchListTile(
                       value: _dialogBlurEnabled,
                       onChanged: _updateDialogBlur,
@@ -12427,6 +13400,126 @@ class ProfileService {
     return false;
   }
 
+  static Future<Map<String, dynamic>?> _loadPresetsConfig() async {
+    final configFile = File(
+      joinPath([
+        getBackendRoot(),
+        'static',
+        'athenaprofiles',
+        'presets.json',
+      ]),
+    );
+    if (!await configFile.exists()) return null;
+    try {
+      final contents = await configFile.readAsString();
+      return jsonDecode(contents) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static String _customPresetsPath() => joinPath([
+    getBackendRoot(),
+    'static',
+    'athenaprofiles',
+    'custom-presets.json',
+  ]);
+
+  static Future<Map<String, dynamic>> _loadCustomPresetsConfig() async {
+    final configFile = File(_customPresetsPath());
+    if (!await configFile.exists()) return {'presets': <dynamic>[]};
+    try {
+      final contents = await configFile.readAsString();
+      return jsonDecode(contents) as Map<String, dynamic>;
+    } catch (_) {
+      return {'presets': <dynamic>[]};
+    }
+  }
+
+  static Future<void> _saveCustomPresetsConfig(Map<String, dynamic> config) async {
+    final configFile = File(_customPresetsPath());
+    await configFile.parent.create(recursive: true);
+    const encoder = JsonEncoder.withIndent('  ');
+    await configFile.writeAsString(encoder.convert(config));
+  }
+
+  static Future<void> createCustomPreset({
+    required String name,
+    required String sourceFilePath,
+    String? versionTag,
+  }) async {
+    final folderName = '$name Profile';
+    final presetsDir = Directory(
+      joinPath([
+        getBackendRoot(),
+        'static',
+        'athenaprofiles',
+        'Profile Presets',
+      ]),
+    );
+    final targetDir = Directory(joinPath([presetsDir.path, folderName]));
+    if (await targetDir.exists()) {
+      throw Exception('A preset folder named "$folderName" already exists.');
+    }
+    await targetDir.create(recursive: true);
+
+    final sourceFile = File(sourceFilePath);
+    if (!await sourceFile.exists()) {
+      throw Exception('Source file not found.');
+    }
+    final targetFile = File(joinPath([targetDir.path, 'profile_athena.json']));
+    await sourceFile.copy(targetFile.path);
+
+    final config = await _loadCustomPresetsConfig();
+    final presetsList = config['presets'] as List<dynamic>? ?? [];
+    presetsList.add({
+      'name': name,
+      'folder': folderName,
+      'versionTag': versionTag?.trim().isNotEmpty == true ? versionTag!.trim() : null,
+      'pinned': null,
+    });
+    config['presets'] = presetsList;
+    await _saveCustomPresetsConfig(config);
+  }
+
+  static Future<void> deleteCustomPreset(String folderName) async {
+    final presetsDir = Directory(
+      joinPath([
+        getBackendRoot(),
+        'static',
+        'athenaprofiles',
+        'Profile Presets',
+        folderName,
+      ]),
+    );
+    if (await presetsDir.exists()) {
+      await presetsDir.delete(recursive: true);
+    }
+
+    final config = await _loadCustomPresetsConfig();
+    final presetsList = config['presets'] as List<dynamic>? ?? [];
+    presetsList.removeWhere((p) {
+      final map = p as Map<String, dynamic>;
+      return (map['folder'] as String?)?.trim().toLowerCase() ==
+          folderName.trim().toLowerCase();
+    });
+    config['presets'] = presetsList;
+    await _saveCustomPresetsConfig(config);
+  }
+
+  static bool isCustomPreset(String folderName, Map<String, dynamic>? customConfig) {
+    if (customConfig == null) return false;
+    final presetsList = customConfig['presets'] as List<dynamic>? ?? [];
+    for (final p in presetsList) {
+      final map = p as Map<String, dynamic>;
+      if ((map['folder'] as String?)?.trim().toLowerCase() ==
+          folderName.trim().toLowerCase()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   static Future<List<ProfilePreset>> listPresets() async {
     final presetsDir = Directory(
       joinPath([
@@ -12437,73 +13530,78 @@ class ProfileService {
       ]),
     );
     if (!await presetsDir.exists()) return [];
+
+    final config = await _loadPresetsConfig();
+    final customConfig = await _loadCustomPresetsConfig();
+    final configPresets = <String, Map<String, dynamic>>{};
+    final hiddenFolders = <String>{};
+    if (config != null) {
+      final presetsList = config['presets'] as List<dynamic>? ?? [];
+      for (final p in presetsList) {
+        final map = p as Map<String, dynamic>;
+        final folder = (map['folder'] as String?)?.trim().toLowerCase();
+        if (folder != null) configPresets[folder] = map;
+      }
+      final hiddenList = config['hidden'] as List<dynamic>? ?? [];
+      for (final h in hiddenList) {
+        hiddenFolders.add((h as String).trim().toLowerCase());
+      }
+    }
+    final customPresetsList = customConfig['presets'] as List<dynamic>? ?? [];
+    for (final p in customPresetsList) {
+      final map = p as Map<String, dynamic>;
+      final folder = (map['folder'] as String?)?.trim().toLowerCase();
+      if (folder != null) configPresets[folder] = map;
+    }
+
     final presets = <ProfilePreset>[];
     await for (final entity in presetsDir.list(recursive: false)) {
       if (entity is! Directory) continue;
       final folder = _basename(entity.path);
       if (folder.trim().isEmpty) continue;
-      if (_isHiddenPresetFolder(folder)) continue;
+      final folderKey = folder.trim().toLowerCase();
+      if (hiddenFolders.contains(folderKey)) continue;
       final presetPath = File(joinPath([entity.path, 'profile_athena.json']));
       if (!await presetPath.exists()) continue;
-      final labelParts = _presetLabelParts(folder);
-      presets.add(
-        ProfilePreset(
-          name: labelParts.$1,
-          folder: folder,
-          versionTag: labelParts.$2,
-        ),
-      );
-    }
-    presets.sort((a, b) {
-      final aTopPinned = _isTopPinnedPresetFolder(a.folder);
-      final bTopPinned = _isTopPinnedPresetFolder(b.folder);
-      if (aTopPinned != bTopPinned) {
-        return aTopPinned ? -1 : 1;
-      }
 
-      final aBottomPinned = _isBottomPinnedPresetFolder(a.folder);
-      final bBottomPinned = _isBottomPinnedPresetFolder(b.folder);
-      if (aBottomPinned != bBottomPinned) {
-        return aBottomPinned ? 1 : -1;
+      final configEntry = configPresets[folderKey];
+      if (configEntry != null) {
+        presets.add(
+          ProfilePreset(
+            name: configEntry['name'] as String? ?? folder,
+            folder: folder,
+            versionTag: configEntry['versionTag'] as String?,
+          ),
+        );
+      } else {
+        presets.add(
+          ProfilePreset(name: folder, folder: folder),
+        );
       }
+    }
+
+    presets.sort((a, b) {
+      final configA = configPresets[a.folder.trim().toLowerCase()];
+      final configB = configPresets[b.folder.trim().toLowerCase()];
+      final aPinned = configA?['pinned'] as String?;
+      final bPinned = configB?['pinned'] as String?;
+      final aTop = aPinned == 'top';
+      final bTop = bPinned == 'top';
+      if (aTop != bTop) return aTop ? -1 : 1;
+      final aBottom = aPinned == 'bottom';
+      final bBottom = bPinned == 'bottom';
+      if (aBottom != bBottom) return aBottom ? 1 : -1;
 
       final aVersion = _parseVersion(a.versionTag);
       final bVersion = _parseVersion(b.versionTag);
       final versionOrder = bVersion.compareTo(aVersion);
       if (versionOrder != 0) {
-        return versionOrder; // Descending order (highest first)
+        return versionOrder; // Descending order (highest version first)
       }
 
       return a.name.toLowerCase().compareTo(b.name.toLowerCase());
     });
     return presets;
-  }
-
-  static (String, String?) _presetLabelParts(String folderName) {
-    switch (folderName.trim().toLowerCase()) {
-      case 'default profile':
-      case 'default':
-        return ('Default Profile', null);
-      case 'blank profile':
-      case 'blank':
-      case 'empty profile':
-      case 'empty':
-        return ('Empty Profile', null);
-      case 'reboot x pulse profile':
-      case 'reboot x pulse one profile':
-      case 'reboot x pulse one':
-        return ('Reboot X Pulse', 'v9.10');
-      case 'reboot x stellar profile':
-        return ('Reboot X Stellar', 'v12.41');
-      case 'reboot x tozo profile':
-        return ('Reboot X Tozo', 'v12.41');
-      case 'reboot x retrac profile':
-        return ('Reboot X Retrac', 'v14.40');
-      case 'reboot x twine profile':
-        return ('Reboot X Twine', 'v14.40');
-      default:
-        return (folderName, null);
-    }
   }
 
   static double _parseVersion(String? versionTag) {
@@ -12516,41 +13614,6 @@ class ProfileService {
       return double.parse(cleanVersion);
     } catch (e) {
       return 0.0;
-    }
-  }
-
-  static bool _isHiddenPresetFolder(String folderName) {
-    switch (folderName.trim().toLowerCase()) {
-      case 'latest profile':
-      case 'latest profile preset':
-        return true;
-      default:
-        return false;
-    }
-  }
-
-  static bool _isTopPinnedPresetFolder(String folderName) {
-    switch (folderName.trim().toLowerCase()) {
-      case 'default profile':
-      case 'default':
-      case 'blank profile':
-      case 'blank':
-      case 'empty profile':
-      case 'empty':
-        return true;
-      default:
-        return false;
-    }
-  }
-
-  static bool _isBottomPinnedPresetFolder(String folderName) {
-    switch (folderName.trim().toLowerCase()) {
-      case 'reboot x pulse profile':
-      case 'reboot x pulse one profile':
-      case 'reboot x pulse one':
-        return true;
-      default:
-        return false;
     }
   }
 
@@ -12739,25 +13802,51 @@ class BackendPaths {
   static const String curveTableComment = '# CurveTables';
   static const String straightBloomComment = '# Straight Bloom';
   static const String dataTableComment = '# DataTables';
+  static const String fixesComment = '# Fixes';
   static const String defaultCurvePath =
       '/Game/Athena/Balance/DataTables/AthenaGameData';
+  static const String _defaultGameDataFolderName = 'DefaultGame Data';
 
   static String get defaultGameIni =>
       joinPath([getBackendRoot(), 'static', 'hotfixes', 'DefaultGame.ini']);
   static String get defaultEngineIni =>
       joinPath([getBackendRoot(), 'static', 'hotfixes', 'DefaultEngine.ini']);
+  static String get defaultGameDataDir => joinPath([
+    getBackendRoot(),
+    'static',
+    'hotfixes',
+    _defaultGameDataFolderName,
+  ]);
   static String get curvesJson =>
       joinPath([getBackendRoot(), 'responses', 'curves.json']);
   static String get curvesDefaultsJson =>
       joinPath([getBackendRoot(), 'responses', 'curves.defaults.json']);
+  static String get curveTableLinesIni =>
+      joinPath([defaultGameDataDir, 'CurveTables.ini']);
+  static String get legacyCurveTableLinesIni =>
+      joinPath([getBackendRoot(), 'responses', 'user-curvetables.ini']);
+  static String get curveTableStateJson =>
+      joinPath([getBackendRoot(), 'responses', 'curvetables-state.json']);
   static String get dataTablesJson =>
       joinPath([getBackendRoot(), 'responses', 'datatables.json']);
+  static String get dataTablesDefaultsJson =>
+      joinPath([getBackendRoot(), 'responses', 'datatables.defaults.json']);
   static String get dataTablesUiState =>
       joinPath([getBackendRoot(), 'responses', 'datatables-ui.json']);
+  static String get dataTableLinesIni =>
+      joinPath([defaultGameDataDir, 'DataTables.ini']);
+  static String get legacyDataTableLinesIni =>
+      joinPath([getBackendRoot(), 'responses', 'user-datatables.ini']);
+  static String get straightBloomLinesIni =>
+      joinPath([defaultGameDataDir, 'StraightBloom.ini']);
+  static String get fixesLinesIni =>
+      joinPath([defaultGameDataDir, 'Fixes.ini']);
+  static String get userToggleStatesJson =>
+      joinPath([getBackendRoot(), 'responses', 'user-toggle-states.json']);
   static String get modificationsBackup =>
       joinPath([getBackendRoot(), 'responses', 'modifications-backup.json']);
-  static String get sniperJson =>
-      joinPath([getBackendRoot(), 'responses', 'sniper.json']);
+  static String get straightBloomStateJson =>
+      joinPath([getBackendRoot(), 'responses', 'straight-bloom-state.json']);
   static String get configIni =>
       joinPath([getBackendRoot(), 'src', 'config', 'config.ini']);
   static String get updateNotesMarkdown =>
@@ -12776,17 +13865,10 @@ class IniService {
     if (!updated.contains(commentLabel)) {
       final assetIndex = updated.indexOf('[AssetHotfix]');
       if (assetIndex != -1) {
-        if (preferPrepend) {
-          updated =
-              '${updated.substring(0, assetIndex)}[AssetHotfix]\n$commentLabel\n${updated.substring(assetIndex)}';
-        } else {
-          final newlineAfter = updated.indexOf('\n', assetIndex);
-          final insertAt = newlineAfter == -1
-              ? updated.length
-              : newlineAfter + 1;
-          updated =
-              '${updated.substring(0, insertAt)}$commentLabel\n${updated.substring(insertAt)}';
-        }
+        final newlineAfter = updated.indexOf('\n', assetIndex);
+        final insertAt = newlineAfter == -1 ? updated.length : newlineAfter + 1;
+        updated =
+            '${updated.substring(0, insertAt)}$commentLabel\n${updated.substring(insertAt)}';
       } else {
         updated = '${updated.trimRight()}\n[AssetHotfix]\n$commentLabel\n';
       }
@@ -12801,51 +13883,785 @@ class IniService {
   }
 }
 
-class StraightBloomService {
-  static Future<bool> isEnabled() async {
-    final iniFile = File(BackendPaths.defaultGameIni);
-    final sniperFile = File(BackendPaths.sniperJson);
-    if (!await iniFile.exists() || !await sniperFile.exists()) return false;
-    final content = await iniFile.readAsString();
-    final lines =
-        (jsonDecode(await sniperFile.readAsString())
-                as Map<String, dynamic>)['lines']
-            as List<dynamic>;
-    return lines.any((line) => content.contains(line as String));
+Future<void> _synchronizeInstalledMutableDataFiles(
+  Directory atlasDataDir,
+) async {
+  final installRoot = getInstallationRoot();
+  if (!_samePath(installRoot, atlasDataDir.path)) {
+    await _mergeInstalledIniFile(
+      installPath: joinPath([
+        installRoot,
+        'static',
+        'hotfixes',
+        'DefaultGame.ini',
+      ]),
+      targetPath: joinPath([
+        atlasDataDir.path,
+        'static',
+        'hotfixes',
+        'DefaultGame.ini',
+      ]),
+      stripManagedHotfixBlocks: true,
+    );
+    await _mergeInstalledIniFile(
+      installPath: joinPath([
+        installRoot,
+        'static',
+        'hotfixes',
+        'DefaultEngine.ini',
+      ]),
+      targetPath: joinPath([
+        atlasDataDir.path,
+        'static',
+        'hotfixes',
+        'DefaultEngine.ini',
+      ]),
+    );
   }
 
-  static Future<void> setEnabled(bool enabled) async {
-    final iniFile = File(BackendPaths.defaultGameIni);
-    final sniperFile = File(BackendPaths.sniperJson);
-    if (!await iniFile.exists() || !await sniperFile.exists()) return;
-    var content = await iniFile.readAsString();
-    final lines =
-        (jsonDecode(await sniperFile.readAsString())
-                as Map<String, dynamic>)['lines']
-            as List<dynamic>;
-    final sniperLines = lines.cast<String>();
-    if (!enabled) {
-      for (final line in sniperLines) {
-        content = content.replaceAll('$line\n', '').replaceAll(line, '');
-      }
-      content = content.replaceAll(RegExp('\n\n+'), '\n');
-    } else {
-      final ensured = IniService.ensureAssetSection(
-        content,
-        BackendPaths.straightBloomComment,
-      );
-      content = ensured.content;
-      final insertPoint = ensured.insertPoint;
-      content =
-          '${content.substring(0, insertPoint)}${sniperLines.join('\n')}\n${content.substring(insertPoint)}';
+  await ManagedHotfixService.ensureInitialized();
+}
+
+Future<void> _mergeInstalledIniFile({
+  required String installPath,
+  required String targetPath,
+  bool stripManagedHotfixBlocks = false,
+}) async {
+  final sourceFile = File(installPath);
+  final targetFile = File(targetPath);
+  if (!await sourceFile.exists() || !await targetFile.exists()) {
+    return;
+  }
+
+  var source = await sourceFile.readAsString();
+  final target = await targetFile.readAsString();
+  if (stripManagedHotfixBlocks) {
+    source = _stripManagedHotfixBlockContents(source);
+  }
+  source = _removeDuplicateAssetHotfixHeaders(source);
+
+  final merged = _mergeIniSourceAdditions(
+    targetContent: target,
+    sourceContent: source,
+  );
+  if (merged != target) {
+    await targetFile.writeAsString(merged);
+  }
+}
+
+String _mergeIniSourceAdditions({
+  required String targetContent,
+  required String sourceContent,
+}) {
+  final lineEnding = targetContent.contains('\r\n')
+      ? '\r\n'
+      : (sourceContent.contains('\r\n') ? '\r\n' : '\n');
+  final hadTrailingNewline =
+      targetContent.endsWith('\n') || sourceContent.endsWith('\n');
+
+  final targetSections = _parseIniSections(targetContent);
+  final sourceSections = _parseIniSections(sourceContent);
+  final targetByKey = <String, _IniSection>{};
+  for (final section in targetSections) {
+    targetByKey[section.key] = section;
+  }
+
+  for (final sourceSection in sourceSections) {
+    final targetSection = targetByKey[sourceSection.key];
+    if (targetSection == null) {
+      targetSections.add(sourceSection.copy());
+      targetByKey[sourceSection.key] = targetSections.last;
+      continue;
     }
+
+    final existingLines = targetSection.lines.toSet();
+    for (final line in sourceSection.lines) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+      if (existingLines.contains(line)) continue;
+      targetSection.lines.add(line);
+      existingLines.add(line);
+    }
+  }
+
+  final rendered = _renderIniSections(
+    targetSections,
+    lineEnding: lineEnding,
+    trailingNewline: hadTrailingNewline,
+  );
+  return _removeDuplicateAssetHotfixHeaders(rendered);
+}
+
+String mergeIniSourceAdditions({
+  required String targetContent,
+  required String sourceContent,
+}) => _mergeIniSourceAdditions(
+  targetContent: targetContent,
+  sourceContent: sourceContent,
+);
+
+class _IniSection {
+  _IniSection({required this.header, required this.lines});
+
+  final String? header;
+  final List<String> lines;
+
+  String get key => (header ?? '').trim().toLowerCase();
+
+  _IniSection copy() =>
+      _IniSection(header: header, lines: List<String>.of(lines));
+}
+
+List<_IniSection> _parseIniSections(String content) {
+  final sectionHeader = RegExp(r'^\[[^\r\n\]]+\]$');
+  final sections = <_IniSection>[];
+  var current = _IniSection(header: null, lines: <String>[]);
+  sections.add(current);
+
+  for (final line in content.split(RegExp(r'\r?\n'))) {
+    final trimmed = line.trim();
+    if (sectionHeader.hasMatch(trimmed)) {
+      current = _IniSection(header: trimmed, lines: <String>[]);
+      sections.add(current);
+      continue;
+    }
+    current.lines.add(line);
+  }
+
+  return sections;
+}
+
+String _renderIniSections(
+  List<_IniSection> sections, {
+  required String lineEnding,
+  required bool trailingNewline,
+}) {
+  final lines = <String>[];
+  for (final section in sections) {
+    if (section.header != null) {
+      lines.add(section.header!);
+    }
+    lines.addAll(section.lines);
+  }
+  var output = lines.join(lineEnding);
+  if (trailingNewline && !output.endsWith(lineEnding)) {
+    output = '$output$lineEnding';
+  }
+  return output;
+}
+
+String _removeDuplicateAssetHotfixHeaders(String content) {
+  final lines = content.split(RegExp(r'\r?\n'));
+  final output = <String>[];
+  var seenAssetHotfix = false;
+  for (final line in lines) {
+    if (line.trim() == '[AssetHotfix]') {
+      if (seenAssetHotfix) {
+        continue;
+      }
+      seenAssetHotfix = true;
+    }
+    output.add(line);
+  }
+  return output.join('\n');
+}
+
+String removeDuplicateAssetHotfixHeaders(String content) =>
+    _removeDuplicateAssetHotfixHeaders(content);
+
+const Set<String> _managedHotfixBlockLabels = {
+  'datatables',
+  'straightbloom',
+  'curvetables',
+  'fixes',
+};
+
+class ManagedHotfixSnapshot {
+  const ManagedHotfixSnapshot({
+    this.dataTableLines = const [],
+    this.hasActiveDataTableLines = false,
+    this.straightBloomLines = const [],
+    this.curveTableLines = const [],
+    this.hasActiveCurveTableLines = false,
+    this.hasActiveStraightBloomLines = false,
+    this.fixesLines = const [],
+  });
+
+  final List<String> dataTableLines;
+  final bool hasActiveDataTableLines;
+  final List<String> straightBloomLines;
+  final List<String> curveTableLines;
+  final bool hasActiveCurveTableLines;
+  final bool hasActiveStraightBloomLines;
+  final List<String> fixesLines;
+}
+
+String? _normalizeHotfixLine(String line) {
+  final trimmedLeft = line.trimLeft();
+  if (trimmedLeft.isEmpty) return null;
+
+  var normalized = trimmedLeft;
+  if (normalized.startsWith(';')) {
+    normalized = normalized.substring(1).trimLeft();
+  }
+  normalized = normalized.trimRight();
+  return normalized.isEmpty ? null : normalized;
+}
+
+bool _isCommentedHotfixLine(String line) {
+  return line.trimLeft().startsWith(';');
+}
+
+ManagedHotfixSnapshot extractManagedHotfixSnapshot({
+  required String content,
+  Iterable<String> straightBloomLines = const [],
+}) {
+  final straightBloomSet = straightBloomLines
+      .map((line) => line.trim())
+      .where((line) => line.isNotEmpty)
+      .toSet();
+  final dataTableLines = <String>[];
+  final capturedStraightBloomLines = <String>[];
+  final curveTableLines = <String>[];
+  final fixesLines = <String>[];
+  final commentHeader = RegExp(r'^\s*#\s*(.+?)\s*$');
+  final sectionHeader = RegExp(r'^\s*\[[^\r\n\]]+\]\s*$');
+  var inAssetHotfix = false;
+  String? activeBlock;
+  var hasActiveDataTables = false;
+  var hasActiveCurveTables = false;
+  var hasActiveStraightBloom = false;
+
+  for (final line in content.split(RegExp(r'\r?\n'))) {
+    final trimmed = line.trim();
+    if (sectionHeader.hasMatch(trimmed)) {
+      inAssetHotfix = trimmed.toLowerCase() == '[assethotfix]';
+      activeBlock = null;
+      continue;
+    }
+    if (!inAssetHotfix) continue;
+
+    final commentMatch = commentHeader.firstMatch(line);
+    if (commentMatch != null) {
+      activeBlock = DataTableService._normalizeCommentLabel(
+        commentMatch.group(1)!,
+      );
+      continue;
+    }
+
+    final normalizedLine = _normalizeHotfixLine(line);
+    if (normalizedLine == null) continue;
+    final isCommented = _isCommentedHotfixLine(line);
+
+    if (straightBloomSet.contains(normalizedLine)) {
+      capturedStraightBloomLines.add(normalizedLine);
+      if (!isCommented) {
+        hasActiveStraightBloom = true;
+      }
+      continue;
+    }
+
+    if (normalizedLine.startsWith('+CurveTable=')) {
+      if (activeBlock == 'fixes') {
+        fixesLines.add(normalizedLine);
+        continue;
+      }
+      curveTableLines.add(normalizedLine);
+      if (!isCommented) {
+        hasActiveCurveTables = true;
+      }
+      continue;
+    }
+
+    if (!normalizedLine.startsWith('+DataTable=')) {
+      if (activeBlock == 'fixes') {
+        fixesLines.add(normalizedLine);
+      }
+      continue;
+    }
+    if (activeBlock == 'fixes') {
+      fixesLines.add(normalizedLine);
+      continue;
+    }
+
+    dataTableLines.add(normalizedLine);
+    if (!isCommented) {
+      hasActiveDataTables = true;
+    }
+  }
+
+  return ManagedHotfixSnapshot(
+    dataTableLines: ManagedHotfixService.mergeLines(const [], dataTableLines),
+    hasActiveDataTableLines: hasActiveDataTables,
+    straightBloomLines: ManagedHotfixService.mergeLines(
+      const [],
+      capturedStraightBloomLines,
+    ),
+    curveTableLines: ManagedHotfixService.mergeLines(const [], curveTableLines),
+    hasActiveCurveTableLines: hasActiveCurveTables,
+    hasActiveStraightBloomLines: hasActiveStraightBloom,
+    fixesLines: ManagedHotfixService.mergeLines(const [], fixesLines),
+  );
+}
+
+({
+  List<String> dataTableLines,
+  List<String> fixesLines,
+  List<String> straightBloomLines,
+  bool hasActiveStraightBloomLines,
+})
+extractImportedDataTableAndFixLines({
+  required String content,
+  Iterable<String> knownFixLines = const [],
+  Iterable<String> knownStraightBloomLines = const [],
+}) {
+  final straightBloomLines = ManagedHotfixService.mergeLines(
+    const [],
+    knownStraightBloomLines.where(
+      (line) => line.trim().startsWith('+DataTable='),
+    ),
+  );
+  final snapshot = extractManagedHotfixSnapshot(
+    content: content,
+    straightBloomLines: straightBloomLines,
+  );
+  final allDataTableLines = ManagedHotfixService.mergeLines(
+    const [],
+    content
+        .split(RegExp(r'\r?\n'))
+        .map(_normalizeHotfixLine)
+        .whereType<String>()
+        .where((line) => line.startsWith('+DataTable=')),
+  );
+  final knownFixSet = ManagedHotfixService.mergeLines(
+    const [],
+    knownFixLines.where((line) => line.trim().startsWith('+DataTable=')),
+  ).toSet();
+  final managedMarkersPresent = RegExp(
+    r'^\s*#\s*(data\s*tables|fixes)\b',
+    caseSensitive: false,
+    multiLine: true,
+  ).hasMatch(content);
+  final straightBloomSet = {
+    ...straightBloomLines,
+    ...snapshot.straightBloomLines,
+  };
+  final fixesSet = {
+    ...snapshot.fixesLines.where((line) => line.startsWith('+DataTable=')),
+    ...allDataTableLines.where(knownFixSet.contains),
+  };
+  final dataTableSet =
+      (managedMarkersPresent ? snapshot.dataTableLines : allDataTableLines)
+          .where(
+            (line) =>
+                !fixesSet.contains(line) && !straightBloomSet.contains(line),
+          )
+          .toSet();
+
+  final dataTableLines = <String>[];
+  final fixesLines = <String>[];
+  final importedStraightBloomLines = <String>[];
+  for (final line in allDataTableLines) {
+    if (straightBloomSet.contains(line)) {
+      importedStraightBloomLines.add(line);
+      continue;
+    }
+    if (fixesSet.contains(line)) {
+      fixesLines.add(line);
+      continue;
+    }
+    if (dataTableSet.contains(line)) {
+      dataTableLines.add(line);
+    }
+  }
+
+  return (
+    dataTableLines: ManagedHotfixService.mergeLines(const [], dataTableLines),
+    fixesLines: ManagedHotfixService.mergeLines(const [], fixesLines),
+    straightBloomLines: ManagedHotfixService.mergeLines(
+      const [],
+      importedStraightBloomLines,
+    ),
+    hasActiveStraightBloomLines: snapshot.hasActiveStraightBloomLines,
+  );
+}
+
+String _stripManagedHotfixBlockContents(String content) {
+  return _removeManagedHotfixArtifacts(content);
+}
+
+List<String> sanitizeManagedDataTableLines({
+  required Iterable<String> dataTableLines,
+  Iterable<String> straightBloomLines = const [],
+  Iterable<String> fixesLines = const [],
+}) {
+  final excluded = {
+    ...straightBloomLines.where(
+      (line) => line.trim().startsWith('+DataTable='),
+    ),
+    ...fixesLines.where((line) => line.trim().startsWith('+DataTable=')),
+  };
+  return ManagedHotfixService.mergeLines(
+    const [],
+    dataTableLines.where((line) => !excluded.contains(line.trim())),
+  );
+}
+
+String _removeManagedHotfixArtifacts(String content) {
+  final lines = content.split(RegExp(r'\r?\n'));
+  final output = <String>[];
+  final commentHeader = RegExp(r'^\s*#\s*(.+?)\s*$');
+  final sectionHeader = RegExp(r'^\s*\[[^\r\n\]]+\]\s*$');
+  var inAssetHotfix = false;
+  String? activeBlock;
+
+  for (final line in lines) {
+    final trimmed = line.trim();
+    if (sectionHeader.hasMatch(trimmed)) {
+      inAssetHotfix = trimmed.toLowerCase() == '[assethotfix]';
+      activeBlock = null;
+      output.add(line);
+      continue;
+    }
+    if (!inAssetHotfix) {
+      output.add(line);
+      continue;
+    }
+
+    final commentMatch = commentHeader.firstMatch(line);
+    if (commentMatch != null) {
+      final normalized = DataTableService._normalizeCommentLabel(
+        commentMatch.group(1)!,
+      );
+      activeBlock = normalized;
+      if (_managedHotfixBlockLabels.contains(normalized)) {
+        continue;
+      }
+      output.add(line);
+      continue;
+    }
+
+    final normalizedLine = _normalizeHotfixLine(line);
+    if (normalizedLine != null &&
+        activeBlock != null &&
+        _managedHotfixBlockLabels.contains(activeBlock)) {
+      continue;
+    }
+
+    output.add(line);
+  }
+
+  return output.join('\n').replaceAll(RegExp(r'\n{3,}'), '\n\n');
+}
+
+String rebuildManagedHotfixContent({
+  required String content,
+  required List<String> dataTableLines,
+  required bool dataTablesEnabled,
+  required List<String> straightBloomLines,
+  required bool straightBloomEnabled,
+  required List<String> curveTableLines,
+  required bool curveTablesEnabled,
+  required List<String> fixesLines,
+}) {
+  final lineEnding = content.contains('\r\n') ? '\r\n' : '\n';
+  final trailingNewline = content.endsWith('\n');
+  final managedBlockLines = <String>[];
+  final sanitizedDataTableLines = sanitizeManagedDataTableLines(
+    dataTableLines: dataTableLines,
+    straightBloomLines: straightBloomLines,
+    fixesLines: fixesLines,
+  );
+
+  void addBlock(String comment, Iterable<String> lines) {
+    final normalizedLines = ManagedHotfixService.mergeLines(const [], lines);
+    if (normalizedLines.isEmpty) return;
+    managedBlockLines.add(comment);
+    managedBlockLines.addAll(normalizedLines);
+  }
+
+  if (dataTablesEnabled) {
+    addBlock(BackendPaths.dataTableComment, sanitizedDataTableLines);
+  }
+  if (straightBloomEnabled) {
+    addBlock(BackendPaths.straightBloomComment, straightBloomLines);
+  }
+  if (curveTablesEnabled) {
+    addBlock(BackendPaths.curveTableComment, curveTableLines);
+  }
+  addBlock(BackendPaths.fixesComment, fixesLines);
+
+  final normalizedContent = _removeManagedHotfixArtifacts(
+    _removeDuplicateAssetHotfixHeaders(content),
+  );
+  final lines = normalizedContent.split(RegExp(r'\r?\n')).toList();
+  var assetIndex = lines.indexWhere((line) => line.trim() == '[AssetHotfix]');
+  if (assetIndex == -1) {
+    if (lines.isNotEmpty && lines.last.trim().isNotEmpty) {
+      lines.add('');
+    }
+    lines.add('[AssetHotfix]');
+    assetIndex = lines.length - 1;
+  }
+
+  if (managedBlockLines.isNotEmpty) {
+    lines.insertAll(assetIndex + 1, managedBlockLines);
+  }
+
+  var output = lines.join(lineEnding);
+  if (trailingNewline && !output.endsWith(lineEnding)) {
+    output = '$output$lineEnding';
+  }
+  return output;
+}
+
+class ManagedHotfixService {
+  static Future<void> ensureInitialized() async {
+    await _migrateLegacyManagedStorageFiles();
+    await _ensureManagedStorageFilesExist();
+    await _migrateDataTableLines();
+    await _migrateCurveTableLines();
+    await _migrateStraightBloomLines();
+    await _migrateFixesLines();
+    await rebuildDefaultGame();
+  }
+
+  static Future<void> rebuildDefaultGame() async {
+    final iniFile = File(BackendPaths.defaultGameIni);
+    if (!await iniFile.exists()) return;
+
+    final straightBloomLines =
+        await StraightBloomService._readConfiguredLines();
+    final fixesLines = await readLines(File(BackendPaths.fixesLinesIni));
+    final dataTableFile = File(BackendPaths.dataTableLinesIni);
+    final dataTableLines = sanitizeManagedDataTableLines(
+      dataTableLines: await readLines(dataTableFile),
+      straightBloomLines: straightBloomLines,
+      fixesLines: fixesLines,
+    );
+    await writeLines(dataTableFile, dataTableLines);
+    final curveLines = await readLines(File(BackendPaths.curveTableLinesIni));
+    final content = rebuildManagedHotfixContent(
+      content: await iniFile.readAsString(),
+      dataTableLines: dataTableLines,
+      dataTablesEnabled: await DataTableService.getUIEnabledState(),
+      straightBloomLines: straightBloomLines,
+      straightBloomEnabled: await StraightBloomService._readEnabledState(),
+      curveTableLines: curveLines,
+      curveTablesEnabled: await CurveTableService._readGlobalEnabledState(),
+      fixesLines: fixesLines,
+    );
+
     await iniFile.writeAsString(content);
+    await DataTableService.ensureAtlasTextHotfixInDefaultGame();
+  }
+
+  static Future<List<String>> readLines(File file) async {
+    if (!await file.exists()) return const [];
+    final lines = await file.readAsLines();
+    return _normalizeLines(lines);
+  }
+
+  static Future<void> writeLines(File file, Iterable<String> lines) async {
+    final normalized = _normalizeLines(lines);
+    await file.parent.create(recursive: true);
+    await file.writeAsString(
+      normalized.isEmpty ? '' : '${normalized.join('\n')}\n',
+    );
+  }
+
+  static Future<void> _ensureManagedStorageFilesExist() async {
+    for (final path in [
+      BackendPaths.curveTableLinesIni,
+      BackendPaths.dataTableLinesIni,
+      BackendPaths.straightBloomLinesIni,
+      BackendPaths.fixesLinesIni,
+    ]) {
+      final file = File(path);
+      if (await file.exists()) continue;
+      await file.parent.create(recursive: true);
+      await file.writeAsString('');
+    }
+  }
+
+  static Future<void> _migrateLegacyManagedStorageFiles() async {
+    await _migrateLegacyManagedStorageFile(
+      legacyPath: BackendPaths.legacyCurveTableLinesIni,
+      targetPath: BackendPaths.curveTableLinesIni,
+    );
+    await _migrateLegacyManagedStorageFile(
+      legacyPath: BackendPaths.legacyDataTableLinesIni,
+      targetPath: BackendPaths.dataTableLinesIni,
+    );
+  }
+
+  static Future<void> _migrateLegacyManagedStorageFile({
+    required String legacyPath,
+    required String targetPath,
+  }) async {
+    if (_samePath(legacyPath, targetPath)) return;
+
+    final legacyFile = File(legacyPath);
+    if (!await legacyFile.exists()) return;
+
+    final legacyLines = await readLines(legacyFile);
+    final targetFile = File(targetPath);
+    final targetLines = await readLines(targetFile);
+    final merged = mergeLines(targetLines, legacyLines);
+
+    if (merged.length != targetLines.length || !await targetFile.exists()) {
+      await writeLines(targetFile, merged);
+    }
+
+    try {
+      await legacyFile.delete();
+    } catch (_) {}
+  }
+
+  static List<String> mergeLines(
+    Iterable<String> primary,
+    Iterable<String> secondary,
+  ) {
+    final merged = <String>[];
+    final seen = <String>{};
+    for (final source in [primary, secondary]) {
+      for (final rawLine in source) {
+        final line = rawLine.trim();
+        if (line.isEmpty || !seen.add(line)) continue;
+        merged.add(line);
+      }
+    }
+    return merged;
+  }
+
+  static Future<void> _migrateDataTableLines() async {
+    final iniFile = File(BackendPaths.defaultGameIni);
+    if (!await iniFile.exists()) return;
+
+    final content = await iniFile.readAsString();
+    final snapshot = extractManagedHotfixSnapshot(
+      content: content,
+      straightBloomLines: await StraightBloomService._readConfiguredLines(),
+    );
+    final targetFile = File(BackendPaths.dataTableLinesIni);
+    final existing = await readLines(targetFile);
+    final merged = mergeLines(existing, snapshot.dataTableLines);
+    if (merged.length != existing.length) {
+      await writeLines(targetFile, merged);
+    }
+  }
+
+  static Future<void> _migrateCurveTableLines() async {
+    final iniFile = File(BackendPaths.defaultGameIni);
+    if (!await iniFile.exists()) return;
+
+    final content = await iniFile.readAsString();
+    final snapshot = extractManagedHotfixSnapshot(content: content);
+    final targetFile = File(BackendPaths.curveTableLinesIni);
+    final existing = await readLines(targetFile);
+
+    final legacyBackupFile = File(BackendPaths.modificationsBackup);
+    final legacyDisabledLines = <String>[];
+    if (await legacyBackupFile.exists()) {
+      try {
+        final json =
+            jsonDecode(await legacyBackupFile.readAsString())
+                as Map<String, dynamic>;
+        legacyDisabledLines.addAll(
+          (json['curveTableLines'] as List<dynamic>? ?? [])
+              .whereType<String>()
+              .map((line) => line.trim())
+              .where((line) => line.isNotEmpty),
+        );
+      } catch (_) {}
+      try {
+        await legacyBackupFile.delete();
+      } catch (_) {}
+    }
+
+    final merged = mergeLines(existing, [
+      ...legacyDisabledLines,
+      ...snapshot.curveTableLines,
+    ]);
+    if (merged.length != existing.length) {
+      await writeLines(targetFile, merged);
+    }
+  }
+
+  static Future<void> _migrateStraightBloomLines() async {
+    final iniFile = File(BackendPaths.defaultGameIni);
+    if (!await iniFile.exists()) return;
+
+    final targetFile = File(BackendPaths.straightBloomLinesIni);
+    final existing = await readLines(targetFile);
+    final snapshot = extractManagedHotfixSnapshot(
+      content: await iniFile.readAsString(),
+      straightBloomLines: existing,
+    );
+    final merged = mergeLines(existing, snapshot.straightBloomLines);
+    if (merged.length != existing.length || !await targetFile.exists()) {
+      await writeLines(targetFile, merged);
+    }
+  }
+
+  static Future<void> _migrateFixesLines() async {
+    final iniFile = File(BackendPaths.defaultGameIni);
+    if (!await iniFile.exists()) return;
+
+    final snapshot = extractManagedHotfixSnapshot(
+      content: await iniFile.readAsString(),
+      straightBloomLines: await StraightBloomService._readConfiguredLines(),
+    );
+    final targetFile = File(BackendPaths.fixesLinesIni);
+    final existing = await readLines(targetFile);
+    final merged = mergeLines(existing, snapshot.fixesLines);
+    if (merged.length != existing.length || !await targetFile.exists()) {
+      await writeLines(targetFile, merged);
+    }
+  }
+
+  static List<String> _normalizeLines(Iterable<String> lines) {
+    final normalized = <String>[];
+    final seen = <String>{};
+    for (final rawLine in lines) {
+      final line = rawLine.trim();
+      if (line.isEmpty || !seen.add(line)) continue;
+      normalized.add(line);
+    }
+    return normalized;
+  }
+}
+
+class StraightBloomService {
+  static Future<bool> isEnabled() async {
+    return _readEnabledState();
+  }
+
+  static Future<void> setEnabled(
+    bool enabled, {
+    bool syncUserToggleStates = true,
+  }) async {
+    await _writeEnabledState(
+      enabled,
+      syncUserToggleStates: syncUserToggleStates,
+    );
+    await ManagedHotfixService.rebuildDefaultGame();
+  }
+
+  static Future<void> _writeEnabledState(
+    bool enabled, {
+    bool syncUserToggleStates = true,
+  }) async {
+    if (syncUserToggleStates) {
+      await UserToggleStatesService.updateState(
+        (current) => current.copyWith(straightBloomEnabled: enabled),
+      );
+    }
   }
 
   static Future<void> importFromIni(String importPath) async {
     final source = File(importPath);
-    final sniperFile = File(BackendPaths.sniperJson);
-    if (!await source.exists() || !await sniperFile.exists()) return;
+    if (!await source.exists()) return;
     final importContent = await source.readAsString();
     final block = _extractLastHotfixBlock(importContent);
     if (block.trim().isEmpty) return;
@@ -12855,13 +14671,43 @@ class StraightBloomService {
         .where((line) => line.isNotEmpty)
         .map((line) => line.startsWith(';') ? line.substring(1) : line)
         .toSet();
-    final lines =
-        (jsonDecode(await sniperFile.readAsString())
-                as Map<String, dynamic>)['lines']
-            as List<dynamic>;
-    final sniperLines = lines.cast<String>();
+    final sniperLines = await _readConfiguredLines();
     final hasAll = sniperLines.every((line) => blockLines.contains(line));
     await setEnabled(hasAll);
+  }
+
+  static Future<bool> _readEnabledState() async {
+    final saved = await UserToggleStatesService.readSavedBool(
+      'straightBloomEnabled',
+    );
+    if (saved != null) {
+      return saved;
+    }
+    final stateFile = File(BackendPaths.straightBloomStateJson);
+    if (await stateFile.exists()) {
+      try {
+        final json =
+            jsonDecode(await stateFile.readAsString()) as Map<String, dynamic>;
+        return json['enabled'] == true;
+      } catch (_) {}
+    }
+    return _detectEnabledFromDefaultGame();
+  }
+
+  static Future<bool> _detectEnabledFromDefaultGame() async {
+    final iniFile = File(BackendPaths.defaultGameIni);
+    if (!await iniFile.exists()) return false;
+    final snapshot = extractManagedHotfixSnapshot(
+      content: await iniFile.readAsString(),
+      straightBloomLines: await _readConfiguredLines(),
+    );
+    return snapshot.hasActiveStraightBloomLines;
+  }
+
+  static Future<List<String>> _readConfiguredLines() async {
+    return ManagedHotfixService.readLines(
+      File(BackendPaths.straightBloomLinesIni),
+    );
   }
 }
 
@@ -12929,38 +14775,6 @@ class CustomCurveGroupInfo {
   final String id;
   final String name;
   final String? imagePath;
-}
-
-class CustomDataTableInput {
-  const CustomDataTableInput({
-    required this.weaponName,
-    required this.weaponIdLine,
-    required this.damagePB,
-    required this.envDamage,
-    required this.advancedMode,
-    this.imageSourcePath,
-    this.damageMid,
-    this.damageLong,
-    this.damageMaxRange,
-    this.rarityConfigs,
-    this.clipSize,
-    this.reloadTime,
-  });
-
-  final String weaponName;
-  final String weaponIdLine;
-  final String damagePB;
-  final String envDamage;
-  final bool advancedMode;
-  final String? imageSourcePath;
-  final String? damageMid;
-  final String? damageLong;
-  final String? damageMaxRange;
-  // Map of rarity name -> damage configuration
-  // Each config contains: damagePB, envDamage, damageMid, damageLong, damageMaxRange, weaponIdLine, reloadTime
-  final Map<String, Map<String, String>>? rarityConfigs;
-  final String? clipSize;
-  final String? reloadTime;
 }
 
 class DataTableWeapon {
@@ -13310,6 +15124,49 @@ class _ImportCurveDraft {
   String selectedGroupId;
 }
 
+String? _normalizeCustomGroupImagePath(Object? rawPath) {
+  final value = rawPath?.toString().trim() ?? '';
+  if (value.isEmpty) {
+    return null;
+  }
+  final normalized = value.replaceAll('\\', '/');
+  if (!normalized.startsWith('custom-groups/')) {
+    return null;
+  }
+  return normalized;
+}
+
+List<String> customGroupImagePathsToDelete(
+  Map<String, dynamic> curveMap,
+  String deletedGroupId,
+) {
+  final deletedPaths = <String>{};
+  final remainingPaths = <String>{};
+
+  for (final value in curveMap.values) {
+    if (value is! Map) {
+      continue;
+    }
+    final data = Map<String, dynamic>.from(value);
+    final imagePath = _normalizeCustomGroupImagePath(
+      data['groupImagePath'] ?? data['imagePath'],
+    );
+    if (imagePath == null) {
+      continue;
+    }
+
+    if (data['isCustom'] == true && data['groupId'] == deletedGroupId) {
+      deletedPaths.add(imagePath);
+    } else {
+      remainingPaths.add(imagePath);
+    }
+  }
+
+  final orphanedPaths = deletedPaths.difference(remainingPaths).toList();
+  orphanedPaths.sort();
+  return orphanedPaths;
+}
+
 class CurveTableService {
   static CurveEntry _entryFromJson(String id, Map<String, dynamic> data) {
     return CurveEntry(
@@ -13354,6 +15211,14 @@ class CurveTableService {
     }
   }
 
+  static Future<void> _writeCurveMap(
+    File file,
+    Map<String, dynamic> map,
+  ) async {
+    await file.parent.create(recursive: true);
+    await file.writeAsString(const JsonEncoder.withIndent('  ').convert(map));
+  }
+
   static Future<Map<String, dynamic>?> _loadDefaultCurveMap() async {
     final candidates = <String>[
       BackendPaths.curvesDefaultsJson,
@@ -13377,10 +15242,7 @@ class CurveTableService {
     if (defaults == null || defaults.isEmpty) return;
 
     if (!await curvesFile.exists()) {
-      await curvesFile.parent.create(recursive: true);
-      await curvesFile.writeAsString(
-        const JsonEncoder.withIndent('  ').convert(defaults),
-      );
+      await _writeCurveMap(curvesFile, defaults);
       return;
     }
 
@@ -13426,9 +15288,7 @@ class CurveTableService {
     }
 
     if (changed) {
-      await curvesFile.writeAsString(
-        const JsonEncoder.withIndent('  ').convert(current),
-      );
+      await _writeCurveMap(curvesFile, current);
     }
   }
 
@@ -13447,44 +15307,12 @@ class CurveTableService {
   }
 
   static Future<bool> areGlobalEnabled() async {
-    final backup = File(BackendPaths.modificationsBackup);
-    return !(await backup.exists());
+    return _readGlobalEnabledState();
   }
 
   static Future<void> toggleGlobal() async {
-    final iniFile = File(BackendPaths.defaultGameIni);
-    final backupFile = File(BackendPaths.modificationsBackup);
-    if (!await iniFile.exists()) return;
-    var content = await iniFile.readAsString();
-    if (await backupFile.exists()) {
-      final backup =
-          jsonDecode(await backupFile.readAsString()) as Map<String, dynamic>;
-      final lines = (backup['curveTableLines'] as List<dynamic>? ?? [])
-          .cast<String>();
-      for (final line in lines) {
-        content = content.replaceAll(';$line', line);
-      }
-      await iniFile.writeAsString(content);
-      await backupFile.delete();
-    } else {
-      final regex = RegExp('^\\+CurveTable=.*;RowUpdate;.*\$', multiLine: true);
-      final matches = regex
-          .allMatches(content)
-          .map((m) => m.group(0)!)
-          .toList();
-      final active = <String>[];
-      for (final line in matches) {
-        if (!line.startsWith(';')) {
-          active.add(line);
-          content = content.replaceAll(
-            RegExp('^${RegExp.escape(line)}\$', multiLine: true),
-            ';$line',
-          );
-        }
-      }
-      await iniFile.writeAsString(content);
-      await backupFile.writeAsString(jsonEncode({'curveTableLines': active}));
-    }
+    await _writeGlobalEnabledState(!(await _readGlobalEnabledState()));
+    await ManagedHotfixService.rebuildDefaultGame();
   }
 
   static _CurveEntryResolvedState _resolveCurveState(
@@ -13535,14 +15363,12 @@ class CurveTableService {
   static Future<Map<String, _CurveEntryResolvedState>> _loadCurveStates(
     Iterable<CurveEntry> entries,
   ) async {
-    final iniFile = File(BackendPaths.defaultGameIni);
-    if (!await iniFile.exists()) {
+    final content = await _readConfiguredContent();
+    if (content.isEmpty) {
       return <String, _CurveEntryResolvedState>{
         for (final entry in entries) entry.id: const _CurveEntryResolvedState(),
       };
     }
-
-    final content = await iniFile.readAsString();
     final states = <String, _CurveEntryResolvedState>{};
     for (final entry in entries) {
       states[entry.id] = _resolveCurveState(content, entry);
@@ -13551,16 +15377,14 @@ class CurveTableService {
   }
 
   static Future<bool> isCurveEnabled(CurveEntry entry) async {
-    final iniFile = File(BackendPaths.defaultGameIni);
-    if (!await iniFile.exists()) return false;
-    final content = await iniFile.readAsString();
+    final content = await _readConfiguredContent();
+    if (content.isEmpty) return false;
     return _resolveCurveState(content, entry).enabled;
   }
 
   static Future<String?> getCurrentValue(CurveEntry entry) async {
-    final iniFile = File(BackendPaths.defaultGameIni);
-    if (!await iniFile.exists()) return null;
-    final content = await iniFile.readAsString();
+    final content = await _readConfiguredContent();
+    if (content.isEmpty) return null;
     return _resolveCurveState(content, entry).value;
   }
 
@@ -13569,9 +15393,7 @@ class CurveTableService {
     bool enabled, {
     String? customValue,
   }) async {
-    final iniFile = File(BackendPaths.defaultGameIni);
-    if (!await iniFile.exists()) return;
-    var content = await iniFile.readAsString();
+    var content = await _readConfiguredContent();
     if (!enabled) {
       if (entry.multiLines.isNotEmpty) {
         for (final line in entry.multiLines) {
@@ -13592,7 +15414,10 @@ class CurveTableService {
         content = content.replaceAll(regex, '');
       }
       content = content.replaceAll(RegExp('\n\n+'), '\n');
-      await iniFile.writeAsString(content);
+      await _writeConfiguredContent(content);
+      if (await _readGlobalEnabledState()) {
+        await ManagedHotfixService.rebuildDefaultGame();
+      }
       return;
     }
 
@@ -13616,14 +15441,6 @@ class CurveTableService {
     }
     content = content.replaceAll(RegExp('\n\n+'), '\n');
 
-    final ensured = IniService.ensureAssetSection(
-      content,
-      BackendPaths.curveTableComment,
-      preferPrepend: true,
-    );
-    content = ensured.content;
-    final insertPoint = ensured.insertPoint;
-
     if (entry.multiLines.isNotEmpty) {
       final lines = entry.multiLines.map((line) {
         if (entry.type == 'amount' && customValue != null) {
@@ -13631,18 +15448,25 @@ class CurveTableService {
         }
         return line;
       }).toList();
-      content =
-          '${content.substring(0, insertPoint)}${lines.join('\n')}\n${content.substring(insertPoint)}';
+      content = [
+        content.trim(),
+        lines.join('\n'),
+      ].where((value) => value.isNotEmpty).join('\n');
     } else {
       final pathPart = entry.pathPart ?? BackendPaths.defaultCurvePath;
       final value = entry.type == 'static'
           ? (entry.staticValue ?? '0')
           : (customValue ?? '0');
       final line = '+CurveTable=$pathPart;RowUpdate;${entry.key};0;$value';
-      content =
-          '${content.substring(0, insertPoint)}$line\n${content.substring(insertPoint)}';
+      content = [
+        content.trim(),
+        line,
+      ].where((value) => value.isNotEmpty).join('\n');
     }
-    await iniFile.writeAsString(content);
+    await _writeConfiguredContent(content);
+    if (await _readGlobalEnabledState()) {
+      await ManagedHotfixService.rebuildDefaultGame();
+    }
   }
 
   static Future<void> importFromIni(String importPath) async {
@@ -13667,18 +15491,20 @@ class CurveTableService {
       final pathPart = match.group(1)!.trim();
       final key = match.group(2)!.trim();
       final rawLine = match.group(0)!.trim();
+      final isCommented = rawLine.startsWith(';');
       final normalized = rawLine.startsWith(';')
           ? rawLine.substring(1).trim()
           : rawLine;
       allNormalized.add(normalized);
       final groupKey = '$pathPart|||$key';
-      grouped.putIfAbsent(groupKey, () => []).add(normalized);
+      if (!isCommented) {
+        grouped.putIfAbsent(groupKey, () => []).add(normalized);
+      }
     }
 
     final curvesFile = File(BackendPaths.curvesJson);
     if (!await curvesFile.exists()) {
-      await curvesFile.parent.create(recursive: true);
-      await curvesFile.writeAsString('{}');
+      await _writeCurveMap(curvesFile, const <String, dynamic>{});
     }
 
     final existing = await CurveTableService.loadCurves();
@@ -13716,9 +15542,7 @@ class CurveTableService {
 
     for (final entry in grouped.entries) {
       final parts = entry.key.split('|||');
-      final activeLines = entry.value
-          .where((line) => !line.startsWith(';'))
-          .toList();
+      final activeLines = entry.value;
       if (activeLines.isNotEmpty) {
         await CurveTableService.applyCurveLines(
           parts[0],
@@ -13728,15 +15552,17 @@ class CurveTableService {
       }
     }
 
-    final backupFile = File(BackendPaths.modificationsBackup);
     if (matches.isNotEmpty) {
-      if (await backupFile.exists()) {
-        await backupFile.delete();
-      }
-    } else {
-      await backupFile.writeAsString(
-        jsonEncode({'curveTableLines': allNormalized}),
+      final activeLines = grouped.values
+          .expand((lines) => lines)
+          .toList(growable: false);
+      final normalized = activeLines.isEmpty ? allNormalized : activeLines;
+      await ManagedHotfixService.writeLines(
+        File(BackendPaths.curveTableLinesIni),
+        normalized,
       );
+      await _writeGlobalEnabledState(activeLines.isNotEmpty);
+      await ManagedHotfixService.rebuildDefaultGame();
     }
   }
 
@@ -13760,9 +15586,7 @@ class CurveTableService {
     String key,
     List<String> lines,
   ) async {
-    final iniFile = File(BackendPaths.defaultGameIni);
-    if (!await iniFile.exists()) return;
-    var content = await iniFile.readAsString();
+    var content = await _readConfiguredContent();
     for (final line in lines) {
       final parts = _splitCurveLine(line);
       if (parts == null) continue;
@@ -13773,36 +15597,25 @@ class CurveTableService {
       content = content.replaceAll(regex, '');
     }
     content = content.replaceAll(RegExp('\n\n+'), '\n');
-    final ensured = IniService.ensureAssetSection(
-      content,
-      BackendPaths.curveTableComment,
-      preferPrepend: true,
-    );
-    content = ensured.content;
-    final insertPoint = ensured.insertPoint;
-    content =
-        '${content.substring(0, insertPoint)}${lines.join('\n')}\n${content.substring(insertPoint)}';
+    content = [
+      content.trim(),
+      lines.join('\n'),
+    ].where((value) => value.isNotEmpty).join('\n');
     content = content.replaceAll(RegExp(r'\n\n+'), '\n');
-    await iniFile.writeAsString(content);
+    await _writeConfiguredContent(content);
+    if (await _readGlobalEnabledState()) {
+      await ManagedHotfixService.rebuildDefaultGame();
+    }
   }
 
   static Future<void> clearAllCurveTables() async {
-    final iniFile = File(BackendPaths.defaultGameIni);
-    final backupFile = File(BackendPaths.modificationsBackup);
     final curvesFile = File(BackendPaths.curvesJson);
-
-    if (!await iniFile.exists()) return;
-    var content = await iniFile.readAsString();
-    content = content.replaceAll(
-      RegExp('^\\+CurveTable=.*\$', multiLine: true),
-      '',
+    await ManagedHotfixService.writeLines(
+      File(BackendPaths.curveTableLinesIni),
+      const [],
     );
-    content = content.replaceAll(RegExp('\n\n+'), '\n');
-    await iniFile.writeAsString(content);
-
-    if (await backupFile.exists()) {
-      await backupFile.delete();
-    }
+    await _writeGlobalEnabledState(false);
+    await ManagedHotfixService.rebuildDefaultGame();
 
     // Remove all entries in the "Other" group
     if (await curvesFile.exists()) {
@@ -13812,7 +15625,7 @@ class CurveTableService {
         if (value is! Map<String, dynamic>) return false;
         return value['groupId'] == 'other';
       });
-      await curvesFile.writeAsString(jsonEncode(curvesData));
+      await _writeCurveMap(curvesFile, curvesData);
     }
   }
 
@@ -13891,8 +15704,50 @@ class CurveTableService {
       nextId++;
     }
 
-    await curvesFile.writeAsString(
-      const JsonEncoder.withIndent('  ').convert(map),
+    await _writeCurveMap(curvesFile, map);
+  }
+
+  static Future<bool> _readGlobalEnabledState() async {
+    final saved = await UserToggleStatesService.readSavedBool(
+      'curveTablesEnabled',
+    );
+    if (saved != null) {
+      return saved;
+    }
+    final stateFile = File(BackendPaths.curveTableStateJson);
+    if (await stateFile.exists()) {
+      try {
+        final json =
+            jsonDecode(await stateFile.readAsString()) as Map<String, dynamic>;
+        return json['enabled'] == true;
+      } catch (_) {}
+    }
+    final legacyBackup = File(BackendPaths.modificationsBackup);
+    return !await legacyBackup.exists();
+  }
+
+  static Future<void> _writeGlobalEnabledState(
+    bool enabled, {
+    bool syncUserToggleStates = true,
+  }) async {
+    if (syncUserToggleStates) {
+      await UserToggleStatesService.updateState(
+        (current) => current.copyWith(curveTablesEnabled: enabled),
+      );
+    }
+  }
+
+  static Future<String> _readConfiguredContent() async {
+    final lines = await ManagedHotfixService.readLines(
+      File(BackendPaths.curveTableLinesIni),
+    );
+    return lines.join('\n');
+  }
+
+  static Future<void> _writeConfiguredContent(String content) async {
+    await ManagedHotfixService.writeLines(
+      File(BackendPaths.curveTableLinesIni),
+      content.split('\n'),
     );
   }
 
@@ -13902,13 +15757,11 @@ class CurveTableService {
     final map =
         jsonDecode(await curvesFile.readAsString()) as Map<String, dynamic>;
     final entriesToDelete = <String, CurveEntry>{};
-    String? groupImagePath;
+    final imagePathsToDelete = customGroupImagePathsToDelete(map, groupId);
     for (final entry in map.entries) {
       final data = entry.value as Map<String, dynamic>;
       if (data['isCustom'] == true && data['groupId'] == groupId) {
         entriesToDelete[entry.key] = _entryFromJson(entry.key, data);
-        groupImagePath ??=
-            (data['groupImagePath'] ?? data['imagePath']) as String?;
       }
     }
     for (final entry in entriesToDelete.values) {
@@ -13917,18 +15770,21 @@ class CurveTableService {
     for (final key in entriesToDelete.keys) {
       map.remove(key);
     }
-    await curvesFile.writeAsString(
-      const JsonEncoder.withIndent('  ').convert(map),
-    );
+    await _writeCurveMap(curvesFile, map);
 
-    if (groupImagePath != null && groupImagePath.isNotEmpty) {
-      if (groupImagePath.startsWith('custom-groups')) {
-        final imageFile = File(
-          joinPath([getBackendRoot(), 'public', 'items', groupImagePath]),
-        );
-        if (await imageFile.exists()) {
-          await imageFile.delete();
-        }
+    for (final imagePath in imagePathsToDelete) {
+      final relativeParts = imagePath
+          .split('/')
+          .where((segment) => segment.isNotEmpty)
+          .toList();
+      if (relativeParts.isEmpty) {
+        continue;
+      }
+      final imageFile = File(
+        joinPath([getBackendRoot(), 'public', 'items', ...relativeParts]),
+      );
+      if (await imageFile.exists()) {
+        await imageFile.delete();
       }
     }
   }
@@ -13943,9 +15799,7 @@ class CurveTableService {
     final entry = _entryFromJson(curveId, data);
     await setCurveEnabled(entry, false);
     map.remove(curveId);
-    await curvesFile.writeAsString(
-      const JsonEncoder.withIndent('  ').convert(map),
-    );
+    await _writeCurveMap(curvesFile, map);
   }
 
   static Future<void> updateCustomCurve(
@@ -13991,9 +15845,7 @@ class CurveTableService {
       groupImagePath: updated.groupImagePath ?? oldEntry.groupImagePath,
     );
     await setCurveEnabled(newEntry, true);
-    await curvesFile.writeAsString(
-      const JsonEncoder.withIndent('  ').convert(map),
-    );
+    await _writeCurveMap(curvesFile, map);
   }
 
   static Future<void> updateCustomGroup(
@@ -14030,16 +15882,13 @@ class CurveTableService {
         map[entry.key] = data;
       }
     }
-    await curvesFile.writeAsString(
-      const JsonEncoder.withIndent('  ').convert(map),
-    );
+    await _writeCurveMap(curvesFile, map);
   }
 
   static Future<void> _ensureCurveInJson(String key, String pathPart) async {
     final curvesFile = File(BackendPaths.curvesJson);
     if (!await curvesFile.exists()) {
-      await curvesFile.parent.create(recursive: true);
-      await curvesFile.writeAsString('{}');
+      await _writeCurveMap(curvesFile, const <String, dynamic>{});
     }
     final map =
         jsonDecode(await curvesFile.readAsString()) as Map<String, dynamic>;
@@ -14065,9 +15914,7 @@ class CurveTableService {
       'groupId': 'other',
       'groupName': 'Other',
     };
-    await curvesFile.writeAsString(
-      const JsonEncoder.withIndent('  ').convert(map),
-    );
+    await _writeCurveMap(curvesFile, map);
   }
 
   static String _humanizeKey(String key) {
@@ -14192,7 +16039,10 @@ class DataTableService {
     return _backendInfiniteRenderFilterLines.every(active.contains);
   }
 
-  static Future<void> setBackendInfiniteRenderEnabled(bool enabled) async {
+  static Future<void> setBackendInfiniteRenderEnabled(
+    bool enabled, {
+    bool syncUserToggleStates = true,
+  }) async {
     final engineFile = File(BackendPaths.defaultEngineIni);
     if (!await engineFile.exists()) return;
     final content = await engineFile.readAsString();
@@ -14225,13 +16075,21 @@ class DataTableService {
       }
     }
 
-    if (!changed) return;
+    if (!changed) {
+      if (syncUserToggleStates) {
+        await UserToggleStatesService.syncFromCurrentState();
+      }
+      return;
+    }
 
     var updatedContent = lines.join(lineEnding);
     if (hasTrailingNewline && !updatedContent.endsWith(lineEnding)) {
       updatedContent = '$updatedContent$lineEnding';
     }
     await engineFile.writeAsString(updatedContent);
+    if (syncUserToggleStates) {
+      await UserToggleStatesService.syncFromCurrentState();
+    }
   }
 
   static Future<bool> isSwapCooldownEnabled() async {
@@ -14254,7 +16112,10 @@ class DataTableService {
     return false;
   }
 
-  static Future<void> setSwapCooldownEnabled(bool enabled) async {
+  static Future<void> setSwapCooldownEnabled(
+    bool enabled, {
+    bool syncUserToggleStates = true,
+  }) async {
     final engineFile = File(BackendPaths.defaultEngineIni);
     if (!await engineFile.exists()) return;
     final content = await engineFile.readAsString();
@@ -14286,13 +16147,21 @@ class DataTableService {
       }
     }
 
-    if (!changed) return;
+    if (!changed) {
+      if (syncUserToggleStates) {
+        await UserToggleStatesService.syncFromCurrentState();
+      }
+      return;
+    }
 
     var updatedContent = lines.join(lineEnding);
     if (hasTrailingNewline && !updatedContent.endsWith(lineEnding)) {
       updatedContent = '$updatedContent$lineEnding';
     }
     await engineFile.writeAsString(updatedContent);
+    if (syncUserToggleStates) {
+      await UserToggleStatesService.syncFromCurrentState();
+    }
   }
 
   static Future<void> ensureAtlasTextHotfixInDefaultGame() async {
@@ -14396,7 +16265,124 @@ class DataTableService {
     );
   }
 
+  static String _dataTableSignature(Map<String, dynamic> data) {
+    final weaponPath = (data['weaponPath']?.toString().trim() ?? '')
+        .toLowerCase();
+    final weaponId = (data['weaponId']?.toString().trim() ?? '').toLowerCase();
+    if (weaponPath.isNotEmpty && weaponId.isNotEmpty) {
+      return '$weaponPath|||$weaponId';
+    }
+
+    final variants = data['variants'];
+    if (variants is! List || variants.isEmpty) {
+      return '';
+    }
+
+    final variantIds =
+        variants
+            .map((variant) {
+              if (variant is! Map) return '';
+              return (variant['weaponId']?.toString().trim() ?? '')
+                  .toLowerCase();
+            })
+            .where((id) => id.isNotEmpty)
+            .toList()
+          ..sort();
+    if (variantIds.isEmpty) {
+      return '';
+    }
+
+    return '$weaponPath|||${variantIds.join('||')}';
+  }
+
+  static Future<void> _writeDataTableMap(
+    File file,
+    Map<String, dynamic> map,
+  ) async {
+    await file.parent.create(recursive: true);
+    await file.writeAsString(const JsonEncoder.withIndent('  ').convert(map));
+  }
+
+  static Future<Map<String, dynamic>?> _loadDefaultDataTableMap() async {
+    final candidates = <String>[
+      BackendPaths.dataTablesDefaultsJson,
+      joinPath([
+        getInstallationRoot(),
+        'responses',
+        'datatables.defaults.json',
+      ]),
+      joinPath([getInstallationRoot(), 'responses', 'datatables.json']),
+    ];
+
+    for (final candidate in candidates) {
+      final map = await _readJsonObject(File(candidate));
+      if (map != null && map.isNotEmpty) {
+        return map;
+      }
+    }
+
+    return null;
+  }
+
+  static Future<void> _mergeMissingDefaultDataTables() async {
+    final dataTablesFile = File(BackendPaths.dataTablesJson);
+    final defaults = await _loadDefaultDataTableMap();
+    if (defaults == null || defaults.isEmpty) return;
+
+    if (!await dataTablesFile.exists()) {
+      await _writeDataTableMap(dataTablesFile, defaults);
+      return;
+    }
+
+    final current = await _readJsonObject(dataTablesFile);
+    if (current == null) return;
+
+    final existingSignatures = <String>{};
+    for (final value in current.values) {
+      if (value is! Map) continue;
+      final signature = _dataTableSignature(Map<String, dynamic>.from(value));
+      if (signature.isNotEmpty) {
+        existingSignatures.add(signature);
+      }
+    }
+
+    var maxId = 0;
+    for (final id in current.keys) {
+      final parsed = int.tryParse(id);
+      if (parsed != null && parsed > maxId) {
+        maxId = parsed;
+      }
+    }
+
+    var changed = false;
+    final defaultEntries = defaults.entries.toList()
+      ..sort((a, b) {
+        final aId = int.tryParse(a.key) ?? (1 << 30);
+        final bId = int.tryParse(b.key) ?? (1 << 30);
+        return aId.compareTo(bId);
+      });
+
+    for (final entry in defaultEntries) {
+      if (entry.value is! Map) continue;
+      final dataTable = Map<String, dynamic>.from(entry.value);
+      final signature = _dataTableSignature(dataTable);
+      if (signature.isEmpty || existingSignatures.contains(signature)) {
+        continue;
+      }
+
+      maxId += 1;
+      current['$maxId'] = jsonDecode(jsonEncode(dataTable));
+      existingSignatures.add(signature);
+      changed = true;
+    }
+
+    if (changed) {
+      await _writeDataTableMap(dataTablesFile, current);
+    }
+  }
+
   static Future<List<DataTableWeapon>> loadWeapons() async {
+    await _mergeMissingDefaultDataTables();
     final dataTablesFile = File(BackendPaths.dataTablesJson);
     if (!await dataTablesFile.exists()) {
       return [];
@@ -14447,14 +16433,16 @@ class DataTableService {
   }
 
   static Future<bool> areDataTablesEnabled() async {
-    final iniFile = File(BackendPaths.defaultGameIni);
-    if (!await iniFile.exists()) return false;
-    final content = await iniFile.readAsString();
-    final regex = RegExp(r'^\+DataTable=.*$', multiLine: true);
-    return regex.hasMatch(content);
+    return getUIEnabledState();
   }
 
   static Future<bool> getUIEnabledState() async {
+    final saved = await UserToggleStatesService.readSavedBool(
+      'dataTablesEnabled',
+    );
+    if (saved != null) {
+      return saved;
+    }
     final stateFile = File(BackendPaths.dataTablesUiState);
     if (await stateFile.exists()) {
       try {
@@ -14466,6 +16454,13 @@ class DataTableService {
       }
     }
 
+    final configured = await ManagedHotfixService.readLines(
+      File(BackendPaths.dataTableLinesIni),
+    );
+    if (configured.isNotEmpty) {
+      return true;
+    }
+
     // Legacy fallback: migrate from modifications-backup.json if present.
     final backupFile = File(BackendPaths.modificationsBackup);
     if (!await backupFile.exists()) return false;
@@ -14473,9 +16468,6 @@ class DataTableService {
       final backup =
           jsonDecode(await backupFile.readAsString()) as Map<String, dynamic>;
       final enabled = backup['dataTablesUIEnabled'] == true;
-      try {
-        await _writeUiState(enabled);
-      } catch (_) {}
       if (!backup.containsKey('curveTableLines')) {
         final extraKeys = backup.keys
             .where((key) => key != 'dataTablesUIEnabled')
@@ -14494,12 +16486,18 @@ class DataTableService {
 
   static Future<void> setUIEnabledState(bool enabled) async {
     await _writeUiState(enabled);
+    await ManagedHotfixService.rebuildDefaultGame();
   }
 
-  static Future<void> _writeUiState(bool enabled) async {
-    final stateFile = File(BackendPaths.dataTablesUiState);
-    await stateFile.parent.create(recursive: true);
-    await stateFile.writeAsString(jsonEncode({'enabled': enabled}));
+  static Future<void> _writeUiState(
+    bool enabled, {
+    bool syncUserToggleStates = true,
+  }) async {
+    if (syncUserToggleStates) {
+      await UserToggleStatesService.updateState(
+        (current) => current.copyWith(dataTablesEnabled: enabled),
+      );
+    }
   }
 
   static Future<DataTableSettings> getWeaponSettings(
@@ -14521,8 +16519,8 @@ class DataTableService {
       defaultReloadTime = variant.reloadTime ?? '2.0';
     }
 
-    final iniFile = File(BackendPaths.defaultGameIni);
-    if (!await iniFile.exists()) {
+    final content = await _readConfiguredContent();
+    if (content.isEmpty) {
       return DataTableSettings(
         damageEnabled: false,
         envDamageEnabled: false,
@@ -14536,7 +16534,6 @@ class DataTableService {
         reloadTimeValue: defaultReloadTime,
       );
     }
-    final content = await iniFile.readAsString();
     final customValues = <String, String>{};
     bool hasDamage = false;
     bool hasEnvDamage = false;
@@ -14660,12 +16657,7 @@ class DataTableService {
     String? variantWeaponId,
   }) async {
     final weaponId = variantWeaponId ?? weapon.weaponId;
-    final iniFile = File(BackendPaths.defaultGameIni);
-    if (!await iniFile.exists()) return;
-    var content = await iniFile.readAsString();
-    final split = _splitProtectedFixesBlock(content);
-    var editable = split.editable;
-    final protected = split.protected;
+    var editable = await _readConfiguredContent();
 
     // Remove existing DataTable lines for this weapon
     for (final field in [
@@ -14738,112 +16730,575 @@ class DataTableService {
     }
 
     if (linesToAdd.isNotEmpty) {
-      final ensured = IniService.ensureAssetSection(
-        editable,
-        BackendPaths.dataTableComment,
-        preferPrepend: true,
-      );
-      editable = ensured.content;
-      final insertPoint = ensured.insertPoint;
-      editable =
-          '${editable.substring(0, insertPoint)}${linesToAdd.join('\n')}\n${editable.substring(insertPoint)}';
+      editable = [
+        editable.trim(),
+        linesToAdd.join('\n'),
+      ].where((value) => value.isNotEmpty).join('\n');
     }
 
-    await iniFile.writeAsString('$editable$protected');
+    await _writeConfiguredContent(editable);
+    if (await getUIEnabledState()) {
+      await ManagedHotfixService.rebuildDefaultGame();
+    }
   }
 
   static Future<void> clearAllDataTables() async {
-    final iniFile = File(BackendPaths.defaultGameIni);
-    if (!await iniFile.exists()) return;
-    var content = await iniFile.readAsString();
-    content = clearDataTableSections(content);
-    await iniFile.writeAsString(content);
-  }
-
-  static Future<void> addCustomWeapon(CustomDataTableInput input) async {
-    // Add weapon to datatables-ui.json
-    final dataTablesFile = File(BackendPaths.dataTablesJson);
-    Map<String, dynamic> data = {};
-    if (await dataTablesFile.exists()) {
-      data =
-          jsonDecode(await dataTablesFile.readAsString())
-              as Map<String, dynamic>;
+    final wasEnabled = await getUIEnabledState();
+    await _writeConfiguredContent('');
+    await _writeUiState(false);
+    if (wasEnabled) {
+      await ManagedHotfixService.rebuildDefaultGame();
     }
-
-    // Generate unique ID
-    final weaponId = 'custom-${DateTime.now().millisecondsSinceEpoch}';
-
-    // Save image if provided
-    String? savedImagePath;
-    if (input.imageSourcePath != null && input.imageSourcePath!.isNotEmpty) {
-      final sourceFile = File(input.imageSourcePath!);
-      if (await sourceFile.exists()) {
-        final fileName = 'custom_${DateTime.now().millisecondsSinceEpoch}.png';
-        final targetPath = joinPath([
-          getBackendRoot(),
-          'public',
-          'items',
-          fileName,
-        ]);
-        await sourceFile.copy(targetPath);
-        savedImagePath = fileName;
-      }
-    }
-
-    // Determine damage fields based on advanced mode
-    List<String> damageFields;
-    List<String> envDamageFields;
-
-    if (input.advancedMode) {
-      damageFields = ['DamagePB', 'DamageMid', 'DamageLong', 'DamageMaxRange'];
-      envDamageFields = [
-        'EnvironmentalDamagePB',
-        'EnvironmentalDamageMid',
-        'EnvironmentalDamageLong',
-        'EnvironmentalDamageMaxRange',
-      ];
-    } else {
-      damageFields = ['DamagePB'];
-      envDamageFields = ['EnvironmentalDamagePB'];
-    }
-
-    data[weaponId] = {
-      'name': input.weaponName,
-      'weaponId': input.weaponIdLine,
-      'weaponPath': '/Game/Athena/Items/Weapons/AthenaRangedWeapons',
-      'imagePath': savedImagePath,
-      'damageFields': damageFields,
-      'environmentalDamageFields': envDamageFields,
-      'damagePB': input.damagePB,
-      'defaultEnvDamage': input.envDamage,
-      if (input.clipSize != null) 'clipSize': input.clipSize,
-    };
-
-    await dataTablesFile.parent.create(recursive: true);
-    await dataTablesFile.writeAsString(
-      const JsonEncoder.withIndent('  ').convert(data),
-    );
   }
 
   static Future<void> importDataTableLines(List<String> lines) async {
-    final iniFile = File(BackendPaths.defaultGameIni);
-    if (!await iniFile.exists()) return;
-
-    var content = await iniFile.readAsString();
-    final ensured = IniService.ensureAssetSection(
-      content,
-      BackendPaths.dataTableComment,
-      preferPrepend: true,
+    final existing = await ManagedHotfixService.readLines(
+      File(BackendPaths.dataTableLinesIni),
     );
-    content = ensured.content;
-    final insertPoint = ensured.insertPoint;
+    final merged = ManagedHotfixService.mergeLines(existing, lines);
+    await ManagedHotfixService.writeLines(
+      File(BackendPaths.dataTableLinesIni),
+      merged,
+    );
+    if (await getUIEnabledState()) {
+      await ManagedHotfixService.rebuildDefaultGame();
+    }
+  }
 
-    // Insert the imported lines
-    final linesToAdd = lines.join('\n');
-    content =
-        '${content.substring(0, insertPoint)}$linesToAdd\n${content.substring(insertPoint)}';
+  static Future<String> _readConfiguredContent() async {
+    final lines = await ManagedHotfixService.readLines(
+      File(BackendPaths.dataTableLinesIni),
+    );
+    return lines.join('\n');
+  }
 
-    await iniFile.writeAsString(content);
+  static Future<void> _writeConfiguredContent(String content) async {
+    await ManagedHotfixService.writeLines(
+      File(BackendPaths.dataTableLinesIni),
+      content.split('\n'),
+    );
+  }
+}
+
+class UserToggleStates {
+  const UserToggleStates({
+    required this.rufusStage,
+    required this.waterLevel,
+    required this.saveArenaPoints,
+    required this.useWaterStorm,
+    required this.startBackendOnLaunch,
+    required this.backendInfiniteRenderEnabled,
+    required this.swapCooldownEnabled,
+    required this.disableBackendUpdateCheck,
+    required this.useDarkMode,
+    required this.backgroundImagePath,
+    required this.backgroundBlur,
+    required this.backgroundParticlesOpacity,
+    required this.dialogBlurEnabled,
+    required this.startupAnimationEnabled,
+    required this.lastShownUpdateNotesVersion,
+    required this.dataTablesEnabled,
+    required this.curveTablesEnabled,
+    required this.straightBloomEnabled,
+  });
+
+  final int rufusStage;
+  final int waterLevel;
+  final bool saveArenaPoints;
+  final bool useWaterStorm;
+  final bool startBackendOnLaunch;
+  final bool backendInfiniteRenderEnabled;
+  final bool swapCooldownEnabled;
+  final bool disableBackendUpdateCheck;
+  final bool useDarkMode;
+  final String backgroundImagePath;
+  final double backgroundBlur;
+  final double backgroundParticlesOpacity;
+  final bool dialogBlurEnabled;
+  final bool startupAnimationEnabled;
+  final String lastShownUpdateNotesVersion;
+  final bool dataTablesEnabled;
+  final bool curveTablesEnabled;
+  final bool straightBloomEnabled;
+
+  ConfigSettings toConfigSettings() {
+    return ConfigSettings(
+      rufusStage: rufusStage,
+      waterLevel: waterLevel,
+      saveArenaPoints: saveArenaPoints,
+      useWaterStorm: useWaterStorm,
+      startBackendOnLaunch: startBackendOnLaunch,
+      backendInfiniteRenderEnabled: backendInfiniteRenderEnabled,
+      swapCooldownEnabled: swapCooldownEnabled,
+      disableBackendUpdateCheck: disableBackendUpdateCheck,
+      useDarkMode: true,
+      backgroundImagePath: backgroundImagePath,
+      backgroundBlur: backgroundBlur,
+      backgroundParticlesOpacity: backgroundParticlesOpacity,
+      dialogBlurEnabled: dialogBlurEnabled,
+      startupAnimationEnabled: startupAnimationEnabled,
+      lastShownUpdateNotesVersion: lastShownUpdateNotesVersion,
+    );
+  }
+
+  UserToggleStates copyWith({
+    int? rufusStage,
+    int? waterLevel,
+    bool? saveArenaPoints,
+    bool? useWaterStorm,
+    bool? startBackendOnLaunch,
+    bool? backendInfiniteRenderEnabled,
+    bool? swapCooldownEnabled,
+    bool? disableBackendUpdateCheck,
+    bool? useDarkMode,
+    String? backgroundImagePath,
+    double? backgroundBlur,
+    double? backgroundParticlesOpacity,
+    bool? dialogBlurEnabled,
+    bool? startupAnimationEnabled,
+    String? lastShownUpdateNotesVersion,
+    bool? dataTablesEnabled,
+    bool? curveTablesEnabled,
+    bool? straightBloomEnabled,
+  }) {
+    return UserToggleStates(
+      rufusStage: rufusStage ?? this.rufusStage,
+      waterLevel: waterLevel ?? this.waterLevel,
+      saveArenaPoints: saveArenaPoints ?? this.saveArenaPoints,
+      useWaterStorm: useWaterStorm ?? this.useWaterStorm,
+      startBackendOnLaunch: startBackendOnLaunch ?? this.startBackendOnLaunch,
+      backendInfiniteRenderEnabled:
+          backendInfiniteRenderEnabled ?? this.backendInfiniteRenderEnabled,
+      swapCooldownEnabled: swapCooldownEnabled ?? this.swapCooldownEnabled,
+      disableBackendUpdateCheck:
+          disableBackendUpdateCheck ?? this.disableBackendUpdateCheck,
+      useDarkMode: useDarkMode ?? this.useDarkMode,
+      backgroundImagePath: backgroundImagePath ?? this.backgroundImagePath,
+      backgroundBlur: backgroundBlur ?? this.backgroundBlur,
+      backgroundParticlesOpacity:
+          backgroundParticlesOpacity ?? this.backgroundParticlesOpacity,
+      dialogBlurEnabled: dialogBlurEnabled ?? this.dialogBlurEnabled,
+      startupAnimationEnabled:
+          startupAnimationEnabled ?? this.startupAnimationEnabled,
+      lastShownUpdateNotesVersion:
+          lastShownUpdateNotesVersion ?? this.lastShownUpdateNotesVersion,
+      dataTablesEnabled: dataTablesEnabled ?? this.dataTablesEnabled,
+      curveTablesEnabled: curveTablesEnabled ?? this.curveTablesEnabled,
+      straightBloomEnabled: straightBloomEnabled ?? this.straightBloomEnabled,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'rufusStage': rufusStage,
+      'waterLevel': waterLevel,
+      'saveArenaPoints': saveArenaPoints,
+      'useWaterStorm': useWaterStorm,
+      'startBackendOnLaunch': startBackendOnLaunch,
+      'backendInfiniteRenderEnabled': backendInfiniteRenderEnabled,
+      'swapCooldownEnabled': swapCooldownEnabled,
+      'disableBackendUpdateCheck': disableBackendUpdateCheck,
+      'useDarkMode': useDarkMode,
+      'backgroundImagePath': backgroundImagePath,
+      'backgroundBlur': backgroundBlur,
+      'backgroundParticlesOpacity': backgroundParticlesOpacity,
+      'dialogBlurEnabled': dialogBlurEnabled,
+      'startupAnimationEnabled': startupAnimationEnabled,
+      'lastShownUpdateNotesVersion': lastShownUpdateNotesVersion,
+      'dataTablesEnabled': dataTablesEnabled,
+      'curveTablesEnabled': curveTablesEnabled,
+      'straightBloomEnabled': straightBloomEnabled,
+    };
+  }
+
+  static UserToggleStates fromJson(
+    Map<String, dynamic> json, {
+    required UserToggleStates fallback,
+  }) {
+    bool readBool(String key, bool fallbackValue) {
+      final value = json[key];
+      return value is bool ? value : fallbackValue;
+    }
+
+    int readInt(String key, int fallbackValue) {
+      final value = json[key];
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      return int.tryParse('$value') ?? fallbackValue;
+    }
+
+    double readDouble(String key, double fallbackValue) {
+      final value = json[key];
+      if (value is double) return value;
+      if (value is num) return value.toDouble();
+      return double.tryParse('$value') ?? fallbackValue;
+    }
+
+    String readString(String key, String fallbackValue) {
+      final value = json[key];
+      return value is String ? value : fallbackValue;
+    }
+
+    return UserToggleStates(
+      rufusStage: readInt('rufusStage', fallback.rufusStage),
+      waterLevel: readInt('waterLevel', fallback.waterLevel),
+      saveArenaPoints: readBool('saveArenaPoints', fallback.saveArenaPoints),
+      useWaterStorm: readBool('useWaterStorm', fallback.useWaterStorm),
+      startBackendOnLaunch: readBool(
+        'startBackendOnLaunch',
+        fallback.startBackendOnLaunch,
+      ),
+      backendInfiniteRenderEnabled: readBool(
+        'backendInfiniteRenderEnabled',
+        fallback.backendInfiniteRenderEnabled,
+      ),
+      swapCooldownEnabled: readBool(
+        'swapCooldownEnabled',
+        fallback.swapCooldownEnabled,
+      ),
+      disableBackendUpdateCheck: readBool(
+        'disableBackendUpdateCheck',
+        fallback.disableBackendUpdateCheck,
+      ),
+      useDarkMode: readBool('useDarkMode', fallback.useDarkMode),
+      backgroundImagePath: readString(
+        'backgroundImagePath',
+        fallback.backgroundImagePath,
+      ),
+      backgroundBlur: readDouble('backgroundBlur', fallback.backgroundBlur),
+      backgroundParticlesOpacity: readDouble(
+        'backgroundParticlesOpacity',
+        fallback.backgroundParticlesOpacity,
+      ),
+      dialogBlurEnabled: readBool(
+        'dialogBlurEnabled',
+        fallback.dialogBlurEnabled,
+      ),
+      startupAnimationEnabled: readBool(
+        'startupAnimationEnabled',
+        fallback.startupAnimationEnabled,
+      ),
+      lastShownUpdateNotesVersion: readString(
+        'lastShownUpdateNotesVersion',
+        fallback.lastShownUpdateNotesVersion,
+      ),
+      dataTablesEnabled: readBool(
+        'dataTablesEnabled',
+        fallback.dataTablesEnabled,
+      ),
+      curveTablesEnabled: readBool(
+        'curveTablesEnabled',
+        fallback.curveTablesEnabled,
+      ),
+      straightBloomEnabled: readBool(
+        'straightBloomEnabled',
+        fallback.straightBloomEnabled,
+      ),
+    );
+  }
+}
+
+class UserToggleStatesService {
+  static StreamSubscription<FileSystemEvent>? _watchSubscription;
+  static Timer? _watchDebounce;
+  static String? _lastKnownSignature;
+  static const String _legacyModificationTogglesFileName =
+      'modification-toggles.json';
+
+  static UserToggleStates freshInstallDefaults() {
+    final config = ConfigService.defaultSettings;
+    return UserToggleStates(
+      rufusStage: config.rufusStage,
+      waterLevel: config.waterLevel,
+      saveArenaPoints: config.saveArenaPoints,
+      useWaterStorm: config.useWaterStorm,
+      startBackendOnLaunch: config.startBackendOnLaunch,
+      backendInfiniteRenderEnabled: config.backendInfiniteRenderEnabled,
+      swapCooldownEnabled: config.swapCooldownEnabled,
+      disableBackendUpdateCheck: config.disableBackendUpdateCheck,
+      useDarkMode: config.useDarkMode,
+      backgroundImagePath: config.backgroundImagePath,
+      backgroundBlur: config.backgroundBlur,
+      backgroundParticlesOpacity: config.backgroundParticlesOpacity,
+      dialogBlurEnabled: config.dialogBlurEnabled,
+      startupAnimationEnabled: config.startupAnimationEnabled,
+      lastShownUpdateNotesVersion: config.lastShownUpdateNotesVersion,
+      dataTablesEnabled: false,
+      curveTablesEnabled: false,
+      straightBloomEnabled: false,
+    );
+  }
+
+  static String _signature(UserToggleStates state) {
+    return jsonEncode(state.toJson());
+  }
+
+  static Future<UserToggleStates> captureCurrentState() async {
+    final config = await ConfigService.load();
+    final dataTablesEnabled = await DataTableService.areDataTablesEnabled();
+    final curveTablesEnabled = await CurveTableService.areGlobalEnabled();
+    final straightBloomEnabled = await StraightBloomService.isEnabled();
+    final backendInfiniteRenderEnabled =
+        await DataTableService.isBackendInfiniteRenderEnabled();
+    final swapCooldownEnabled = await DataTableService.isSwapCooldownEnabled();
+
+    return UserToggleStates(
+      rufusStage: config.rufusStage,
+      waterLevel: config.waterLevel,
+      saveArenaPoints: config.saveArenaPoints,
+      useWaterStorm: config.useWaterStorm,
+      startBackendOnLaunch: config.startBackendOnLaunch,
+      dataTablesEnabled: dataTablesEnabled,
+      curveTablesEnabled: curveTablesEnabled,
+      straightBloomEnabled: straightBloomEnabled,
+      backendInfiniteRenderEnabled: backendInfiniteRenderEnabled,
+      swapCooldownEnabled: swapCooldownEnabled,
+      disableBackendUpdateCheck: config.disableBackendUpdateCheck,
+      useDarkMode: config.useDarkMode,
+      backgroundImagePath: config.backgroundImagePath,
+      backgroundBlur: config.backgroundBlur,
+      backgroundParticlesOpacity: config.backgroundParticlesOpacity,
+      dialogBlurEnabled: config.dialogBlurEnabled,
+      startupAnimationEnabled: config.startupAnimationEnabled,
+      lastShownUpdateNotesVersion: config.lastShownUpdateNotesVersion,
+    );
+  }
+
+  static Future<void> syncFromCurrentState() async {
+    final state = await captureCurrentState();
+    await writeState(state);
+  }
+
+  static Future<File> _resolveStateFile() async {
+    final current = File(BackendPaths.userToggleStatesJson);
+    if (await current.exists()) {
+      return current;
+    }
+    final legacy = File(
+      joinPath([
+        getBackendRoot(),
+        'responses',
+        _legacyModificationTogglesFileName,
+      ]),
+    );
+    if (await legacy.exists()) {
+      return legacy;
+    }
+    return current;
+  }
+
+  static Future<void> _migrateLegacyFileIfNeeded() async {
+    final current = File(BackendPaths.userToggleStatesJson);
+    if (await current.exists()) return;
+    final legacy = File(
+      joinPath([
+        getBackendRoot(),
+        'responses',
+        _legacyModificationTogglesFileName,
+      ]),
+    );
+    if (!await legacy.exists()) return;
+    final fallback = await captureCurrentState();
+    final state = await loadFromFile(legacy, fallback: fallback);
+    if (state == null) return;
+    await current.parent.create(recursive: true);
+    await current.writeAsString(
+      const JsonEncoder.withIndent('  ').convert(state.toJson()),
+    );
+    try {
+      await legacy.delete();
+    } catch (_) {}
+  }
+
+  static Future<Map<String, dynamic>?> _readRawSavedJson() async {
+    final file = await _resolveStateFile();
+    if (!await file.exists()) return null;
+    try {
+      final decoded = jsonDecode(await file.readAsString());
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      if (decoded is Map) {
+        return decoded.map((key, value) => MapEntry('$key', value));
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  static Future<bool?> readSavedBool(String key) async {
+    final json = await _readRawSavedJson();
+    final value = json?[key];
+    return value is bool ? value : null;
+  }
+
+  static Future<UserToggleStates?> _loadSavedState({
+    required UserToggleStates fallback,
+  }) async {
+    final file = await _resolveStateFile();
+    final state = await loadFromFile(file, fallback: fallback);
+    if (state == null) return null;
+    if (file.path != BackendPaths.userToggleStatesJson) {
+      await _migrateLegacyFileIfNeeded();
+    }
+    return state;
+  }
+
+  static Future<void> applySavedStateIfPresent() async {
+    await _migrateLegacyFileIfNeeded();
+    final fallback = await captureCurrentState();
+    final state = await _loadSavedState(fallback: fallback);
+    if (state == null) return;
+    _lastKnownSignature = _signature(state);
+    await apply(state);
+  }
+
+  static void startWatching() {
+    if (_watchSubscription != null) return;
+    final targetFile = File(BackendPaths.userToggleStatesJson);
+    unawaited(targetFile.parent.create(recursive: true));
+    _watchSubscription = targetFile.parent.watch().listen((event) {
+      final changedName = event.path
+          .replaceAll('/', '\\')
+          .split('\\')
+          .where((segment) => segment.isNotEmpty)
+          .last
+          .toLowerCase();
+      if (changedName != 'user-toggle-states.json') return;
+      if (event is! FileSystemModifyEvent && event is! FileSystemCreateEvent) {
+        return;
+      }
+      _watchDebounce?.cancel();
+      _watchDebounce = Timer(const Duration(milliseconds: 150), () {
+        unawaited(_handleWatchedFileChange());
+      });
+    });
+  }
+
+  static Future<UserToggleStates?> loadFromFile(
+    File file, {
+    required UserToggleStates fallback,
+  }) async {
+    if (!await file.exists()) return null;
+    try {
+      final decoded = jsonDecode(await file.readAsString());
+      if (decoded is! Map<String, dynamic>) return null;
+      return UserToggleStates.fromJson(decoded, fallback: fallback);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> _handleWatchedFileChange() async {
+    final fallback = await captureCurrentState();
+    final state = await _loadSavedState(fallback: fallback);
+    if (state == null) return;
+    final signature = _signature(state);
+    if (signature == _lastKnownSignature) return;
+    _lastKnownSignature = signature;
+    await apply(state, notifyExternalListeners: true);
+  }
+
+  static Future<void> writeState(
+    UserToggleStates state, {
+    bool notifyExternalListeners = false,
+  }) async {
+    final file = File(BackendPaths.userToggleStatesJson);
+    final signature = _signature(state);
+    _lastKnownSignature = signature;
+    final desiredContent = const JsonEncoder.withIndent(
+      '  ',
+    ).convert(state.toJson());
+    if (await file.exists()) {
+      try {
+        final existingContent = await file.readAsString();
+        if (existingContent.trim() == desiredContent.trim()) {
+          await _cleanupLegacyToggleStateFiles();
+          if (notifyExternalListeners) {
+            userToggleStatesRevision.value += 1;
+          }
+          return;
+        }
+      } catch (_) {}
+    }
+    await file.parent.create(recursive: true);
+    await file.writeAsString(desiredContent);
+    await _cleanupLegacyToggleStateFiles();
+    if (notifyExternalListeners) {
+      userToggleStatesRevision.value += 1;
+    }
+  }
+
+  static Future<void> updateState(
+    UserToggleStates Function(UserToggleStates current) transform, {
+    bool notifyExternalListeners = false,
+  }) async {
+    final fallback = await captureCurrentState();
+    final current = await _loadSavedState(fallback: fallback) ?? fallback;
+    await writeState(
+      transform(current),
+      notifyExternalListeners: notifyExternalListeners,
+    );
+  }
+
+  static Future<void> _cleanupLegacyToggleStateFiles() async {
+    final legacyFiles = <String>[
+      BackendPaths.dataTablesUiState,
+      BackendPaths.curveTableStateJson,
+      BackendPaths.straightBloomStateJson,
+      joinPath([
+        getBackendRoot(),
+        'responses',
+        _legacyModificationTogglesFileName,
+      ]),
+    ];
+    for (final path in legacyFiles) {
+      final file = File(path);
+      if (!await file.exists()) continue;
+      try {
+        await file.delete();
+      } catch (_) {}
+    }
+  }
+
+  static Future<bool> apply(
+    UserToggleStates state, {
+    bool notifyExternalListeners = false,
+  }) async {
+    final config = state.toConfigSettings();
+    await ConfigService.save(config, syncUserToggleStates: false);
+    await writeState(state);
+    appThemeMode.value = ThemeMode.dark;
+    appBackgroundPath.value = config.backgroundImagePath;
+    appBackgroundBlur.value = config.backgroundBlur;
+    appBackgroundParticlesOpacity.value = config.backgroundParticlesOpacity;
+    appDialogBlurEnabled.value = config.dialogBlurEnabled;
+    appStartupAnimationEnabled.value = config.startupAnimationEnabled;
+    await DataTableService._writeUiState(
+      state.dataTablesEnabled,
+      syncUserToggleStates: false,
+    );
+    await CurveTableService._writeGlobalEnabledState(
+      state.curveTablesEnabled,
+      syncUserToggleStates: false,
+    );
+    await StraightBloomService._writeEnabledState(
+      state.straightBloomEnabled,
+      syncUserToggleStates: false,
+    );
+    await DataTableService.setBackendInfiniteRenderEnabled(
+      state.backendInfiniteRenderEnabled,
+      syncUserToggleStates: false,
+    );
+    await DataTableService.setSwapCooldownEnabled(
+      state.swapCooldownEnabled,
+      syncUserToggleStates: false,
+    );
+    await ManagedHotfixService.rebuildDefaultGame();
+    await syncFromCurrentState();
+    if (notifyExternalListeners) {
+      userToggleStatesRevision.value += 1;
+    }
+    return true;
   }
 }
 
@@ -14925,28 +17380,30 @@ class ConfigSettings {
 }
 
 class ConfigService {
+  static const ConfigSettings defaultSettings = ConfigSettings(
+    rufusStage: 4,
+    waterLevel: 1,
+    saveArenaPoints: false,
+    useWaterStorm: false,
+    startBackendOnLaunch: true,
+    backendInfiniteRenderEnabled: true,
+    swapCooldownEnabled: false,
+    disableBackendUpdateCheck: false,
+    useDarkMode: true,
+    backgroundImagePath: '',
+    backgroundBlur: 15,
+    backgroundParticlesOpacity: 1.0,
+    dialogBlurEnabled: true,
+    startupAnimationEnabled: true,
+    lastShownUpdateNotesVersion: '',
+  );
+
   static Future<ConfigSettings> load() async {
     final base = await _loadConfigFile(File(BackendPaths.configIni));
     final gui = await _loadConfigFile(File(_guiConfigPath()));
     final map = {...base, ...gui};
     if (map.isEmpty) {
-      return const ConfigSettings(
-        rufusStage: 4,
-        waterLevel: 1,
-        saveArenaPoints: false,
-        useWaterStorm: false,
-        startBackendOnLaunch: true,
-        backendInfiniteRenderEnabled: true,
-        swapCooldownEnabled: false,
-        disableBackendUpdateCheck: false,
-        useDarkMode: true,
-        backgroundImagePath: '',
-        backgroundBlur: 15,
-        backgroundParticlesOpacity: 1.0,
-        dialogBlurEnabled: true,
-        startupAnimationEnabled: true,
-        lastShownUpdateNotesVersion: '',
-      );
+      return defaultSettings;
     }
     final lastShownUpdateNotesVersion =
         gui['LastShownUpdateNotesVersion'] ?? '';
@@ -14957,6 +17414,9 @@ class ConfigService {
     );
     final resolvedParticlesOpacity =
         parsedParticlesOpacity ?? (legacyParticlesEnabled ? 1.0 : 0.0);
+    final storedUseDarkMode =
+        (map['UseDarkMode'] ?? 'true').toLowerCase() == 'true';
+    final shouldPersistDarkMode = !storedUseDarkMode;
     final hasGuiBackendInfiniteRender = gui.containsKey(
       'BackendInfiniteRenderEnabled',
     );
@@ -14993,7 +17453,7 @@ class ConfigService {
       swapCooldownEnabled: resolvedSwapCooldown,
       disableBackendUpdateCheck:
           (map['DisableBackendUpdateCheck'] ?? '').toLowerCase() == 'true',
-      useDarkMode: (map['UseDarkMode'] ?? 'true').toLowerCase() == 'true',
+      useDarkMode: true,
       backgroundImagePath: map['BackgroundImagePath'] ?? '',
       backgroundBlur: double.tryParse(map['BackgroundBlur'] ?? '') ?? 15,
       backgroundParticlesOpacity: resolvedParticlesOpacity,
@@ -15005,13 +17465,17 @@ class ConfigService {
     );
     if (!hasGuiBackendInfiniteRender ||
         !hasGuiSwapCooldown ||
-        shouldPersistWaterLevel) {
-      await save(settings);
+        shouldPersistWaterLevel ||
+        shouldPersistDarkMode) {
+      await save(settings, syncUserToggleStates: false);
     }
     return settings;
   }
 
-  static Future<void> save(ConfigSettings settings) async {
+  static Future<void> save(
+    ConfigSettings settings, {
+    bool syncUserToggleStates = true,
+  }) async {
     final buffer = StringBuffer()
       ..writeln('RufusStage=${settings.rufusStage}')
       ..writeln('WaterLevel=${settings.waterLevel}')
@@ -15025,7 +17489,7 @@ class ConfigService {
       ..writeln(
         'DisableBackendUpdateCheck=${settings.disableBackendUpdateCheck}',
       )
-      ..writeln('UseDarkMode=${settings.useDarkMode}')
+      ..writeln('UseDarkMode=true')
       ..writeln('BackgroundImagePath=${settings.backgroundImagePath}')
       ..writeln('BackgroundBlur=${settings.backgroundBlur}')
       ..writeln(
@@ -15050,6 +17514,9 @@ class ConfigService {
       await guiFile.parent.create(recursive: true);
       await guiFile.writeAsString(buffer.toString());
     } catch (_) {}
+    if (syncUserToggleStates) {
+      await UserToggleStatesService.syncFromCurrentState();
+    }
   }
 
   static String _guiConfigPath() {
@@ -15060,9 +17527,7 @@ class ConfigService {
     int storedLevel, {
     required bool zeroIndexed,
   }) {
-    final normalized = zeroIndexed
-        ? storedLevel + 1
-        : storedLevel;
+    final normalized = zeroIndexed ? storedLevel + 1 : storedLevel;
     return normalized.clamp(1, 7).toInt();
   }
 
@@ -15119,6 +17584,66 @@ class UpdateInfo {
 
   String get currentLabel => _formatVersion(currentVersion);
   String get latestLabel => _formatVersion(latestVersion);
+}
+
+String? selectReleaseInstallerUrl(dynamic assetsRaw) {
+  if (assetsRaw is! List) return null;
+
+  String? atlasSetupExe;
+  String? setupExe;
+  String? atlasExe;
+  String? firstExe;
+  String? atlasInstallerMsi;
+  String? installerMsi;
+  String? atlasMsi;
+  String? firstMsi;
+
+  for (final asset in assetsRaw) {
+    if (asset is! Map<String, dynamic>) continue;
+    final name = asset['name']?.toString().toLowerCase() ?? '';
+    final url = asset['browser_download_url']?.toString().trim();
+    if (url == null || url.isEmpty || name.isEmpty) continue;
+
+    final isAtlasAsset = name.contains('atlas') || name.contains('backend');
+    final isInstaller =
+        name.contains('setup') ||
+        name.contains('installer') ||
+        name.contains('install');
+
+    if (name.endsWith('.exe')) {
+      if (isInstaller && isAtlasAsset) {
+        atlasSetupExe ??= url;
+      } else if (isInstaller) {
+        setupExe ??= url;
+      } else if (isAtlasAsset) {
+        atlasExe ??= url;
+      } else {
+        firstExe ??= url;
+      }
+      continue;
+    }
+
+    if (name.endsWith('.msi')) {
+      if (isInstaller && isAtlasAsset) {
+        atlasInstallerMsi ??= url;
+      } else if (isInstaller) {
+        installerMsi ??= url;
+      } else if (isAtlasAsset) {
+        atlasMsi ??= url;
+      } else {
+        firstMsi ??= url;
+      }
+    }
+  }
+
+  return atlasSetupExe ??
+      setupExe ??
+      atlasExe ??
+      firstExe ??
+      atlasInstallerMsi ??
+      installerMsi ??
+      atlasMsi ??
+      firstMsi;
 }
 
 class UpdateService {
@@ -15185,7 +17710,7 @@ class UpdateService {
         final tag = entry['tag_name']?.toString().trim();
         if (tag == null || tag.isEmpty) continue;
 
-        final installerUrl = _findReleaseInstallerUrl(entry['assets']);
+        final installerUrl = selectReleaseInstallerUrl(entry['assets']);
         if (installerUrl == null) continue;
 
         DateTime? published;
@@ -15259,7 +17784,7 @@ class UpdateService {
       final json = jsonDecode(body) as Map<String, dynamic>;
       final tag = json['tag_name']?.toString().trim();
       if (tag == null || tag.isEmpty) return null;
-      final installerUrl = _findReleaseInstallerUrl(json['assets']);
+      final installerUrl = selectReleaseInstallerUrl(json['assets']);
       return (
         version: tag,
         installerUrl: installerUrl,
@@ -15270,34 +17795,6 @@ class UpdateService {
     } finally {
       client.close();
     }
-  }
-
-  static String? _findReleaseInstallerUrl(dynamic assetsRaw) {
-    if (assetsRaw is! List) return null;
-
-    String? preferredExe;
-    String? fallbackExe;
-    String? msi;
-
-    for (final asset in assetsRaw) {
-      if (asset is! Map<String, dynamic>) continue;
-      final name = asset['name']?.toString().toLowerCase() ?? '';
-      final url = asset['browser_download_url']?.toString();
-      if (url == null || name.isEmpty || !name.contains('atlas')) continue;
-
-      if (name.endsWith('.exe')) {
-        if (name.contains('setup') || name.contains('installer')) {
-          preferredExe ??= url;
-        } else {
-          fallbackExe ??= url;
-        }
-      } else if (name.endsWith('.msi')) {
-        msi ??= url;
-      }
-    }
-
-    // Prefer MSI if both installer types are published on a release.
-    return msi ?? preferredExe ?? fallbackExe;
   }
 
   static Future<Map<String, dynamic>?> _fetchRemotePackage() async {
@@ -15361,7 +17858,7 @@ class UpdateService {
     final uri = Uri.parse(url);
     var fileName = uri.pathSegments.isEmpty ? '' : uri.pathSegments.last;
     if (fileName.trim().isEmpty) {
-      fileName = 'ATLAS-Backend-Installer.msi';
+      fileName = 'ATLAS-Backend-Setup.exe';
     }
     final installerFile = File(joinPath([tempDir.path, fileName]));
     final client = HttpClient();
@@ -15421,32 +17918,53 @@ class UpdateService {
   }
 
   static bool _shouldPreserve(String relativePath) {
-    final normalized = relativePath.replaceAll('\\', '/');
+    final normalized = relativePath.replaceAll('\\', '/').toLowerCase();
     if (normalized.startsWith('atlas_gui_flutter/')) return true;
     if (normalized.startsWith('node_modules/')) return true;
     if (normalized.startsWith('exports/')) return true;
-    if (normalized.startsWith('responses/curves.json')) return true;
-    if (normalized.startsWith('responses/datatables.json')) return true;
-    if (normalized.startsWith('responses/datatables-ui.json')) return true;
-    if (normalized.startsWith('responses/modifications-backup.json')) {
-      return true;
+    if (_mutableUpdateFileRelativePaths.contains(normalized)) return true;
+    for (final prefix in _mutableUpdateDirRelativePrefixes) {
+      if (normalized.startsWith(prefix)) return true;
     }
-    if (normalized.startsWith('responses/sniper.json')) return true;
-    if (normalized.startsWith('src/config/config.ini')) return true;
-    if (normalized.startsWith('public/items/custom-groups/')) return true;
-    if (normalized.startsWith('static/hotfixes/DefaultGame.ini')) return true;
 
     if (normalized.startsWith('static/profiles/')) {
       final rest = normalized.substring('static/profiles/'.length);
       return !rest.startsWith('profile_');
     }
-    if (normalized.startsWith('static/ClientSettings/')) {
-      final rest = normalized.substring('static/ClientSettings/'.length);
+    if (normalized.startsWith('static/clientsettings/')) {
+      final rest = normalized.substring('static/clientsettings/'.length);
       return !rest.startsWith('config/');
     }
     return false;
   }
 }
+
+const List<String> _mutableUpdateFileRelativePaths = [
+  'gui.ini',
+  'profiles-ui-state.json',
+  'responses/user-toggle-states.json',
+  'responses/curves.json',
+  'responses/curvetables-state.json',
+  'responses/datatables.json',
+  'responses/datatables-ui.json',
+  'static/hotfixes/defaultgame data/straightbloom.ini',
+  'static/hotfixes/defaultgame data/fixes.ini',
+  'static/hotfixes/defaultgame data/curvetables.ini',
+  'static/hotfixes/defaultgame data/datatables.ini',
+  'responses/user-curvetables.ini',
+  'responses/user-datatables.ini',
+  'responses/epic-settings.json',
+  'responses/modifications-backup.json',
+  'responses/straight-bloom-state.json',
+  'src/config/config.ini',
+  'static/hotfixes/defaultengine.ini',
+  'static/hotfixes/defaultgame.ini',
+];
+
+const List<String> _mutableUpdateDirRelativePrefixes = [
+  'public/items/custom_',
+  'public/items/custom-groups/',
+];
 
 class UpdateNotesService {
   static const UpdateNotesStyle _defaultStyle = UpdateNotesStyle(
@@ -15588,27 +18106,7 @@ class UpdateBackupService {
     await backupRoot.create(recursive: true);
 
     final backendRoot = getBackendRoot();
-    final entries = <_BackupEntry>[
-      _BackupEntry.dir(joinPath([backendRoot, 'static', 'ClientSettings'])),
-      _BackupEntry.file(
-        joinPath([backendRoot, 'static', 'hotfixes', 'DefaultGame.ini']),
-      ),
-      _BackupEntry.file(joinPath([backendRoot, 'responses', 'curves.json'])),
-      _BackupEntry.file(
-        joinPath([backendRoot, 'responses', 'datatables.json']),
-      ),
-      _BackupEntry.file(
-        joinPath([backendRoot, 'responses', 'modifications-backup.json']),
-      ),
-      _BackupEntry.file(
-        joinPath([backendRoot, 'responses', 'datatables-ui.json']),
-      ),
-      _BackupEntry.file(joinPath([backendRoot, 'responses', 'sniper.json'])),
-      _BackupEntry.file(joinPath([backendRoot, 'src', 'config', 'config.ini'])),
-      _BackupEntry.dir(
-        joinPath([backendRoot, 'public', 'items', 'custom-groups']),
-      ),
-    ];
+    final entries = _mutableUpdateEntries(backendRoot);
 
     for (final entry in entries) {
       final target = joinPath([
@@ -15642,16 +18140,35 @@ class UpdateBackupService {
       );
     }
 
-    // Don't backup Profile Presets - they are templates
-    // (athenaprofiles/Profile Presets is skipped automatically)
-
-    final guiConfigFile = File(ConfigService._guiConfigPath());
-    if (guiConfigFile.existsSync()) {
-      final guiBackupFile = File(
-        joinPath([backupRoot.path, 'appdata', 'gui.ini']),
+    // Don't backup built-in Profile Presets - they are templates.
+    // But DO backup custom preset folders and their JSON config.
+    final customPresetsFile = File(
+      joinPath([backendRoot, 'static', 'athenaprofiles', 'custom-presets.json']),
+    );
+    if (customPresetsFile.existsSync()) {
+      final targetCustomPresetsFile = File(
+        joinPath([backupRoot.path, 'static', 'athenaprofiles', 'custom-presets.json']),
       );
-      await guiBackupFile.parent.create(recursive: true);
-      await guiConfigFile.copy(guiBackupFile.path);
+      await targetCustomPresetsFile.parent.create(recursive: true);
+      await customPresetsFile.copy(targetCustomPresetsFile.path);
+
+      try {
+        final customConfig = jsonDecode(await customPresetsFile.readAsString()) as Map<String, dynamic>;
+        final customPresetsList = customConfig['presets'] as List<dynamic>? ?? [];
+        for (final p in customPresetsList) {
+          final map = p as Map<String, dynamic>;
+          final folder = map['folder'] as String?;
+          if (folder == null || folder.trim().isEmpty) continue;
+          final customPresetDir = Directory(
+            joinPath([backendRoot, 'static', 'athenaprofiles', 'Profile Presets', folder]),
+          );
+          if (!customPresetDir.existsSync()) continue;
+          final targetPresetDir = Directory(
+            joinPath([backupRoot.path, 'static', 'athenaprofiles', 'Profile Presets', folder]),
+          );
+          await _copyDirectory(customPresetDir, targetPresetDir);
+        }
+      } catch (_) {}
     }
 
     final manifest = {
@@ -15668,33 +18185,7 @@ class UpdateBackupService {
     if (!backupRoot.existsSync()) return;
 
     final backendRoot = getBackendRoot();
-    final entries = <_BackupEntry>[
-      _BackupEntry.dir(joinPath([backupRoot.path, 'static', 'ClientSettings'])),
-      _BackupEntry.file(
-        joinPath([backupRoot.path, 'static', 'hotfixes', 'DefaultGame.ini']),
-      ),
-      _BackupEntry.file(
-        joinPath([backupRoot.path, 'responses', 'curves.json']),
-      ),
-      _BackupEntry.file(
-        joinPath([backupRoot.path, 'responses', 'datatables.json']),
-      ),
-      _BackupEntry.file(
-        joinPath([backupRoot.path, 'responses', 'modifications-backup.json']),
-      ),
-      _BackupEntry.file(
-        joinPath([backupRoot.path, 'responses', 'datatables-ui.json']),
-      ),
-      _BackupEntry.file(
-        joinPath([backupRoot.path, 'responses', 'sniper.json']),
-      ),
-      _BackupEntry.file(
-        joinPath([backupRoot.path, 'src', 'config', 'config.ini']),
-      ),
-      _BackupEntry.dir(
-        joinPath([backupRoot.path, 'public', 'items', 'custom-groups']),
-      ),
-    ];
+    final entries = _mutableUpdateEntries(backupRoot.path);
 
     for (final entry in entries) {
       final target = joinPath([
@@ -15728,26 +18219,43 @@ class UpdateBackupService {
       );
     }
 
-    // Note: Profile Presets (athenaprofiles/Profile Presets) are not backed up or restored
-    // They are templates and should not be modified
-
-    final guiBackupFile = File(
-      joinPath([backupRoot.path, 'appdata', 'gui.ini']),
+    // Note: Built-in Profile Presets are templates and are not backed up.
+    // Custom preset folders and their config are restored below.
+    final customPresetsBackup = File(
+      joinPath([backupRoot.path, 'static', 'athenaprofiles', 'custom-presets.json']),
     );
-    if (guiBackupFile.existsSync()) {
-      final guiConfigFile = File(ConfigService._guiConfigPath());
-      await guiConfigFile.parent.create(recursive: true);
-      await guiBackupFile.copy(guiConfigFile.path);
+    if (customPresetsBackup.existsSync()) {
+      final targetCustomPresetsFile = File(
+        joinPath([backendRoot, 'static', 'athenaprofiles', 'custom-presets.json']),
+      );
+      await targetCustomPresetsFile.parent.create(recursive: true);
+      await customPresetsBackup.copy(targetCustomPresetsFile.path);
+
+      try {
+        final customConfig = jsonDecode(await customPresetsBackup.readAsString()) as Map<String, dynamic>;
+        final customPresetsList = customConfig['presets'] as List<dynamic>? ?? [];
+        for (final p in customPresetsList) {
+          final map = p as Map<String, dynamic>;
+          final folder = map['folder'] as String?;
+          if (folder == null || folder.trim().isEmpty) continue;
+          final customPresetDir = Directory(
+            joinPath([backupRoot.path, 'static', 'athenaprofiles', 'Profile Presets', folder]),
+          );
+          if (!customPresetDir.existsSync()) continue;
+          final targetPresetDir = Directory(
+            joinPath([backendRoot, 'static', 'athenaprofiles', 'Profile Presets', folder]),
+          );
+          await _copyDirectory(customPresetDir, targetPresetDir);
+        }
+      } catch (_) {}
     }
 
-    // Restoring a pre-update DefaultGame.ini can remove newer text replacements.
-    // Re-apply the section after restore while preserving user data lines.
-    await DataTableService.ensureAtlasTextHotfixInDefaultGame();
+    // Rebuild managed hotfix output after restore so the restored source files
+    // and current DefaultGame.ini stay in sync.
+    await ManagedHotfixService.ensureInitialized();
 
     final restoredConfig = await ConfigService.load();
-    appThemeMode.value = restoredConfig.useDarkMode
-        ? ThemeMode.dark
-        : ThemeMode.light;
+    appThemeMode.value = ThemeMode.dark;
     appBackgroundPath.value = restoredConfig.backgroundImagePath;
     appBackgroundBlur.value = restoredConfig.backgroundBlur;
     appBackgroundParticlesOpacity.value =
@@ -15781,7 +18289,7 @@ class UpdateBackupService {
   ) async {
     await destination.create(recursive: true);
     await for (final entity in source.list(recursive: false)) {
-      final name = entity.uri.pathSegments.last;
+      final name = _entityName(entity);
       final newPath = joinPath([destination.path, name]);
       if (entity is Directory) {
         await _copyDirectory(entity, Directory(newPath));
@@ -15812,7 +18320,7 @@ class UpdateBackupService {
   }) async {
     await destination.create(recursive: true);
     await for (final entity in source.list(recursive: false)) {
-      final name = entity.uri.pathSegments.last;
+      final name = _entityName(entity);
       // Only exclude template files at root level, not in user subfolders
       if (isRootLevel && excludeFiles.contains(name)) continue;
       final newPath = joinPath([destination.path, name]);
@@ -15828,6 +18336,79 @@ class UpdateBackupService {
       }
     }
   }
+}
+
+List<_BackupEntry> _mutableUpdateEntries(String root) {
+  final entries = <_BackupEntry>[
+    _BackupEntry.file(joinPath([root, 'gui.ini'])),
+    _BackupEntry.file(joinPath([root, 'profiles-ui-state.json'])),
+    _BackupEntry.file(joinPath([root, 'responses', 'user-toggle-states.json'])),
+    _BackupEntry.dir(joinPath([root, 'exports'])),
+    _BackupEntry.dir(joinPath([root, 'static', 'ClientSettings'])),
+    _BackupEntry.file(
+      joinPath([root, 'static', 'hotfixes', 'DefaultGame.ini']),
+    ),
+    _BackupEntry.file(
+      joinPath([root, 'static', 'hotfixes', 'DefaultEngine.ini']),
+    ),
+    _BackupEntry.file(joinPath([root, 'responses', 'curves.json'])),
+    _BackupEntry.file(joinPath([root, 'responses', 'curvetables-state.json'])),
+    _BackupEntry.file(joinPath([root, 'responses', 'datatables.json'])),
+    _BackupEntry.file(joinPath([root, 'responses', 'datatables-ui.json'])),
+    _BackupEntry.file(
+      joinPath([
+        root,
+        'static',
+        'hotfixes',
+        'DefaultGame Data',
+        'StraightBloom.ini',
+      ]),
+    ),
+    _BackupEntry.file(
+      joinPath([root, 'static', 'hotfixes', 'DefaultGame Data', 'Fixes.ini']),
+    ),
+    _BackupEntry.file(
+      joinPath([
+        root,
+        'static',
+        'hotfixes',
+        'DefaultGame Data',
+        'CurveTables.ini',
+      ]),
+    ),
+    _BackupEntry.file(
+      joinPath([
+        root,
+        'static',
+        'hotfixes',
+        'DefaultGame Data',
+        'DataTables.ini',
+      ]),
+    ),
+    _BackupEntry.file(joinPath([root, 'responses', 'user-curvetables.ini'])),
+    _BackupEntry.file(joinPath([root, 'responses', 'user-datatables.ini'])),
+    _BackupEntry.file(joinPath([root, 'responses', 'epic-settings.json'])),
+    _BackupEntry.file(
+      joinPath([root, 'responses', 'modifications-backup.json']),
+    ),
+    _BackupEntry.file(
+      joinPath([root, 'responses', 'straight-bloom-state.json']),
+    ),
+    _BackupEntry.file(joinPath([root, 'src', 'config', 'config.ini'])),
+    _BackupEntry.dir(joinPath([root, 'public', 'items', 'custom-groups'])),
+  ];
+
+  final publicItemsDir = Directory(joinPath([root, 'public', 'items']));
+  if (publicItemsDir.existsSync()) {
+    for (final entity in publicItemsDir.listSync(followLinks: false)) {
+      if (entity is! File) continue;
+      final name = _entityName(entity);
+      if (!name.toLowerCase().startsWith('custom_')) continue;
+      entries.add(_BackupEntry.file(entity.path));
+    }
+  }
+
+  return entries;
 }
 
 class _BackupEntry {
@@ -15955,9 +18536,6 @@ class DataService {
   static const String _profileTemplateBackupDirName = '.defaults';
 
   static Future<void> clearBackendData(BuildContext context) async {
-    const backendInfiniteRenderDefault = true;
-    const swapCooldownDefault = false;
-
     final confirm = await _confirmDialog(
       context,
       'Clear all backend data? This will reset user Profiles, Client settings, DataTables, CurveTables, and Straight Bloom.',
@@ -15969,15 +18547,12 @@ class DataService {
     final clientSettingsDir = Directory(
       joinPath([getBackendRoot(), 'static', 'ClientSettings']),
     );
-    final iniFile = File(BackendPaths.defaultGameIni);
-    final curvesFile = File(BackendPaths.curvesJson);
     final backupFile = File(BackendPaths.modificationsBackup);
-    final sniperFile = File(BackendPaths.sniperJson);
 
     if (await profilesDir.exists()) {
       await _ensureProfileTemplateBackup(profilesDir);
       await for (final entity in profilesDir.list()) {
-        final name = entity.uri.pathSegments.last;
+        final name = _entityName(entity);
         if (_profileTemplateFiles.contains(name)) continue;
         await entity.delete(recursive: true);
       }
@@ -15986,66 +18561,22 @@ class DataService {
 
     if (await clientSettingsDir.exists()) {
       await for (final entity in clientSettingsDir.list()) {
-        final name = entity.uri.pathSegments.last;
+        final name = _entityName(entity);
         if (name.toLowerCase() == 'config') continue;
         await entity.delete(recursive: true);
       }
     }
 
-    if (await iniFile.exists()) {
-      if (await sniperFile.exists()) {
-        await StraightBloomService.setEnabled(false);
-      }
+    await _resetCatalogsToFreshInstallDefaults();
+    await _deleteCustomCurveAndDataTableAssets();
+    await _restoreFreshInstallHotfixFiles();
+    if (await backupFile.exists()) {
+      await backupFile.delete();
     }
-
-    if (await iniFile.exists()) {
-      var content = await iniFile.readAsString();
-      content = DataTableService.clearDataTableSections(content);
-
-      if (await curvesFile.exists()) {
-        content = content.replaceAll(
-          RegExp('^\\+CurveTable=.*\$', multiLine: true),
-          '',
-        );
-        final curves =
-            jsonDecode(await curvesFile.readAsString()) as Map<String, dynamic>;
-        final keysToRemove = curves.entries
-            .where((e) => (e.value as Map<String, dynamic>)['isCustom'] == true)
-            .map((e) => e.key)
-            .toList();
-        for (final key in keysToRemove) {
-          curves.remove(key);
-        }
-        await curvesFile.writeAsString(
-          const JsonEncoder.withIndent('  ').convert(curves),
-        );
-        await backupFile.writeAsString(jsonEncode({'curveTableLines': []}));
-      }
-
-      content = content.replaceAll(RegExp('\n\n+'), '\n');
-      await iniFile.writeAsString(content);
-    }
-
-    // Reset DataTables UI toggle to OFF when backend data is cleared.
-    await DataTableService.setUIEnabledState(false);
-    await DataTableService.setBackendInfiniteRenderEnabled(
-      backendInfiniteRenderDefault,
+    await UserToggleStatesService.apply(
+      UserToggleStatesService.freshInstallDefaults(),
+      notifyExternalListeners: true,
     );
-    await DataTableService.setSwapCooldownEnabled(swapCooldownDefault);
-
-    final current = await ConfigService.load();
-    await ConfigService.save(
-      current.copyWith(
-        backendInfiniteRenderEnabled: backendInfiniteRenderDefault,
-        swapCooldownEnabled: swapCooldownDefault,
-        backgroundImagePath: '',
-        backgroundBlur: 15,
-        backgroundParticlesOpacity: 1.0,
-      ),
-    );
-    appBackgroundPath.value = '';
-    appBackgroundBlur.value = 15;
-    appBackgroundParticlesOpacity.value = 1.0;
 
     if (context.mounted) {
       showAtlasSnackBar(
@@ -16055,36 +18586,161 @@ class DataService {
     }
   }
 
+  static Future<void> _resetCatalogsToFreshInstallDefaults() async {
+    final defaultCurves = await CurveTableService._loadDefaultCurveMap();
+    await CurveTableService._writeCurveMap(
+      File(BackendPaths.curvesJson),
+      defaultCurves ?? <String, dynamic>{},
+    );
+
+    final defaultDataTables = await DataTableService._loadDefaultDataTableMap();
+    await DataTableService._writeDataTableMap(
+      File(BackendPaths.dataTablesJson),
+      defaultDataTables ?? <String, dynamic>{},
+    );
+  }
+
+  static Future<void> _deleteCustomCurveAndDataTableAssets() async {
+    final customGroupDir = Directory(
+      joinPath([getBackendRoot(), 'public', 'items', 'custom-groups']),
+    );
+    await _clearDirectory(customGroupDir);
+    if (await customGroupDir.exists()) {
+      try {
+        await customGroupDir.delete();
+      } catch (_) {}
+    }
+
+    final itemsDir = Directory(joinPath([getBackendRoot(), 'public', 'items']));
+    if (!await itemsDir.exists()) {
+      return;
+    }
+
+    await for (final entity in itemsDir.list(recursive: false)) {
+      if (entity is! File) continue;
+      final name = _basename(entity.path).toLowerCase();
+      if (!name.startsWith('custom_')) continue;
+      try {
+        await entity.delete();
+      } catch (_) {}
+    }
+  }
+
+  static Future<void> _restoreFreshInstallHotfixFiles() async {
+    await _restoreInstalledFile(
+      relativeParts: ['static', 'hotfixes', 'DefaultGame.ini'],
+      targetPath: BackendPaths.defaultGameIni,
+    );
+    await _restoreInstalledFile(
+      relativeParts: ['static', 'hotfixes', 'DefaultEngine.ini'],
+      targetPath: BackendPaths.defaultEngineIni,
+    );
+    await _restoreInstalledFile(
+      relativeParts: [
+        'static',
+        'hotfixes',
+        'DefaultGame Data',
+        'StraightBloom.ini',
+      ],
+      targetPath: BackendPaths.straightBloomLinesIni,
+    );
+    await _restoreInstalledFile(
+      relativeParts: ['static', 'hotfixes', 'DefaultGame Data', 'Fixes.ini'],
+      targetPath: BackendPaths.fixesLinesIni,
+    );
+    await ManagedHotfixService.writeLines(
+      File(BackendPaths.curveTableLinesIni),
+      const [],
+    );
+    await ManagedHotfixService.writeLines(
+      File(BackendPaths.dataTableLinesIni),
+      const [],
+    );
+  }
+
+  static Future<void> _restoreInstalledFile({
+    required List<String> relativeParts,
+    required String targetPath,
+  }) async {
+    final sourcePath = joinPath([getInstallationRoot(), ...relativeParts]);
+    if (_samePath(sourcePath, targetPath)) {
+      return;
+    }
+    final source = File(sourcePath);
+    if (!await source.exists()) {
+      return;
+    }
+    final target = File(targetPath);
+    await target.parent.create(recursive: true);
+    await target.writeAsBytes(await source.readAsBytes(), flush: true);
+  }
+
   static Future<void> exportData(BuildContext context) async {
     final exportsRoot = Directory(joinPath([getBackendRoot(), 'exports']));
-    final defaultGameDir = Directory(
-      joinPath([exportsRoot.path, 'DefaultGame']),
+    final hotfixDataDir = Directory(
+      joinPath([exportsRoot.path, 'DefaultGame Data']),
     );
     final profilesDir = Directory(joinPath([exportsRoot.path, 'Profiles']));
     final clientDir = Directory(joinPath([exportsRoot.path, 'ClientSettings']));
-    if (await _hasExistingExport(defaultGameDir, profilesDir, clientDir)) {
+    final toggleStatesFile = File(
+      joinPath([exportsRoot.path, 'user-toggle-states.json']),
+    );
+    if (await _hasExistingExport(
+      hotfixDataDir,
+      profilesDir,
+      clientDir,
+      toggleStatesFile: toggleStatesFile,
+    )) {
       if (!context.mounted) return;
       final confirm = await _confirmDialog(
         context,
         'Exports already exist. Overwrite them?',
       );
       if (!confirm) return;
-      await _clearDirectory(defaultGameDir);
+      await _clearDirectory(hotfixDataDir);
       await _clearDirectory(profilesDir);
       await _clearDirectory(clientDir);
+      if (await toggleStatesFile.exists()) {
+        await toggleStatesFile.delete();
+      }
     }
-    await defaultGameDir.create(recursive: true);
+    await hotfixDataDir.create(recursive: true);
     await profilesDir.create(recursive: true);
     await clientDir.create(recursive: true);
     await _clearNonDirectoryEntries(profilesDir);
     await _clearNonDirectoryEntries(clientDir);
 
-    final iniSource = File(BackendPaths.defaultGameIni);
-    var exportedDefaultGame = false;
-    if (await iniSource.exists()) {
-      await iniSource.copy(joinPath([defaultGameDir.path, 'DefaultGame.ini']));
-      exportedDefaultGame = true;
-    }
+    final exportedCurveTables = await _copyFileIfExists(
+      File(BackendPaths.curveTableLinesIni),
+      File(joinPath([hotfixDataDir.path, 'CurveTables.ini'])),
+    );
+    final exportedDataTables = await _copyFileIfExists(
+      File(BackendPaths.dataTableLinesIni),
+      File(joinPath([hotfixDataDir.path, 'DataTables.ini'])),
+    );
+    final exportedCurvesCatalog = await _copyFileIfExists(
+      File(BackendPaths.curvesJson),
+      File(joinPath([hotfixDataDir.path, 'curves.json'])),
+    );
+    final exportedDataTablesCatalog = await _copyFileIfExists(
+      File(BackendPaths.dataTablesJson),
+      File(joinPath([hotfixDataDir.path, 'datatables.json'])),
+    );
+    final exportedToggleStates = await _copyFileIfExists(
+      File(BackendPaths.userToggleStatesJson),
+      toggleStatesFile,
+    );
+    final exportedCustomGroupImages = await _copyDirectoryIfHasFiles(
+      Directory(
+        joinPath([getBackendRoot(), 'public', 'items', 'custom-groups']),
+      ),
+      Directory(joinPath([hotfixDataDir.path, 'custom-groups'])),
+    );
+    final exportedCustomItemImages = await _copyMatchingFilesIfAny(
+      Directory(joinPath([getBackendRoot(), 'public', 'items'])),
+      Directory(joinPath([hotfixDataDir.path, 'custom-items'])),
+      (name) => name.toLowerCase().startsWith('custom_'),
+    );
 
     final profilesExported = await _copyNonEmptyChildDirs(
       Directory(joinPath([getBackendRoot(), 'static', 'profiles'])),
@@ -16096,13 +18752,60 @@ class DataService {
       clientDir,
     );
 
+    // Export custom presets
+    int customPresetsExported = 0;
+    final customPresetsSource = File(
+      joinPath([getBackendRoot(), 'static', 'athenaprofiles', 'custom-presets.json']),
+    );
+    if (await customPresetsSource.exists()) {
+      try {
+        final customConfig = jsonDecode(await customPresetsSource.readAsString()) as Map<String, dynamic>;
+        final customPresetsList = customConfig['presets'] as List<dynamic>? ?? [];
+        if (customPresetsList.isNotEmpty) {
+          final customPresetsExportDir = Directory(
+            joinPath([exportsRoot.path, 'CustomPresets']),
+          );
+          await customPresetsExportDir.create(recursive: true);
+          await customPresetsSource.copy(
+            joinPath([customPresetsExportDir.path, 'custom-presets.json']),
+          );
+          for (final p in customPresetsList) {
+            final map = p as Map<String, dynamic>;
+            final folder = map['folder'] as String?;
+            if (folder == null || folder.trim().isEmpty) continue;
+            final presetDir = Directory(
+              joinPath([getBackendRoot(), 'static', 'athenaprofiles', 'Profile Presets', folder]),
+            );
+            if (!await presetDir.exists()) continue;
+            await _copyDir(
+              presetDir,
+              Directory(joinPath([customPresetsExportDir.path, folder])),
+            );
+            customPresetsExported++;
+          }
+        }
+      } catch (_) {}
+    }
+
     await _clearNonDirectoryEntries(profilesDir);
     await _clearNonDirectoryEntries(clientDir);
 
-    if (!exportedDefaultGame && profilesExported == 0 && clientExported == 0) {
+    if (!exportedCurveTables &&
+        !exportedDataTables &&
+        !exportedCurvesCatalog &&
+        !exportedDataTablesCatalog &&
+        !exportedToggleStates &&
+        !exportedCustomGroupImages &&
+        !exportedCustomItemImages &&
+        profilesExported == 0 &&
+        clientExported == 0 &&
+        customPresetsExported == 0) {
       await _deleteIfEmpty(profilesDir);
       await _deleteIfEmpty(clientDir);
-      await _deleteIfEmpty(defaultGameDir);
+      await _deleteIfEmpty(hotfixDataDir);
+      if (await toggleStatesFile.exists()) {
+        await toggleStatesFile.delete();
+      }
       if (context.mounted) {
         showAtlasSnackBar(
           context,
@@ -16115,21 +18818,36 @@ class DataService {
     if (context.mounted) {
       await _showExportSummary(
         context,
-        exportedDefaultGame: exportedDefaultGame,
+        exportedToggleStates: exportedToggleStates,
+        exportedCurveTables: exportedCurveTables,
+        exportedDataTables: exportedDataTables,
+        exportedCurvesCatalog: exportedCurvesCatalog,
+        exportedDataTablesCatalog: exportedDataTablesCatalog,
+        exportedCustomGroupImages: exportedCustomGroupImages,
+        exportedCustomItemImages: exportedCustomItemImages,
         profilesExported: profilesExported,
         clientExported: clientExported,
+        customPresetsExported: customPresetsExported,
       );
     }
   }
 
   static Future<void> importData(BuildContext context) async {
     final exportsRoot = Directory(joinPath([getBackendRoot(), 'exports']));
-    final defaultGameDir = Directory(
-      joinPath([exportsRoot.path, 'DefaultGame']),
+    final hotfixDataDir = Directory(
+      joinPath([exportsRoot.path, 'DefaultGame Data']),
     );
     final profilesDir = Directory(joinPath([exportsRoot.path, 'Profiles']));
     final clientDir = Directory(joinPath([exportsRoot.path, 'ClientSettings']));
-    if (!await _hasExistingExport(defaultGameDir, profilesDir, clientDir)) {
+    final toggleStatesFile = File(
+      joinPath([exportsRoot.path, 'user-toggle-states.json']),
+    );
+    if (!await _hasExistingExport(
+      hotfixDataDir,
+      profilesDir,
+      clientDir,
+      toggleStatesFile: toggleStatesFile,
+    )) {
       if (context.mounted) {
         showAtlasSnackBar(
           context,
@@ -16157,7 +18875,117 @@ class DataService {
       Directory(joinPath([getBackendRoot(), 'static', 'ClientSettings'])),
       onlyDirs: true,
     );
-    // Profiles + client settings only: skip DefaultGame.ini imports.
+
+    // Import custom presets
+    final customPresetsExportDir = Directory(
+      joinPath([exportsRoot.path, 'CustomPresets']),
+    );
+    if (await customPresetsExportDir.exists()) {
+      final exportedCustomPresetsFile = File(
+        joinPath([customPresetsExportDir.path, 'custom-presets.json']),
+      );
+      if (await exportedCustomPresetsFile.exists()) {
+        try {
+          final customConfig = jsonDecode(
+            await exportedCustomPresetsFile.readAsString(),
+          ) as Map<String, dynamic>;
+          final customPresetsList = customConfig['presets'] as List<dynamic>? ?? [];
+          final presetsDir = Directory(
+            joinPath([getBackendRoot(), 'static', 'athenaprofiles', 'Profile Presets']),
+          );
+          await presetsDir.create(recursive: true);
+          for (final p in customPresetsList) {
+            final map = p as Map<String, dynamic>;
+            final folder = map['folder'] as String?;
+            if (folder == null || folder.trim().isEmpty) continue;
+            final sourcePresetDir = Directory(
+              joinPath([customPresetsExportDir.path, folder]),
+            );
+            if (!await sourcePresetDir.exists()) continue;
+            final targetPresetDir = Directory(
+              joinPath([presetsDir.path, folder]),
+            );
+            if (await targetPresetDir.exists()) {
+              await targetPresetDir.delete(recursive: true);
+            }
+            await _copyDir(sourcePresetDir, targetPresetDir);
+          }
+          // Merge custom presets into existing custom-presets.json
+          final existingConfig = await ProfileService._loadCustomPresetsConfig();
+          final existingFolders = <String>{};
+          final existingList = existingConfig['presets'] as List<dynamic>? ?? [];
+          for (final p in existingList) {
+            final map = p as Map<String, dynamic>;
+            final folder = (map['folder'] as String?)?.trim().toLowerCase();
+            if (folder != null) existingFolders.add(folder);
+          }
+          for (final p in customPresetsList) {
+            final map = p as Map<String, dynamic>;
+            final folder = (map['folder'] as String?)?.trim().toLowerCase();
+            if (folder != null && !existingFolders.contains(folder)) {
+              existingList.add(p);
+            }
+          }
+          existingConfig['presets'] = existingList;
+          await ProfileService._saveCustomPresetsConfig(existingConfig);
+        } catch (_) {}
+      }
+    }
+
+    await Directory(BackendPaths.defaultGameDataDir).create(recursive: true);
+    final importedCurveTables = await _copyFileIfExists(
+      File(joinPath([hotfixDataDir.path, 'CurveTables.ini'])),
+      File(BackendPaths.curveTableLinesIni),
+    );
+    final importedDataTables = await _copyFileIfExists(
+      File(joinPath([hotfixDataDir.path, 'DataTables.ini'])),
+      File(BackendPaths.dataTableLinesIni),
+    );
+    final importedCurvesCatalog = await _copyFileIfExists(
+      File(joinPath([hotfixDataDir.path, 'curves.json'])),
+      File(BackendPaths.curvesJson),
+    );
+    final importedDataTablesCatalog = await _copyFileIfExists(
+      File(joinPath([hotfixDataDir.path, 'datatables.json'])),
+      File(BackendPaths.dataTablesJson),
+    );
+    final importedToggleStates = await _copyFileIfExists(
+      toggleStatesFile,
+      File(BackendPaths.userToggleStatesJson),
+    );
+    final importedCustomGroupImages =
+        await _replaceDirectoryFromExportIfPresent(
+          Directory(joinPath([hotfixDataDir.path, 'custom-groups'])),
+          Directory(
+            joinPath([getBackendRoot(), 'public', 'items', 'custom-groups']),
+          ),
+        );
+    final importedCustomItemImages = await _replaceMatchingFilesFromExportIfAny(
+      Directory(joinPath([hotfixDataDir.path, 'custom-items'])),
+      Directory(joinPath([getBackendRoot(), 'public', 'items'])),
+      (name) => name.toLowerCase().startsWith('custom_'),
+    );
+    if (importedCurvesCatalog) {
+      await CurveTableService._mergeMissingDefaultCurves();
+    }
+    if (importedDataTablesCatalog) {
+      await DataTableService._mergeMissingDefaultDataTables();
+    }
+    if (importedToggleStates) {
+      final fallback = await UserToggleStatesService.captureCurrentState();
+      final restoredState = await UserToggleStatesService.loadFromFile(
+        File(BackendPaths.userToggleStatesJson),
+        fallback: fallback,
+      );
+      if (restoredState != null) {
+        await UserToggleStatesService.apply(
+          restoredState,
+          notifyExternalListeners: true,
+        );
+      }
+    } else if (importedCurveTables || importedDataTables) {
+      await ManagedHotfixService.rebuildDefaultGame();
+    }
 
     // Clear profile cache on backend
     try {
@@ -16174,9 +19002,17 @@ class DataService {
     if (context.mounted) {
       showAtlasSnackBar(
         context,
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'Import complete. Changes will be visible on next login.',
+            importedToggleStates ||
+                    importedCurveTables ||
+                    importedDataTables ||
+                    importedCurvesCatalog ||
+                    importedDataTablesCatalog ||
+                    importedCustomGroupImages ||
+                    importedCustomItemImages
+                ? 'Import complete. Toggle states, hotfix data, and custom CurveTable/DataTable assets have been applied, and profile changes will be visible on next login.'
+                : 'Import complete. Changes will be visible on next login.',
           ),
         ),
       );
@@ -16186,7 +19022,7 @@ class DataService {
   static Future<void> clearExportedData(BuildContext context) async {
     final confirm = await _confirmDialog(
       context,
-      'Clear exported data? This will remove all user Profiles, Client Settings, and DefaultGame.ini from exports/.',
+      'Clear exported data? This will remove all user Profiles, Client Settings, toggle states, and exported DataTable/CurveTable data from exports/.',
     );
     if (!confirm) return;
     final exportsRoot = Directory(joinPath([getBackendRoot(), 'exports']));
@@ -16202,23 +19038,50 @@ class DataService {
   static Future<bool> _hasExistingExport(
     Directory a,
     Directory b,
-    Directory c,
-  ) async {
+    Directory c, {
+    File? toggleStatesFile,
+  }) async {
     final aHas = a.existsSync() && a.listSync().isNotEmpty;
     final bHas = b.existsSync() && b.listSync().isNotEmpty;
     final cHas = c.existsSync() && c.listSync().isNotEmpty;
-    return aHas || bHas || cHas;
+    final toggleStatesHas = toggleStatesFile?.existsSync() ?? false;
+    return aHas || bHas || cHas || toggleStatesHas;
   }
 
   static Future<void> _showExportSummary(
     BuildContext context, {
-    required bool exportedDefaultGame,
+    required bool exportedToggleStates,
+    required bool exportedCurveTables,
+    required bool exportedDataTables,
+    required bool exportedCurvesCatalog,
+    required bool exportedDataTablesCatalog,
+    required bool exportedCustomGroupImages,
+    required bool exportedCustomItemImages,
     required int profilesExported,
     required int clientExported,
+    required int customPresetsExported,
   }) async {
     final lines = <String>[];
-    if (exportedDefaultGame) {
-      lines.add('DefaultGame.ini');
+    if (exportedToggleStates) {
+      lines.add('user-toggle-states.json');
+    }
+    if (exportedDataTables) {
+      lines.add('DataTables.ini');
+    }
+    if (exportedCurveTables) {
+      lines.add('CurveTables.ini');
+    }
+    if (exportedCurvesCatalog) {
+      lines.add('curves.json');
+    }
+    if (exportedDataTablesCatalog) {
+      lines.add('datatables.json');
+    }
+    if (exportedCustomGroupImages) {
+      lines.add('custom curve group images');
+    }
+    if (exportedCustomItemImages) {
+      lines.add('custom DataTable images');
     }
     if (profilesExported > 0) {
       lines.add(
@@ -16228,6 +19091,11 @@ class DataService {
     if (clientExported > 0) {
       lines.add(
         'ClientSettings: $clientExported folder${clientExported == 1 ? '' : 's'}',
+      );
+    }
+    if (customPresetsExported > 0) {
+      lines.add(
+        'Custom Presets: $customPresetsExported preset${customPresetsExported == 1 ? '' : 's'}',
       );
     }
     await _showBlurDialog<void>(
@@ -16255,11 +19123,106 @@ class DataService {
     );
   }
 
+  static Future<bool> _copyFileIfExists(File src, File dest) async {
+    if (!await src.exists()) return false;
+    await dest.parent.create(recursive: true);
+    await src.copy(dest.path);
+    return true;
+  }
+
+  static Future<bool> _copyDirectoryIfHasFiles(
+    Directory src,
+    Directory dest,
+  ) async {
+    if (!await _dirHasFiles(src)) {
+      return false;
+    }
+    await _copyDir(src, dest);
+    return true;
+  }
+
+  static Future<bool> _copyMatchingFilesIfAny(
+    Directory src,
+    Directory dest,
+    bool Function(String name) shouldCopy,
+  ) async {
+    if (!await src.exists()) {
+      return false;
+    }
+    var copied = false;
+    await dest.create(recursive: true);
+    await for (final entity in src.list(recursive: false)) {
+      if (entity is! File) {
+        continue;
+      }
+      final name = _basename(entity.path);
+      if (name.isEmpty || !shouldCopy(name)) {
+        continue;
+      }
+      await entity.copy(joinPath([dest.path, name]));
+      copied = true;
+    }
+    if (!copied) {
+      await _deleteIfEmpty(dest);
+    }
+    return copied;
+  }
+
+  static Future<bool> _replaceDirectoryFromExportIfPresent(
+    Directory src,
+    Directory dest,
+  ) async {
+    if (!await _dirHasFiles(src)) {
+      return false;
+    }
+    if (await dest.exists()) {
+      await dest.delete(recursive: true);
+    }
+    await _copyDir(src, dest);
+    return true;
+  }
+
+  static Future<bool> _replaceMatchingFilesFromExportIfAny(
+    Directory src,
+    Directory dest,
+    bool Function(String name) shouldCopy,
+  ) async {
+    if (!await src.exists()) {
+      return false;
+    }
+    var hasMatches = false;
+    await for (final entity in src.list(recursive: false)) {
+      if (entity is! File) {
+        continue;
+      }
+      final name = _basename(entity.path);
+      if (name.isNotEmpty && shouldCopy(name)) {
+        hasMatches = true;
+        break;
+      }
+    }
+    if (!hasMatches) {
+      return false;
+    }
+    await dest.create(recursive: true);
+    await for (final entity in dest.list(recursive: false)) {
+      if (entity is! File) {
+        continue;
+      }
+      final name = _basename(entity.path);
+      if (name.isEmpty || !shouldCopy(name)) {
+        continue;
+      }
+      await entity.delete();
+    }
+    return _copyMatchingFilesIfAny(src, dest, shouldCopy);
+  }
+
   static Future<void> _copyDir(Directory src, Directory dest) async {
     if (!await src.exists()) return;
     await dest.create(recursive: true);
     await for (final entity in src.list(recursive: false)) {
-      final name = entity.uri.pathSegments.last;
+      final name = _entityName(entity);
       final destPath = joinPath([dest.path, name]);
       if (entity is Directory) {
         await _copyDir(entity, Directory(destPath));
@@ -16353,23 +19316,18 @@ class DataService {
         .toList();
     content = content.replaceAll(curveRegex, '');
 
-    final sniperFile = File(BackendPaths.sniperJson);
     final straightLines = <String>[];
-    if (await sniperFile.exists()) {
-      final lines =
-          (jsonDecode(await sniperFile.readAsString())
-                  as Map<String, dynamic>)['lines']
-              as List<dynamic>;
-      for (final line in lines.cast<String>()) {
-        if (content.contains(line)) {
-          straightLines.add(line);
-          content = content.replaceAll(line, '');
-        }
-        final commented = ';$line';
-        if (content.contains(commented)) {
-          straightLines.add(commented);
-          content = content.replaceAll(commented, '');
-        }
+    final configuredStraightLines =
+        await StraightBloomService._readConfiguredLines();
+    for (final line in configuredStraightLines) {
+      if (content.contains(line)) {
+        straightLines.add(line);
+        content = content.replaceAll(line, '');
+      }
+      final commented = ';$line';
+      if (content.contains(commented)) {
+        straightLines.add(commented);
+        content = content.replaceAll(commented, '');
       }
     }
 
@@ -16709,7 +19667,9 @@ Future<void> _showModificationsIniImportSummary(
   required Map<String, List<String>> curveGrouped,
   required List<_ImportCurveDraft> curveMissing,
   required int curveLines,
+  required int straightBloomLines,
   required int dataTableLines,
+  required int fixesLines,
 }) async {
   final curveSummary = _buildCurveImportSummaryLines(
     curveGrouped,
@@ -16823,6 +19783,33 @@ Future<void> _showModificationsIniImportSummary(
               ),
       );
 
+      final straightBloomCard = buildCard(
+        icon: Icons.track_changes_rounded,
+        title: 'Straight Bloom',
+        child: straightBloomLines == 0
+            ? Text(
+                'No Straight Bloom entries found.',
+                style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
+                  color: _onSurface(dialogContext, 0.6),
+                ),
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '$straightBloomLines Straight Bloom ${straightBloomLines == 1 ? 'line' : 'lines'} detected.',
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Current StraightBloom.ini is kept. Detected active lines will turn Straight Bloom on.',
+                    style: Theme.of(dialogContext).textTheme.bodySmall
+                        ?.copyWith(color: _onSurface(dialogContext, 0.72)),
+                  ),
+                ],
+              ),
+      );
+
       final dataTablesCard = buildCard(
         icon: Icons.grid_view_rounded,
         title: 'DataTables',
@@ -16833,7 +19820,7 @@ Future<void> _showModificationsIniImportSummary(
                   color: _onSurface(dialogContext, 0.6),
                 ),
               )
-            : dataTableLines == 0
+            : dataTableLines == 0 && fixesLines == 0
             ? Text(
                 'No DataTable entries found.',
                 style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
@@ -16844,15 +19831,25 @@ Future<void> _showModificationsIniImportSummary(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    '$dataTableLines DataTable ${dataTableLines == 1 ? 'entry' : 'entries'} imported.',
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'You can view and edit these in the DataTables tab.',
-                    style: Theme.of(dialogContext).textTheme.bodySmall
-                        ?.copyWith(color: _onSurface(dialogContext, 0.72)),
-                  ),
+                  if (dataTableLines > 0)
+                    Text(
+                      '$dataTableLines DataTable ${dataTableLines == 1 ? 'entry' : 'entries'} imported.',
+                    ),
+                  if (dataTableLines > 0) const SizedBox(height: 6),
+                  if (dataTableLines > 0)
+                    Text(
+                      'You can view and edit these in the DataTables tab.',
+                      style: Theme.of(dialogContext).textTheme.bodySmall
+                          ?.copyWith(color: _onSurface(dialogContext, 0.72)),
+                    ),
+                  if (fixesLines > 0) ...[
+                    if (dataTableLines > 0) const SizedBox(height: 10),
+                    Text(
+                      '$fixesLines ${fixesLines == 1 ? 'Fixes line' : 'Fixes lines'} detected. Current Fixes.ini is kept.',
+                      style: Theme.of(dialogContext).textTheme.bodySmall
+                          ?.copyWith(color: _onSurface(dialogContext, 0.72)),
+                    ),
+                  ],
                 ],
               ),
       );
@@ -16863,12 +19860,14 @@ Future<void> _showModificationsIniImportSummary(
           width: 720,
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final isWide = constraints.maxWidth >= 680;
+              final isWide = constraints.maxWidth >= 820;
               if (isWide) {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(child: curvesCard),
+                    const SizedBox(width: 12),
+                    Expanded(child: straightBloomCard),
                     const SizedBox(width: 12),
                     Expanded(child: dataTablesCard),
                   ],
@@ -16878,6 +19877,8 @@ Future<void> _showModificationsIniImportSummary(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   curvesCard,
+                  const SizedBox(height: 12),
+                  straightBloomCard,
                   const SizedBox(height: 12),
                   dataTablesCard,
                 ],
@@ -17250,431 +20251,6 @@ Future<List<CustomCurveInput>?> _promptCustomCurves(
                   );
                 }
                 Navigator.pop(context, inputs);
-              },
-              child: const Text('Add'),
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-  return result;
-}
-
-Future<CustomDataTableInput?> _promptCustomDataTable(
-  BuildContext context, {
-  CustomDataTableInput? existingInput,
-}) async {
-  // Determine which fields to show based on existing data
-  final bool hasDamageFields =
-      existingInput == null ||
-      (existingInput.damagePB.isNotEmpty || existingInput.envDamage.isNotEmpty);
-  final bool hasClipSize =
-      existingInput == null || (existingInput.clipSize?.isNotEmpty ?? false);
-  final bool hasReloadTime =
-      existingInput == null || (existingInput.reloadTime?.isNotEmpty ?? false);
-
-  final weaponNameController = TextEditingController(
-    text: existingInput?.weaponName ?? '',
-  );
-  final weaponIdController = TextEditingController(
-    text: existingInput?.weaponIdLine ?? '',
-  );
-  final damagePBController = TextEditingController(
-    text: existingInput?.damagePB ?? '50',
-  );
-  final envDamageController = TextEditingController(
-    text: existingInput?.envDamage ?? '50',
-  );
-  final damageMidController = TextEditingController(
-    text: existingInput?.damageMid ?? '40',
-  );
-  final damageLongController = TextEditingController(
-    text: existingInput?.damageLong ?? '30',
-  );
-  final damageMaxRangeController = TextEditingController(
-    text: existingInput?.damageMaxRange ?? '20',
-  );
-  final clipSizeController = TextEditingController(
-    text: existingInput?.clipSize ?? '30',
-  );
-  final reloadTimeController = TextEditingController(
-    text: existingInput?.reloadTime ?? '2.0',
-  );
-
-  // Rarity configuration
-  final rarities = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'];
-  final raritySuffixes = {
-    'Common': 'C',
-    'Uncommon': 'UC',
-    'Rare': 'R',
-    'Epic': 'VR',
-    'Legendary': 'SR',
-  };
-  String selectedRarity = 'Common';
-
-  // Store damage values per rarity
-  final rarityDamageValues = <String, Map<String, String>>{};
-  if (existingInput?.rarityConfigs != null) {
-    rarityDamageValues.addAll(existingInput!.rarityConfigs!);
-  }
-
-  // Helper to save current values to the selected rarity
-  void saveCurrentRarityValues() {
-    if (hasDamageFields) {
-      rarityDamageValues[selectedRarity] = {
-        'damagePB': damagePBController.text,
-        'envDamage': envDamageController.text,
-        'damageMid': damageMidController.text,
-        'damageLong': damageLongController.text,
-        'damageMaxRange': damageMaxRangeController.text,
-        'weaponIdLine': weaponIdController.text,
-      };
-    }
-  }
-
-  // Helper to load values for a rarity
-  void loadRarityValues(String rarity) {
-    if (!hasDamageFields) return;
-
-    final values = rarityDamageValues[rarity];
-    if (values != null) {
-      damagePBController.text = values['damagePB'] ?? '50';
-      envDamageController.text = values['envDamage'] ?? '50';
-      damageMidController.text = values['damageMid'] ?? '40';
-      damageLongController.text = values['damageLong'] ?? '30';
-      damageMaxRangeController.text = values['damageMaxRange'] ?? '20';
-      weaponIdController.text = values['weaponIdLine'] ?? '';
-    } else {
-      // Default values
-      damagePBController.text = '50';
-      envDamageController.text = '50';
-      damageMidController.text = '40';
-      damageLongController.text = '30';
-      damageMaxRangeController.text = '20';
-    }
-  }
-
-  // Helper to update weaponId based on rarity
-  void updateWeaponIdForRarity(String newRarity) {
-    final currentId = weaponIdController.text.trim();
-    if (currentId.isEmpty) return;
-
-    // Replace the rarity suffix in the weapon ID
-    String newId = currentId;
-    for (final entry in raritySuffixes.entries) {
-      final pattern = '_${entry.value}_';
-      if (currentId.contains(pattern)) {
-        newId = currentId.replaceFirst(
-          pattern,
-          '_${raritySuffixes[newRarity]}_',
-        );
-        weaponIdController.text = newId;
-        return;
-      }
-    }
-  }
-
-  String? imagePath = existingInput?.imageSourcePath;
-  bool advancedMode = existingInput?.advancedMode ?? false;
-  String? errorText;
-
-  final result = await _showBlurDialog<CustomDataTableInput>(
-    context: context,
-    builder: (context) => StatefulBuilder(
-      builder: (context, setState) => AlertDialog(
-        title: const Text('Add Custom DataTable'),
-        content: SizedBox(
-          width: 520,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextField(
-                  controller: weaponNameController,
-                  decoration: InputDecoration(
-                    labelText: 'Weapon Name',
-                    hintText: 'Assault Rifle',
-                    hintStyle: TextStyle(color: Colors.grey.shade600),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: weaponIdController,
-                  decoration: InputDecoration(
-                    labelText: 'DataTable RowName',
-                    hintText: 'Assault_Auto_Athena_C_Ore_T03',
-                    hintStyle: TextStyle(color: Colors.grey.shade600),
-                  ),
-                  onChanged: (value) {
-                    // If user manually edits, update it for current rarity
-                    setState(() => errorText = null);
-                  },
-                ),
-                const SizedBox(height: 12),
-                if (hasDamageFields) ...[
-                  DropdownButtonFormField<String>(
-                    initialValue: selectedRarity,
-                    decoration: const InputDecoration(
-                      labelText: 'Rarity',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: rarities.map((rarity) {
-                      return DropdownMenuItem(
-                        value: rarity,
-                        child: Row(
-                          children: [
-                            Text(rarity),
-                            const SizedBox(width: 8),
-                            Text(
-                              '(${raritySuffixes[rarity]})',
-                              style: TextStyle(
-                                color: Colors.grey.shade600,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: (newRarity) {
-                      if (newRarity == null) return;
-                      setState(() {
-                        // Save current rarity's values before switching
-                        saveCurrentRarityValues();
-
-                        // Switch to new rarity
-                        selectedRarity = newRarity;
-
-                        // Load values for new rarity (or defaults)
-                        loadRarityValues(newRarity);
-
-                        // Update weaponId to match new rarity
-                        updateWeaponIdForRarity(newRarity);
-
-                        errorText = null;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                if (!hasDamageFields) const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        imagePath == null
-                            ? 'No image selected'
-                            : imagePath!.split(Platform.pathSeparator).last,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    _HoverScale(
-                      child: TextButton.icon(
-                        onPressed: () async {
-                          final picked = await FilePicker.platform.pickFiles(
-                            type: FileType.image,
-                          );
-                          if (picked == null ||
-                              picked.files.single.path == null) {
-                            return;
-                          }
-                          setState(() {
-                            imagePath = picked.files.single.path;
-                            errorText = null;
-                          });
-                        },
-                        icon: const Icon(Icons.image_outlined),
-                        label: const Text('Choose image'),
-                      ),
-                    ),
-                  ],
-                ),
-                if (hasDamageFields) ...[
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: damagePBController,
-                    decoration: InputDecoration(
-                      labelText: advancedMode ? 'DamagePB' : 'Base Damage',
-                      hintText: '50',
-                      hintStyle: TextStyle(color: Colors.grey.shade600),
-                    ),
-                    keyboardType: TextInputType.number,
-                  ),
-                ],
-                if (hasDamageFields && advancedMode) ...[
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: damageMidController,
-                    decoration: InputDecoration(
-                      labelText: 'DamageMid',
-                      hintText: '40',
-                      hintStyle: TextStyle(color: Colors.grey.shade600),
-                    ),
-                    keyboardType: TextInputType.number,
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: damageLongController,
-                    decoration: InputDecoration(
-                      labelText: 'DamageLong',
-                      hintText: '30',
-                      hintStyle: TextStyle(color: Colors.grey.shade600),
-                    ),
-                    keyboardType: TextInputType.number,
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: damageMaxRangeController,
-                    decoration: InputDecoration(
-                      labelText: 'DamageMaxRange',
-                      hintText: '20',
-                      hintStyle: TextStyle(color: Colors.grey.shade600),
-                    ),
-                    keyboardType: TextInputType.number,
-                  ),
-                ],
-                if (hasDamageFields) ...[
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: envDamageController,
-                    decoration: InputDecoration(
-                      labelText: 'Base Environmental Damage',
-                      hintText: '50',
-                      hintStyle: TextStyle(color: Colors.grey.shade600),
-                    ),
-                    keyboardType: TextInputType.number,
-                  ),
-                ],
-                if (hasClipSize) ...[
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: clipSizeController,
-                    decoration: InputDecoration(
-                      labelText: 'Clip Size',
-                      hintText: '30',
-                      hintStyle: TextStyle(color: Colors.grey.shade600),
-                    ),
-                    keyboardType: TextInputType.number,
-                  ),
-                ],
-                if (hasReloadTime) ...[
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: reloadTimeController,
-                    decoration: InputDecoration(
-                      labelText: 'Reload Time',
-                      hintText: '2.0',
-                      hintStyle: TextStyle(color: Colors.grey.shade600),
-                    ),
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                  ),
-                ],
-                if (hasDamageFields) ...[
-                  const SizedBox(height: 16),
-                  SwitchListTile(
-                    value: advancedMode,
-                    onChanged: (value) => setState(() => advancedMode = value),
-                    title: const Text('Advanced Options'),
-                    subtitle: const Text(
-                      'Configure damage for different ranges',
-                    ),
-                  ),
-                ],
-                if (errorText != null) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    errorText!,
-                    style: const TextStyle(color: Colors.redAccent),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          _HoverScale(
-            child: TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-          ),
-          _HoverScale(
-            child: ElevatedButton(
-              onPressed: () {
-                final weaponName = weaponNameController.text.trim();
-                final weaponId = weaponIdController.text.trim();
-                final damagePB = hasDamageFields
-                    ? damagePBController.text.trim()
-                    : '';
-                final envDamage = hasDamageFields
-                    ? envDamageController.text.trim()
-                    : '';
-
-                if (weaponName.isEmpty) {
-                  setState(() => errorText = 'Weapon name is required.');
-                  return;
-                }
-                if (weaponId.isEmpty) {
-                  setState(
-                    () => errorText = 'DataTable line (weaponId) is required.',
-                  );
-                  return;
-                }
-                if (hasDamageFields && damagePB.isEmpty) {
-                  setState(() => errorText = 'Base DamagePB is required.');
-                  return;
-                }
-                if (hasDamageFields && envDamage.isEmpty) {
-                  setState(
-                    () => errorText = 'Base Environmental Damage is required.',
-                  );
-                  return;
-                }
-
-                // Save the current rarity's values before submitting
-                if (hasDamageFields) {
-                  saveCurrentRarityValues();
-                }
-
-                Navigator.pop(
-                  context,
-                  CustomDataTableInput(
-                    weaponName: weaponName,
-                    weaponIdLine: weaponId,
-                    damagePB: damagePB,
-                    envDamage: envDamage,
-                    advancedMode: hasDamageFields && advancedMode,
-                    imageSourcePath: imagePath,
-                    damageMid: (hasDamageFields && advancedMode)
-                        ? damageMidController.text.trim()
-                        : null,
-                    damageLong: (hasDamageFields && advancedMode)
-                        ? damageLongController.text.trim()
-                        : null,
-                    damageMaxRange: (hasDamageFields && advancedMode)
-                        ? damageMaxRangeController.text.trim()
-                        : null,
-                    rarityConfigs:
-                        (hasDamageFields && rarityDamageValues.isNotEmpty)
-                        ? Map.from(rarityDamageValues)
-                        : null,
-                    clipSize:
-                        (hasClipSize &&
-                            clipSizeController.text.trim().isNotEmpty)
-                        ? clipSizeController.text.trim()
-                        : null,
-                    reloadTime:
-                        (hasReloadTime &&
-                            reloadTimeController.text.trim().isNotEmpty)
-                        ? reloadTimeController.text.trim()
-                        : null,
-                  ),
-                );
               },
               child: const Text('Add'),
             ),
@@ -18275,6 +20851,8 @@ class BackendController extends ChangeNotifier {
 
     final backendRoot = getBackendRoot();
     final installRoot = getInstallationRoot();
+    await _syncInstalledRuntimeSourceDirectory(Directory(backendRoot));
+    await _syncInstalledRuntimeDependencyFiles(Directory(backendRoot));
     final bunPath = _resolveBunPath(installRoot);
     final bunAvailable = await _checkBunAvailable(installRoot, bunPath);
     if (!bunAvailable) {
@@ -18285,12 +20863,12 @@ class BackendController extends ChangeNotifier {
       return;
     }
 
-    final nodeModules = Directory(joinPath([installRoot, 'node_modules']));
+    final nodeModules = Directory(joinPath([backendRoot, 'node_modules']));
     if (!nodeModules.existsSync()) {
       _addLog('Installing dependencies (bun install)...');
       final install = await Process.run(bunPath ?? 'bun', [
         'install',
-      ], workingDirectory: installRoot);
+      ], workingDirectory: backendRoot);
       if (install.exitCode != 0) {
         _addLog('Dependency install failed: ${install.stderr}');
         isStarting = false;
@@ -18301,6 +20879,17 @@ class BackendController extends ChangeNotifier {
       _addLog('Dependencies installed.');
     }
 
+    final runtimeEntryPoint = File(joinPath([backendRoot, 'src', 'index.ts']));
+    if (!runtimeEntryPoint.existsSync()) {
+      _addLog(
+        'Backend runtime source is missing from AppData. Restart the app or reinstall the backend.',
+      );
+      isStarting = false;
+      _setStatus('Start failed', Colors.redAccent);
+      notifyListeners();
+      return;
+    }
+
     final config = await ConfigService.load();
     final env = Map<String, String>.from(Platform.environment);
     if (config.disableBackendUpdateCheck) {
@@ -18308,12 +20897,20 @@ class BackendController extends ChangeNotifier {
     }
     env['ATLAS_DATA_ROOT'] = backendRoot;
     env['ATLAS_INSTALL_ROOT'] = installRoot;
+    final runtimeNodeModulesPath = joinPath([backendRoot, 'node_modules']);
+    if (Directory(runtimeNodeModulesPath).existsSync()) {
+      final existingNodePath = env['NODE_PATH']?.trim();
+      final separator = Platform.isWindows ? ';' : ':';
+      env['NODE_PATH'] = existingNodePath == null || existingNodePath.isEmpty
+          ? runtimeNodeModulesPath
+          : '$runtimeNodeModulesPath$separator$existingNodePath';
+    }
 
     try {
       _process = await Process.start(
         bunPath ?? 'bun',
         ['run', 'src/index.ts'],
-        workingDirectory: installRoot,
+        workingDirectory: backendRoot,
         environment: env,
         mode: ProcessStartMode.detachedWithStdio,
       );
@@ -18421,11 +21018,6 @@ class BackendController extends ChangeNotifier {
   }
 
   Future<void> closeFortnite() async {
-    if (!Platform.isWindows) {
-      _addLog('Close Fortnite is only supported on Windows.');
-      return;
-    }
-
     _addLog('Closing Fortnite...');
     const processes = <String>[
       'FortniteClient-Win64-Shipping.exe',
@@ -18529,7 +21121,6 @@ class BackendController extends ChangeNotifier {
   }
 
   Future<void> _killBackendOnPort(int port) async {
-    if (!Platform.isWindows) return;
     try {
       final result = await Process.run('netstat', ['-ano']);
       if (result.exitCode != 0) return;
@@ -18608,17 +21199,55 @@ class BackendController extends ChangeNotifier {
   }
 }
 
+bool _isInstalledExecutableDirectory(String executablePath) {
+  String normalize(String input) {
+    return input.replaceAll('/', '\\').toLowerCase();
+  }
+
+  bool hasPrefix(String? prefix) {
+    if (prefix == null || prefix.trim().isEmpty) return false;
+    return normalize(executablePath).startsWith(normalize(prefix));
+  }
+
+  final localAppData = Platform.environment['LOCALAPPDATA'];
+  final installedRoots = <String>[
+    if (Platform.environment['ProgramFiles'] case final programFiles?)
+      programFiles,
+    if (Platform.environment['ProgramFiles(x86)'] case final programFilesX86?)
+      programFilesX86,
+    if (localAppData != null)
+      joinPath([localAppData, 'Programs', 'ATLAS Backend']),
+    if (localAppData != null)
+      joinPath([localAppData, 'Programs', 'ATLAS-Backend']),
+    if (localAppData != null) joinPath([localAppData, 'ATLAS Backend']),
+    if (localAppData != null) joinPath([localAppData, 'ATLAS-Backend']),
+  ];
+
+  for (final root in installedRoots) {
+    if (hasPrefix(root)) return true;
+  }
+
+  final packagedMarkers = [
+    Directory(joinPath([executablePath, 'data'])).existsSync(),
+    Directory(joinPath([executablePath, 'static'])).existsSync(),
+    Directory(joinPath([executablePath, 'src'])).existsSync(),
+    File(joinPath([executablePath, 'package.json'])).existsSync(),
+    File(joinPath([executablePath, 'flutter_windows.dll'])).existsSync(),
+  ];
+  if (packagedMarkers.every((marker) => marker)) {
+    return true;
+  }
+
+  return false;
+}
+
 String getBackendRoot() {
-  // Check if running from an installed location (not from source)
-  // If running from Program Files or AppData Local, use separate app data directory
+  // Installed builds keep mutable runtime data under %APPDATA%\ATLAS.
   final executablePath = File(Platform.resolvedExecutable).parent.path;
-  if (executablePath.contains(r'Program Files') ||
-      executablePath.contains(r'AppData\Local\Programs')) {
-    // Running from installed MSI - use AppData for data storage
+  if (_isInstalledExecutableDirectory(executablePath)) {
     final appDataDir = Platform.environment['APPDATA'];
     if (appDataDir != null) {
       final atlasDataDir = Directory(joinPath([appDataDir, 'ATLAS']));
-      // Ensure the directory exists
       if (!atlasDataDir.existsSync()) {
         atlasDataDir.createSync(recursive: true);
       }
@@ -18709,46 +21338,4 @@ String? _resolveBackgroundPath(String path) {
   );
   if (publicImage.existsSync()) return publicImage.path;
   return null;
-}
-
-class VpnService {
-  static Future<String> getVpnIpAddress() async {
-    try {
-      // Use PowerShell to query Radmin VPN adapter IP address
-      final result = await Process.run('powershell.exe', [
-        '-NoProfile',
-        '-Command',
-        r'Get-NetIPAddress | Where-Object {$_.InterfaceAlias -like "*Radmin*" -and $_.AddressFamily -eq "IPv4"} | Select-Object -First 1 -ExpandProperty IPAddress',
-      ]);
-
-      if (result.exitCode == 0) {
-        final ip = result.stdout.toString().trim();
-        if (ip.isNotEmpty && !ip.contains('Error')) {
-          return ip;
-        }
-      }
-
-      // Fallback: Try alternative command for older Windows versions
-      final fallbackResult = await Process.run('powershell.exe', [
-        '-NoProfile',
-        '-Command',
-        r'Get-WmiObject Win32_NetworkAdapterConfiguration | Where-Object {$_.Description -like "*Radmin*" -and $_.IPAddress -ne $null} | Select-Object -First 1 -ExpandProperty IPAddress',
-      ]);
-
-      if (fallbackResult.exitCode == 0) {
-        final ip = fallbackResult.stdout.toString().trim();
-        if (ip.isNotEmpty && !ip.contains('Error')) {
-          // WMI returns array format, extract first IPv4
-          final match = RegExp(r'\b(?:\d{1,3}\.){3}\d{1,3}\b').firstMatch(ip);
-          if (match != null) {
-            return match.group(0)!;
-          }
-        }
-      }
-
-      return 'Error: Radmin VPN adapter not found';
-    } catch (e) {
-      return 'Error: Failed to detect VPN IP - $e';
-    }
-  }
 }

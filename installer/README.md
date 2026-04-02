@@ -1,10 +1,10 @@
 # ATLAS Backend Installer
 
-Installer builds use WiX Toolset to build a Windows MSI with install/repair/uninstall support.
+Installer builds use Inno Setup to create a Windows `.exe` installer.
 
 ## Requirements
-- Flutter SDK (bundled in this repo under `flutter/`)
-- WiX Toolset (`wix` on PATH) for MSI output
+- Flutter SDK
+- Inno Setup 6 (`ISCC.exe` available on PATH or installed in the standard location)
 
 ## Build
 ```powershell
@@ -18,14 +18,15 @@ build-installer.cmd
 
 ## Options
 - `-SkipFlutterBuild` to skip `flutter build windows --release`
-- `-SkipMsi` to skip MSI generation (only stage files into `dist\ATLAS`)
-- `-BunVersion` to override bundled Bun version (default: `1.3.5`)
+- `-SkipFlutterClean` to reuse the existing Flutter build output without cleaning first
+- `-SkipInnoCompile` to only stage files into `dist\ATLAS-Backend`
+- `-BunVersion` to override the bundled Bun version (default: `1.3.5`)
 
 ## Output
-- `dist\ATLAS-Backend-<version>.msi`
+- `dist\ATLAS Backend Setup-<version>.exe`
 
 ## Notes
-- The setup icon uses `atlas_gui_flutter\windows\runner\resources\app_icon.ico`.
-- Backend files are staged next to the GUI so `getBackendRoot()` resolves correctly.
+- The installer runs elevated, installs into `Program Files`, and bundles the VC++ runtime installer.
+- Backend files are staged next to the GUI so `getInstallationRoot()` and `getBackendRoot()` still resolve correctly after install.
 - Bun is bundled under `tools\bun\bun.exe` so the backend runs without a separate Bun install.
-- The MSI will automatically uninstall legacy Inno Setup (EXE) installs if detected.
+- The EXE installer will try to remove an older MSI-based ATLAS Backend install before continuing.

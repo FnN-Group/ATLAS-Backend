@@ -580,6 +580,178 @@
                     "filterWeight": 0
                 }
             ]
+        },
+        {
+            "name": "BRSeason12",
+            "catalogEntries": [
+                {
+                    "offerId": "E72002954292DCD8B8013B9E59A89921",
+                    "devName": "BR.Season12.BattlePass.01",
+                    "offerType": "StaticPrice",
+                    "prices": [
+                        {
+                            "currencyType": "MtxCurrency",
+                            "currencySubType": "",
+                            "regularPrice": 950,
+                            "dynamicRegularPrice": -1,
+                            "finalPrice": 0,
+                            "saleExpiration": "9999-12-31T23:59:59.999Z",
+                            "basePrice": 950
+                        }
+                    ],
+                    "categories": [],
+                    "dailyLimit": -1,
+                    "weeklyLimit": -1,
+                    "monthlyLimit": -1,
+                    "refundable": false,
+                    "appStoreId": ["", "", "", "", "", "", "", "", "", "", "", ""],
+                    "requirements": [
+                        {
+                            "requirementType": "DenyOnFulfillment",
+                            "requiredId": "E72002954292DCD8B8013B9E59A89921",
+                            "minQuantity": 1
+                        }
+                    ],
+                    "metaInfo": [
+                        { "key": "bShowInItemShop", "value": "false" },
+                        { "key": "sectionPriority", "value": "1000" },
+                        { "key": "SectionId", "value": "BattlePass" },
+                        { "key": "TileSize", "value": "DoubleWide" },
+                        { "key": "DisplayAssetPath", "value": "/Game/Catalog/DisplayAssets/DA_BR_Season12_BattlePass.DA_BR_Season12_BattlePass" },
+                        { "key": "NewDisplayAssetPath", "value": "/Game/Catalog/NewDisplayAssets/DAv2_BR_Season12_BattlePass.DAv2_BR_Season12_BattlePass" },
+                        { "key": "IsBattlePass", "value": "true" },
+                        { "key": "ShouldShowBattlePassPurchase", "value": "true" }
+                    ],
+                    "catalogGroup": "",
+                    "catalogGroupPriority": 0,
+                    "sortPriority": 1,
+                    "title": "Battle Pass",
+                    "shortDescription": "Chapter 2 - Season 2",
+                    "description": "Chapter 2 - Season 2 BattlePass",
+                    "displayAssetPath": "/Game/Catalog/DisplayAssets/DA_BR_Season12_BattlePass.DA_BR_Season12_Rare",
+                    "itemGrants": []
+                },
+                {
+                    "offerId": "689DD7694B70D4EF412B2D811A63C5BC",
+                    "devName": "BR.Season12.SingleTier.01",
+                    "offerType": "StaticPrice",
+                    "prices": [
+                        {
+                            "currencyType": "MtxCurrency",
+                            "currencySubType": "",
+                            "regularPrice": 150,
+                            "dynamicRegularPrice": -1,
+                            "finalPrice": 150,
+                            "saleExpiration": "9999-12-31T23:59:59.999Z",
+                            "basePrice": 150
+                        }
+                    ],
+                    "categories": [],
+                    "dailyLimit": -1,
+                    "weeklyLimit": -1,
+                    "monthlyLimit": -1,
+                    "refundable": false,
+                    "appStoreId": ["", "", "", "", "", "", "", "", "", "", "", ""],
+                    "requirements": [],
+                    "metaInfo": [
+                        { "key": "Preroll", "value": "False" }
+                    ],
+                    "catalogGroup": "",
+                    "catalogGroupPriority": 0,
+                    "sortPriority": 0,
+                    "title": "Battle Pass Level",
+                    "shortDescription": "",
+                    "description": "Get great rewards now!",
+                    "displayAssetPath": "",
+                    "itemGrants": []
+                }
+            ]
+        },
+        {
+            "name": "BRSeason13",
+            "catalogEntries": [
+                {
+                    "offerId": "3C1777684B7D65BECE90F28BB05CB4AF",
+                    "devName": "BR.Season13.BattlePass.01",
+                    "offerType": "StaticPrice",
+                    "prices": [
+                        {
+                            "currencyType": "MtxCurrency",
+                            "currencySubType": "",
+                            "regularPrice": 950,
+                            "dynamicRegularPrice": -1,
+                            "finalPrice": 0,
+                            "saleExpiration": "9999-12-31T23:59:59.999Z",
+                            "basePrice": 950
+                        }
+                    ],
+                    "categories": [],
+                    "dailyLimit": -1,
+                    "weeklyLimit": -1,
+                    "monthlyLimit": -1,
+                    "refundable": false,
+                    "appStoreId": ["", "", "", "", "", "", "", "", "", "", "", ""],
+                    "requirements": [
+                        {
+                            "requirementType": "DenyOnFulfillment",
+                            "requiredId": "3C1777684B7D65BECE90F28BB05CB4AF",
+                            "minQuantity": 1
+                        }
+                    ],
+                    "metaInfo": [
+                        { "key": "Preroll", "value": "False" },
+                        { "key": "bShowInItemShop", "value": "false" },
+                        { "key": "sectionPriority", "value": "1000" },
+                        { "key": "SectionId", "value": "BattlePass" },
+                        { "key": "TileSize", "value": "DoubleWide" },
+                        { "key": "DisplayAssetPath", "value": "/Game/Catalog/DisplayAssets/DA_BR_Season13_BattlePass.DA_BR_Season13_Rare" },
+                        { "key": "IsBattlePass", "value": "true" },
+                        { "key": "ShouldShowBattlePassPurchase", "value": "true" }
+                    ],
+                    "catalogGroup": "",
+                    "catalogGroupPriority": 0,
+                    "sortPriority": 1,
+                    "title": "Battle Pass",
+                    "shortDescription": "Chapter 2 - Season 3",
+                    "description": "",
+                    "displayAssetPath": "/Game/Catalog/DisplayAssets/DA_BR_Season13_BattlePass.DA_BR_Season13_Rare",
+                    "itemGrants": []
+                },
+                {
+                    "offerId": "C677E22244C444256A79ACA0C59BAE7D",
+                    "devName": "BR.Season13.SingleTier.01",
+                    "offerType": "StaticPrice",
+                    "prices": [
+                        {
+                            "currencyType": "MtxCurrency",
+                            "currencySubType": "",
+                            "regularPrice": 150,
+                            "dynamicRegularPrice": -1,
+                            "finalPrice": 150,
+                            "saleExpiration": "9999-12-31T23:59:59.999Z",
+                            "basePrice": 150
+                        }
+                    ],
+                    "categories": [],
+                    "dailyLimit": -1,
+                    "weeklyLimit": -1,
+                    "monthlyLimit": -1,
+                    "refundable": false,
+                    "appStoreId": ["", "", "", "", "", "", "", "", "", "", "", ""],
+                    "requirements": [],
+                    "metaInfo": [
+                        { "key": "Preroll", "value": "False" }
+                    ],
+                    "catalogGroup": "",
+                    "catalogGroupPriority": 0,
+                    "sortPriority": 0,
+                    "title": "Battle Pass Level",
+                    "shortDescription": "",
+                    "description": "Get great rewards now!",
+                    "displayAssetPath": "",
+                    "itemGrants": []
+                }
+            ]
         }
     ]
 }

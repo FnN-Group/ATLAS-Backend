@@ -1,6 +1,6 @@
 import app from "..";
-import path from "node:path";
 import fs from "node:fs";
+import { atlasDataReadPath } from "../config/paths";
 
 export default function () {
   app.get("/epic/friends/v1/:accountId/blocklist", async (c) => {
@@ -8,7 +8,10 @@ export default function () {
   });
 
   app.all("/v1/epic-settings/public/users/*/values", async (c) => {
-    const epicSettingsPath = path.join(__dirname, "..", "..", "responses", "epic-settings.json");
+    const epicSettingsPath = atlasDataReadPath(
+      "responses",
+      "epic-settings.json"
+    );
     try {
       const data = JSON.parse(fs.readFileSync(epicSettingsPath, "utf-8"));
       return c.json(data);

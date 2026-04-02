@@ -135,7 +135,7 @@ export default {
 								"creatorName": "Epic",
 								"descriptionTags": [],
 								"metadata": {
-									"image_url": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/main/public/playlists/Late-Game-Arena.png",
+									"image_url": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/playlists/Late-Game-Arena.png",
 									"matchmaking": {
 									"override_playlist": "playlist_showdownalt_solo"
 									}
@@ -291,7 +291,7 @@ export default {
 								"creatorName": "Epic",
 								"descriptionTags": [],
 								"metadata": {
-									"image_url": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/main/public/playlists/Late-Game-Arena.png",
+									"image_url": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/playlists/Late-Game-Arena.png",
 									"matchmaking": {
 									"override_playlist": "playlist_showdownalt_solo"
 									}
@@ -447,7 +447,7 @@ export default {
 								"creatorName": "Epic",
 								"descriptionTags": [],
 								"metadata": {
-									"image_url": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/main/public/playlists/Late-Game-Arena.png",
+									"image_url": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/playlists/Late-Game-Arena.png",
 									"matchmaking": {
 									"override_playlist": "playlist_showdownalt_solo"
 									}
@@ -603,7 +603,7 @@ export default {
 								"creatorName": "Epic",
 								"descriptionTags": [],
 								"metadata": {
-									"image_url": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/main/public/playlists/Late-Game-Arena.png",
+									"image_url": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/playlists/Late-Game-Arena.png",
 									"matchmaking": {
 									"override_playlist": "playlist_showdownalt_solo"
 									}
@@ -759,7 +759,7 @@ export default {
 								"creatorName": "Epic",
 								"descriptionTags": [],
 								"metadata": {
-									"image_url": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/main/public/playlists/Late-Game-Arena.png",
+									"image_url": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/playlists/Late-Game-Arena.png",
 									"matchmaking": {
 									"override_playlist": "playlist_showdownalt_solo"
 									}

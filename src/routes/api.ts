@@ -63,9 +63,28 @@ export default function () {
   });
 
   // Return 404 so game treats parental controls as unavailable → no lock on privacy settings
-  app.get("/content-controls/:accountId", async (c) => c.notFound());
-  app.get("/content-controls/:accountId/rules/namespaces/fn", async (c) => c.notFound());
-  app.post("/content-controls/:accountId/verify-pin", async (c) => c.notFound());
+  app.get("/content-controls/:accountId", async (c) => {
+    return c.json({
+      data: {
+        ageGate: 0,
+        controlsEnabled: false,
+        maxEpicProfilePrivacy: "none",
+        principalId: c.req.param("accountId"),
+      },
+    });
+  });
+
+  app.get("/content-controls/:accountId/rules/namespaces/fn", async (c) => {
+    return c.json([]);
+  });
+
+  app.post("/content-controls/:accountId/verify-pin", async (c) => {
+    return c.json({
+      data: {
+        pinCorrect: true,
+      },
+    });
+  });
 
   app.get("/fortnite/api/game/v2/privacy/account/:accountId", async (c) => {
     return c.json({
@@ -181,6 +200,43 @@ export default function () {
     return c.text("true");
   });
 
+  // Newer clients call these endpoints before opening playlist details.
+  // Return explicit unlocked results so discovery tiles do not show as gated.
+  app.post("/api/v1/links/lock-status/:accountId/check", async (c) => {
+    const body = await c.req.json().catch(() => ({} as any));
+    const linkCodes = Array.isArray(body?.linkCodes)
+      ? body.linkCodes.filter((value: unknown) => typeof value === "string")
+      : [];
+
+    return c.json({
+      results: linkCodes.map((linkCode: string) => ({
+        playerId: c.req.param("accountId"),
+        linkCode,
+        lockStatus: "UNLOCKED",
+        lockStatusReason: "NONE",
+        isVisible: true,
+      })),
+      hasMore: false,
+    });
+  });
+
+  app.post("/api/v1/links/lock-status/ssd/check", async (c) => {
+    const body = await c.req.json().catch(() => ({} as any));
+    const linkCodes = Array.isArray(body?.linkCodes)
+      ? body.linkCodes.filter((value: unknown) => typeof value === "string")
+      : [];
+
+    return c.json({
+      results: linkCodes.map((linkCode: string) => ({
+        linkCode,
+        lockStatus: "UNLOCKED",
+        lockStatusReason: "NONE",
+        isVisible: true,
+      })),
+      hasMore: false,
+    });
+  });
+
   app.get("/fortnite/api/v2/versioncheck/*", async (c) => {
     return c.json({
       type: "NO_UPDATE",
@@ -189,6 +245,13 @@ export default function () {
 
   app.post("/api/v1/user/setting", async (c) => {
     return c.json({});
+  });
+
+  app.post("/api/v1/links/favorites/:accountId/check", async (c) => {
+    return c.json({
+      results: [],
+      hasMore: false,
+    });
   });
 
   app.get("/fortnite/api/receipts/v1/account/*/receipts", async (c) => {

@@ -1,4 +1,5 @@
 import { setStatusMessage } from "../../index";
+import { getConfiguredMatchmakerPort } from "./config";
 
 interface MatchmakingPayload {
   region?: string;
@@ -9,7 +10,7 @@ interface MatchmakingPayload {
   version?: string;
 }
 
-export function startMatchmakingWebSocket(port: number = 5555) {
+export function startMatchmakingWebSocket(port: number = getConfiguredMatchmakerPort()) {
   Bun.serve({
     port,
     fetch(req, server) {

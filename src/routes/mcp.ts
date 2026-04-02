@@ -5,6 +5,12 @@ import { v4 as uuidv4 } from "uuid";
 import getVersion from "../utils/handlers/getVersion";
 import { Atlas } from "../utils/handlers/errors";
 import { atlasDataPath } from "../config/paths";
+import {
+  loadBattlePassData,
+  isBattlePassOffer,
+  handleBattlePassPurchase,
+  handleTierPurchase,
+} from "../utils/handlers/battlepass";
 
 const userpath = new Set();
 const profilesDir = atlasDataPath("static", "profiles");
@@ -148,6 +154,14 @@ export default function () {
 
       switch (c.req.param("operation")) {
         case "QueryProfile":
+          // Clean any stale gift boxes from common_core profiles
+          if (profile.items) {
+            for (const [itemId, item] of Object.entries(profile.items)) {
+              if ((item as any)?.templateId?.startsWith("GiftBox:")) {
+                delete profile.items[itemId];
+              }
+            }
+          }
           break;
         case "RedeemRealMoneyPurchases":
           break;
@@ -163,6 +177,40 @@ export default function () {
           break;
         case "RefreshExpeditions":
           break;
+        case "RemoveGiftBox":
+          {
+            // Client may send giftBoxItemId (string) or giftBoxItemIds (array)
+            const ids: string[] = [];
+            if (typeof body.giftBoxItemId === "string") ids.push(body.giftBoxItemId);
+            if (Array.isArray(body.giftBoxItemIds)) ids.push(...body.giftBoxItemIds);
+
+            for (const gid of ids) {
+              if (typeof gid === "string" && profile.items[gid]) {
+                delete profile.items[gid];
+                profileChanges.push({
+                  changeType: "itemRemoved",
+                  itemId: gid,
+                });
+              }
+            }
+
+            // Also remove any remaining GiftBox items (cleanup)
+            for (const [itemId, item] of Object.entries(profile.items)) {
+              if ((item as any)?.templateId?.startsWith("GiftBox:")) {
+                delete profile.items[itemId];
+                profileChanges.push({
+                  changeType: "itemRemoved",
+                  itemId,
+                });
+              }
+            }
+
+            if (profileChanges.length > 0) {
+              profile.rvn += 1;
+              profile.commandRevision += 1;
+            }
+            break;
+          }
         case "PurchaseCatalogEntry":
           {
             const useragent: any = c.req.header("user-agent");
@@ -247,6 +295,148 @@ export default function () {
               profileCommandRevision: athena.commandRevision || 0,
             });
 
+            // --- Battle Pass purchase handling ---
+            const bpData = loadBattlePassData(ver.season);
+            const bpType = bpData ? isBattlePassOffer(bpData, body.offerId) : null;
+
+            if (bpData && bpType) {
+              // Check if this specific offer was already purchased
+              const purchasedOffers = Array.isArray(athena.stats.attributes.purchased_bp_offers)
+                ? athena.stats.attributes.purchased_bp_offers
+                : [];
+
+              // Prevent re-purchasing the same battle pass
+              if (bpType === "battlepass" && purchasedOffers.includes(body.offerId)) {
+                return c.json(Atlas.storefront.alreadyOwned, 400);
+              }
+
+              let lootList: any[] = [];
+
+              if (bpType === "battlepass") {
+                lootList = handleBattlePassPurchase(
+                  athena,
+                  profile,
+                  bpData,
+                  body.offerId,
+                  ver.season,
+                  profileChanges,
+                  MultiUpdate[0].profileChanges
+                );
+
+                // Track the offer as purchased so DenyOnFulfillment works client-side
+                if (!Array.isArray(athena.stats.attributes.purchased_bp_offers)) {
+                  athena.stats.attributes.purchased_bp_offers = [];
+                }
+                if (!athena.stats.attributes.purchased_bp_offers.includes(body.offerId)) {
+                  athena.stats.attributes.purchased_bp_offers.push(body.offerId);
+                  MultiUpdate[0].profileChanges.push({
+                    changeType: "statModified",
+                    name: "purchased_bp_offers",
+                    value: athena.stats.attributes.purchased_bp_offers,
+                  });
+                }
+              } else if (bpType === "tier") {
+                const purchaseQuantity = Number(body.purchaseQuantity ?? 1);
+                lootList = handleTierPurchase(
+                  athena,
+                  profile,
+                  bpData,
+                  purchaseQuantity,
+                  ver.season,
+                  profileChanges,
+                  MultiUpdate[0].profileChanges
+                );
+              }
+
+              // Add gift box to common_core for the BP purchase animation
+              const giftBoxId = uuidv4().replace(/-/g, "");
+              const giftBoxTemplate = bpType === "battlepass"
+                ? "GiftBox:gb_battlepasspurchased"
+                : "GiftBox:gb_battlepass";
+
+              profile.items[giftBoxId] = {
+                templateId: giftBoxTemplate,
+                attributes: {
+                  fromAccountId: "",
+                  lootList,
+                },
+                quantity: 1,
+              };
+              profileChanges.push({
+                changeType: "itemAdded",
+                itemId: giftBoxId,
+                item: profile.items[giftBoxId],
+              });
+
+              notification.lootResult.items = lootList.map((l: any) => ({
+                itemType: l.itemType,
+                itemGuid: l.itemGuid,
+                itemProfile: "athena",
+                quantity: l.quantity,
+              }));
+              Notifications.push(notification);
+
+              // Handle currency deduction for BP
+              const offerPrice = Number(foundOffer.offerId?.prices?.[0]?.finalPrice ?? 0);
+              const offerCurrencyType = String(foundOffer.offerId?.prices?.[0]?.currencyType ?? "").toLowerCase();
+
+              if (offerCurrencyType === "mtxcurrency" && offerPrice > 0) {
+                const totalCost = bpType === "tier"
+                  ? offerPrice * (Number(body.purchaseQuantity ?? 1))
+                  : offerPrice;
+                let paid = false;
+                const currentMtxPlatform = String(profile.stats?.attributes?.current_mtx_platform ?? "").toLowerCase();
+
+                for (const key in profile.items) {
+                  const item = profile.items[key];
+                  const templateId = String(item?.templateId ?? "").toLowerCase();
+                  if (!templateId.startsWith("currency:mtx")) continue;
+
+                  const currencyPlatform = String(item?.attributes?.platform ?? "").toLowerCase();
+                  if (currencyPlatform !== currentMtxPlatform && currencyPlatform !== "shared") continue;
+
+                  if (Number(item?.quantity ?? 0) < totalCost) {
+                    return c.json(Atlas.storefront.currencyInsufficient, 400);
+                  }
+
+                  profile.items[key].quantity -= totalCost;
+                  profileChanges.push({
+                    changeType: "itemQuantityChanged",
+                    itemId: key,
+                    quantity: profile.items[key].quantity,
+                  });
+                  paid = true;
+                  break;
+                }
+
+                if (!paid) {
+                  return c.json(Atlas.storefront.currencyInsufficient, 400);
+                }
+              }
+
+              // Save athena
+              athena.rvn += 1;
+              athena.commandRevision += 1;
+              athena.updated = new Date().toISOString();
+              MultiUpdate[0].profileRevision = athena.rvn;
+              MultiUpdate[0].profileCommandRevision = athena.commandRevision;
+
+              await fs.promises.writeFile(athenaPath, JSON.stringify(athena, null, 2));
+              profileCache.set(
+                `${accountId}_athena`,
+                JSON.parse(JSON.stringify(athena)),
+              );
+
+              if (profileChanges.length > 0) {
+                profile.rvn += 1;
+                profile.commandRevision += 1;
+                profile.updated = new Date().toISOString();
+              }
+
+              break;
+            }
+            // --- End Battle Pass handling ---
+
             for (const value of foundOffer.offerId.itemGrants ?? []) {
               const itemExists = Object.values(athena.items).some(
                 (item: any) =>
@@ -285,6 +475,8 @@ export default function () {
 
             Notifications.push(notification);
 
+            // Always push a profileChange for common_core so we never
+            // accidentally fall into fullProfileUpdate
             const offerPrice = Number(foundOffer.offerId?.prices?.[0]?.finalPrice ?? 0);
             const offerCurrencyType = String(foundOffer.offerId?.prices?.[0]?.currencyType ?? "").toLowerCase();
 

@@ -356,7 +356,7 @@
           "hidden": false,
           "_type": "CommonUI Simple Message Base",
           "title": "ATLAS",
-          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm",
+          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm\nClick (F8) and type \"open 127.0.0.1\" to join.",
           "spotlight": true
         }
       ]
@@ -640,7 +640,7 @@
           "tabTitleOverride": "ATLAS",
           "_type": "CommonUI Simple Message MOTD",
           "title": "Welcome to ATLAS!",
-          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm",
+          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm\nClick (F8) and type \"open 127.0.0.1\" to join.",
           "offerAction": "ShowOfferDetails",
           "videoLoop": false,
           "videoStreamingEnabled": false,
@@ -669,7 +669,7 @@
           "_type": "CommonUI Simple Message Base",
           "adspace": "ENJOY!",
           "title": "ATLAS",
-          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm",
+          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm\nClick (F8) and type \"open 127.0.0.1\" to join.",
           "spotlight": false
         }
       ]
@@ -695,7 +695,7 @@
           "tabTitleOverride": "ATLAS",
           "_type": "CommonUI Simple Message MOTD",
           "title": "Welcome to ATLAS!",
-          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm",
+          "body": "@cipherfps\nDiscord: https://discord.gg/GqgakxU6bm\nClick (F8) and type \"open 127.0.0.1\" to join.",
           "offerAction": "ShowOfferDetails",
           "videoLoop": false,
           "videoStreamingEnabled": false,

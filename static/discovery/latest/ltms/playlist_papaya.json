@@ -23,12 +23,12 @@
           "es-419": "Fiesta campal",
           "tr": "Çılgın Parti"
       },
-      "image_url": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/main/public/playlists/Late-Game-Arena.png",
+      "image_url": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/playlists/Late-Game-Arena.png",
       "image_urls": {
-          "url_s": "https://cdn2.unrealengine.com/partyroyale-480-480x270-a4ce24699034.jpg",
-          "url_xs": "https://cdn2.unrealengine.com/partyroyale-256-256x144-932b805e9fb7.jpg",
-          "url_m": "https://cdn2.unrealengine.com/partyroyale-640-640x360-983da0123af2.jpg",
-          "url": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/main/public/playlists/Late-Game-Arena.png"
+          "url_s": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/playlists/Late-Game-Arena.png",
+          "url_xs": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/playlists/Late-Game-Arena.png",
+          "url_m": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/playlists/Late-Game-Arena.png",
+          "url": "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/playlists/Late-Game-Arena.png"
       },
       "matchmaking": {
           "override_playlist": "playlist_showdownalt_solo"

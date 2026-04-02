@@ -1,10 +1,506 @@
 import app from "..";
 import getVersion from "../utils/handlers/getVersion";
 import { Atlas } from "../utils/handlers/errors";
-import discoveryResponses from "../../static/discovery/events";
-import path from "node:path";
+import { atlasDataReadPath } from "../config/paths";
 import fs from "node:fs";
 import crypto from "crypto";
+
+const ARENA_PLAYLISTS = [
+  "playlist_showdownalt_solo",
+  "playlist_showdownalt_duos",
+  "playlist_showdownalt_trios",
+] as const;
+
+const ARENA_PLAYLIST_TITLES: Record<string, string> = {
+  playlist_showdownalt_solo: "Arena Solo",
+  playlist_showdownalt_duos: "Arena Duo",
+  playlist_showdownalt_trios: "Arena Trio",
+};
+
+const DEFAULT_DISCOVERY_IMAGE =
+  "https://raw.githubusercontent.com/cipherfps/ATLAS-Backend/refs/heads/gui/public/playlists/Late-Game-Arena.png";
+const SEASON_29_PLUS_PRIMARY_PLAYLISTS = [
+  "playlist_showdownalt_solo",
+  "playlist_defaultsolo",
+  "playlist_defaultduo",
+  "playlist_trios",
+  "playlist_defaultsquad",
+] as const;
+
+type DiscoveryLink = Record<string, any>;
+type DiscoverySurface = Record<string, any>;
+
+function readJsonFile(...parts: string[]): any {
+  return JSON.parse(fs.readFileSync(atlasDataReadPath(...parts), "utf-8"));
+}
+
+function cloneDeep<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function getNormalDiscoverySurface(): DiscoverySurface {
+  return readJsonFile("static", "discovery", "menu.json");
+}
+
+function buildImageUrls(imageUrl: string): Record<string, string> {
+  return {
+    url_s: imageUrl,
+    url_xs: imageUrl,
+    url_m: imageUrl,
+    url: imageUrl,
+  };
+}
+
+function isArenaPlaylistMnemonic(mnemonic: unknown): mnemonic is (typeof ARENA_PLAYLISTS)[number] {
+  return typeof mnemonic === "string" && (ARENA_PLAYLISTS as readonly string[]).includes(mnemonic);
+}
+
+function applyArenaImageMetadata(metadata?: Record<string, any> | null): Record<string, any> {
+  const nextMetadata = metadata || {};
+  nextMetadata.image_url = DEFAULT_DISCOVERY_IMAGE;
+  nextMetadata.image_urls = buildImageUrls(DEFAULT_DISCOVERY_IMAGE);
+  return nextMetadata;
+}
+
+function normalizeArenaLink(link: DiscoveryLink | null): DiscoveryLink | null {
+  if (!link || !isArenaPlaylistMnemonic(link.mnemonic)) {
+    return link;
+  }
+
+  link.metadata = applyArenaImageMetadata(link.metadata);
+  return link;
+}
+
+function buildArenaPlaylistLink(
+  mnemonic: string,
+  template?: DiscoveryLink | null,
+): DiscoveryLink {
+  const link = template ? cloneDeep(template) : {};
+  const title = ARENA_PLAYLIST_TITLES[mnemonic] || "Arena";
+
+  link.namespace = "fn";
+  link.accountId = link.accountId || "epic";
+  link.creatorName = link.creatorName || "Epic";
+  link.mnemonic = mnemonic;
+  link.linkType = "BR:Playlist";
+  link.active = true;
+  link.disabled = false;
+  link.version = link.version || 95;
+  link.created = link.created || "2024-01-01T00:00:00.000Z";
+  link.published = link.published || "2024-01-01T00:00:00.000Z";
+  link.descriptionTags = Array.isArray(link.descriptionTags) ? link.descriptionTags : [];
+  link.moderationStatus = link.moderationStatus || "Unmoderated";
+  link.metadata = applyArenaImageMetadata(link.metadata);
+  link.metadata.parent_set = "set_br_playlists";
+  link.metadata.favorite_override = "set_br_playlists";
+  link.metadata.play_history_override = "set_br_playlists";
+  link.metadata.product_tag = "Product.BR.Build.Arena";
+  link.metadata.matchmaking = {
+    ...(link.metadata.matchmaking || {}),
+    override_playlist: mnemonic,
+  };
+  link.metadata.alt_title = {
+    ...(link.metadata.alt_title || {}),
+    en: title,
+  };
+  link.metadata.title = title;
+  link.metadata.video_vuid = link.metadata.video_vuid || "";
+  link.metadata.tileSize = link.metadata.tileSize || "medium";
+
+  return link;
+}
+
+function buildArenaModeSet(template?: DiscoveryLink | null): DiscoveryLink {
+  const imageUrl = DEFAULT_DISCOVERY_IMAGE;
+
+  return {
+    namespace: "fn",
+    accountId: "epic",
+    creatorName: "Epic",
+    mnemonic: "set_arena_playlists",
+    linkType: "ModeSet",
+    metadata: {
+      image_url: imageUrl,
+      image_urls: buildImageUrls(imageUrl),
+      title: "Arena",
+      locale: "en",
+      video_vuid: "",
+      sub_link_codes: [...ARENA_PLAYLISTS],
+      default_sub_link_code: "playlist_showdownalt_solo",
+      alt_title: {
+        en: "Arena",
+      },
+    },
+    version: 1,
+    active: true,
+    disabled: false,
+    created: "2024-01-01T00:00:00.000Z",
+    published: "2024-01-01T00:00:00.000Z",
+    descriptionTags: [],
+    moderationStatus: "Unmoderated",
+    discoveryIntent: "PUBLIC",
+  };
+}
+
+function buildHabaneroModeSet(template?: DiscoveryLink | null): DiscoveryLink {
+  const modeSet = buildArenaModeSet(template);
+  modeSet.mnemonic = "set_habanero_playlists";
+  modeSet.metadata = {
+    ...(modeSet.metadata || {}),
+    title: "Arena",
+    alt_title: {
+      ...((modeSet.metadata && modeSet.metadata.alt_title) || {}),
+      en: "Arena",
+    },
+    tagline: "Queue into Arena and climb the competitive ladder.",
+    product_tag: "Product.BR.Build.Arena",
+  };
+  return modeSet;
+}
+
+function applyModernPrimaryModeSetOverride(
+  modeSet: DiscoveryLink | null,
+  arenaTemplate?: DiscoveryLink | null,
+): void {
+  if (!modeSet) {
+    return;
+  }
+
+  const imageUrl = DEFAULT_DISCOVERY_IMAGE;
+
+  modeSet.metadata = modeSet.metadata || {};
+  modeSet.metadata.image_url = imageUrl;
+  modeSet.metadata.image_urls = buildImageUrls(imageUrl);
+  modeSet.metadata.title = "Arena";
+  modeSet.metadata.locale = modeSet.metadata.locale || "en";
+  modeSet.metadata.video_vuid = "";
+  modeSet.metadata.tagline = "Queue into Arena and core Battle Royale playlists.";
+  modeSet.metadata.default_sub_link_code = "playlist_showdownalt_solo";
+  modeSet.metadata.sub_link_codes = [...SEASON_29_PLUS_PRIMARY_PLAYLISTS];
+  modeSet.metadata.alt_title = {
+    ...(modeSet.metadata.alt_title || {}),
+    en: "Arena",
+  };
+}
+
+function getLatestDiscoveryLinks(): DiscoveryLink[] {
+  const latestMenu = readJsonFile("static", "discovery", "latest", "menu.json");
+  const brPlaylist = readJsonFile("static", "discovery", "latest", "brplaylist.json");
+
+  const links = [
+    ...(Array.isArray(latestMenu) ? latestMenu : [latestMenu]),
+    ...(Array.isArray(brPlaylist) ? brPlaylist : [brPlaylist]),
+  ]
+    .filter(Boolean)
+    .map((link) => cloneDeep(link));
+
+  for (const link of links) {
+    normalizeArenaLink(link);
+  }
+
+  const arenaTemplate =
+    links.find((link) => link?.mnemonic === "playlist_showdownalt_solo") ?? null;
+
+  for (const mnemonic of ARENA_PLAYLISTS) {
+    if (!links.some((link) => link?.mnemonic === mnemonic)) {
+      links.push(buildArenaPlaylistLink(mnemonic, arenaTemplate));
+    }
+  }
+
+  const battleRoyaleModeSet = links.find((link) => link?.mnemonic === "set_br_playlists");
+  if (battleRoyaleModeSet?.metadata) {
+    const subLinkCodes = Array.isArray(battleRoyaleModeSet.metadata.sub_link_codes)
+      ? battleRoyaleModeSet.metadata.sub_link_codes.filter((value: unknown) => typeof value === "string")
+      : [];
+
+    for (const mnemonic of ARENA_PLAYLISTS) {
+      if (!subLinkCodes.includes(mnemonic)) {
+        subLinkCodes.push(mnemonic);
+      }
+    }
+
+    battleRoyaleModeSet.metadata.sub_link_codes = subLinkCodes;
+  }
+
+  if (!links.some((link) => link?.mnemonic === "set_arena_playlists")) {
+    links.push(buildArenaModeSet(arenaTemplate || battleRoyaleModeSet));
+  }
+
+  if (!links.some((link) => link?.mnemonic === "set_habanero_playlists")) {
+    links.push(buildHabaneroModeSet(arenaTemplate || battleRoyaleModeSet));
+  }
+
+  return links;
+}
+
+function getSurfaceResults(surface: DiscoverySurface): any[] {
+  const results = surface?.Panels?.[0]?.Pages?.[0]?.results;
+  return Array.isArray(results) ? results : [];
+}
+
+function makeSurfaceEntry(link: DiscoveryLink): Record<string, any> {
+  return {
+    linkData: link,
+    lastVisited: null,
+    linkCode: link.mnemonic || link.linkCode || "",
+    isFavorite: false,
+  };
+}
+
+function findLinkByMnemonic(links: DiscoveryLink[], mnemonic: string): DiscoveryLink | null {
+  return links.find((link) => link?.mnemonic === mnemonic) ?? null;
+}
+
+function findSurfaceLinkByMnemonic(surface: DiscoverySurface, mnemonic: string): DiscoveryLink | null {
+  for (const result of getSurfaceResults(surface)) {
+    if (result?.linkData?.mnemonic === mnemonic) {
+      return result.linkData;
+    }
+  }
+
+  return null;
+}
+
+function normalizeArenaSurface(surface: DiscoverySurface): DiscoverySurface {
+  for (const result of getSurfaceResults(surface)) {
+    const link = result?.linkData;
+    const mnemonic = link?.mnemonic || result?.linkCode;
+    if (!link || !isArenaPlaylistMnemonic(mnemonic)) {
+      continue;
+    }
+
+    normalizeArenaLink(link);
+  }
+
+  return surface;
+}
+
+function ensureArenaDiscoverySurface(surface: DiscoverySurface, latestLinks: DiscoveryLink[]): DiscoverySurface {
+  const results = getSurfaceResults(surface);
+  if (results.length === 0) {
+    return surface;
+  }
+
+  for (let index = results.length - 1; index >= 0; index -= 1) {
+    const mnemonic = results[index]?.linkData?.mnemonic || results[index]?.linkCode;
+    if (mnemonic === "set_arena_playlists") {
+      results.splice(index, 1);
+    }
+  }
+
+  const arenaTemplate =
+    findLinkByMnemonic(latestLinks, "playlist_showdownalt_solo") ||
+    findSurfaceLinkByMnemonic(surface, "playlist_showdownalt_solo");
+
+  for (const mnemonic of ARENA_PLAYLISTS) {
+    const exists = results.some(
+      (result) => result?.linkData?.mnemonic === mnemonic || result?.linkCode === mnemonic,
+    );
+    if (exists) {
+      continue;
+    }
+
+    const link =
+      findLinkByMnemonic(latestLinks, mnemonic) || buildArenaPlaylistLink(mnemonic, arenaTemplate);
+    results.push(makeSurfaceEntry(link));
+  }
+
+  return surface;
+}
+
+function populateModeSets(surface: DiscoverySurface, latestLinks: DiscoveryLink[]): DiscoverySurface {
+  surface.ModeSets = {};
+
+  for (const link of latestLinks) {
+    if (link?.linkType === "ModeSet" && typeof link.mnemonic === "string") {
+      surface.ModeSets[link.mnemonic] = cloneDeep(link);
+    }
+  }
+
+  if (surface.ModeSets["set_arena_playlists"]) {
+    delete surface.ModeSets["set_arena_playlists"];
+  }
+
+  return surface;
+}
+
+function buildDiscoverySurfaceResponse(ver: ReturnType<typeof getVersion>): DiscoverySurface {
+  const normalSurface = getNormalDiscoverySurface();
+  if (ver.season < 23) {
+    return normalizeArenaSurface(normalSurface);
+  }
+
+  const latestLinks = getLatestDiscoveryLinks();
+  const surface = normalizeArenaSurface(ensureArenaDiscoverySurface(cloneDeep(normalSurface), latestLinks));
+
+  if (ver.season >= 27) {
+    const populatedSurface = populateModeSets(surface, latestLinks);
+    if (ver.season >= 29) {
+      applyModernPrimaryModeSetOverride(
+        populatedSurface.ModeSets?.["set_br_playlists"] ?? null,
+        findLinkByMnemonic(latestLinks, "playlist_showdownalt_solo"),
+      );
+    }
+
+    return populatedSurface;
+  }
+
+  surface.ModeSets = {};
+  return surface;
+}
+
+function getMnemonicLinks(ver: ReturnType<typeof getVersion>): DiscoveryLink[] {
+  const links =
+    ver.season >= 27
+      ? getLatestDiscoveryLinks()
+      : getSurfaceResults(buildDiscoverySurfaceResponse(ver))
+    .map((result) => result?.linkData)
+    .filter(Boolean);
+
+  if (ver.season >= 29) {
+    const arenaTemplate = findLinkByMnemonic(links, "playlist_showdownalt_solo");
+    const battleRoyaleModeSet = findLinkByMnemonic(links, "set_br_playlists");
+    applyModernPrimaryModeSetOverride(battleRoyaleModeSet, arenaTemplate);
+  }
+
+  return links;
+}
+
+function buildApiV2SurfaceResponse(ver: ReturnType<typeof getVersion>): Record<string, any> {
+  const links = getMnemonicLinks(ver);
+  const availableMnemonics = new Set(
+    links
+      .map((link) => (typeof link?.mnemonic === "string" ? link.mnemonic : ""))
+      .filter(Boolean),
+  );
+
+  const curatedHomebar = availableMnemonics.has("reference_byepicnocompetitive_5")
+    ? ["reference_byepicnocompetitive_5"]
+    : [];
+
+  const preferredPanelCodes = (
+    ver.season >= 29
+      ? [
+          ...SEASON_29_PLUS_PRIMARY_PLAYLISTS,
+        ]
+      : [
+          "set_br_playlists",
+          "playlist_showdownalt_solo",
+          "playlist_showdownalt_duos",
+          "playlist_showdownalt_trios",
+          "playlist_defaultsolo",
+          "playlist_defaultduo",
+          "playlist_trios",
+          "playlist_defaultsquad",
+          "playlist_juno",
+          "playlist_papaya",
+          "playlist_durian",
+        ]
+  ).filter((mnemonic) => availableMnemonics.has(mnemonic));
+
+  const fallbackCodes = links
+    .map((link) => (typeof link?.mnemonic === "string" ? link.mnemonic : ""))
+    .filter(
+      (mnemonic) =>
+        mnemonic &&
+        mnemonic !== "reference_byepicnocompetitive_5" &&
+        !preferredPanelCodes.includes(mnemonic),
+    );
+
+  const panelCodes = [...preferredPanelCodes, ...fallbackCodes].slice(0, 8);
+  const makeSurfaceResult = (linkCode: string, globalCCU = 1) => ({
+    lastVisited: null,
+    linkCode,
+    isFavorite: false,
+    favoriteStatus: "NONE",
+    globalCCU,
+    lockStatus: "UNLOCKED",
+    lockStatusReason: "NONE",
+    isVisible: true,
+  });
+
+  return {
+    panels: [
+      {
+        panelName: "Homebar_V3",
+        panelDisplayName: "Test_EpicsPicksHomebar",
+        featureTags: ["col:5", "homebar"],
+        firstPage: {
+          results: curatedHomebar.map((linkCode) => makeSurfaceResult(linkCode, -1)),
+          hasMore: false,
+          panelTargetName: null,
+        },
+        panelType: "CuratedList",
+        playHistoryType: null,
+      },
+      {
+        panelName: "ByEpicNoCompetitive",
+        panelDisplayName: "By Epic",
+        featureTags: ["col:5"],
+        firstPage: {
+          results: panelCodes.map((linkCode) => makeSurfaceResult(linkCode)),
+          hasMore: false,
+          panelTargetName: null,
+        },
+        panelType: "AnalyticsList",
+        playHistoryType: null,
+      },
+    ],
+  };
+}
+
+function buildGenericPlaylistLink(mnemonic: string): DiscoveryLink {
+  return {
+    namespace: "fn",
+    accountId: "epic",
+    creatorName: "Epic",
+    mnemonic,
+    linkType: "BR:Playlist",
+    metadata: {
+      image_url: "",
+      image_urls: buildImageUrls(""),
+      matchmaking: {
+        override_playlist: mnemonic,
+      },
+    },
+    version: 95,
+    active: true,
+    disabled: false,
+    created: "2021-10-01T00:56:45.010Z",
+    published: "2021-08-03T15:27:20.251Z",
+    descriptionTags: [],
+    moderationStatus: "Approved",
+  };
+}
+
+function getDiscoveryLinkResponse(
+  ver: ReturnType<typeof getVersion>,
+  mnemonic: string,
+): DiscoveryLink {
+  const links = getMnemonicLinks(ver);
+  const existing = findLinkByMnemonic(links, mnemonic);
+
+  if (existing) {
+    return existing;
+  }
+
+  if (ARENA_PLAYLISTS.includes(mnemonic as (typeof ARENA_PLAYLISTS)[number])) {
+    const arenaTemplate = findLinkByMnemonic(links, "playlist_showdownalt_solo");
+    return buildArenaPlaylistLink(mnemonic, arenaTemplate);
+  }
+
+  if (mnemonic === "set_arena_playlists") {
+    const battleRoyaleModeSet = findLinkByMnemonic(links, "set_br_playlists");
+    return buildArenaModeSet(battleRoyaleModeSet);
+  }
+
+  if (mnemonic === "set_habanero_playlists") {
+    const battleRoyaleModeSet = findLinkByMnemonic(links, "set_br_playlists");
+    return buildHabaneroModeSet(battleRoyaleModeSet);
+  }
+
+  return buildGenericPlaylistLink(mnemonic);
+}
 
 export default function () {
   app.get("/fortnite/api/discovery/accessToken/*", async (c) => {
@@ -19,66 +515,7 @@ export default function () {
   });
 
   app.post("/api/v2/discovery/surface/*", async (c) => {
-    return c.json({
-      panels: [
-        {
-          panelName: "Homebar_V3",
-          panelDisplayName: "Test_EpicsPicksHomebar",
-          featureTags: ["col:5", "homebar"],
-          firstPage: {
-            results: [
-              {
-                lastVisited: null,
-                linkCode: "reference_byepicnocompetitive_5",
-                isFavorite: false,
-                globalCCU: 1,
-              },
-            ],
-            hasMore: false,
-            panelTargetName: null,
-          },
-          panelType: "CuratedList",
-          playHistoryType: null,
-        },
-        {
-          panelName: "ByEpicNoCompetitive",
-          panelDisplayName: "By Epic",
-          featureTags: ["col:5"],
-          firstPage: {
-            results: [
-              {
-                lastVisited: null,
-                linkCode: "set_br_playlists",
-                isFavorite: false,
-                globalCCU: 1,
-              },
-              {
-                lastVisited: null,
-                linkCode: "playlist_durian",
-                isFavorite: false,
-                globalCCU: 1,
-              },
-              {
-                lastVisited: null,
-                linkCode: "playlist_showdownalt_solo",
-                isFavorite: false,
-                globalCCU: 1,
-              },
-              {
-                lastVisited: null,
-                linkCode: "playlist_juno",
-                isFavorite: false,
-                globalCCU: 1,
-              },
-            ],
-            hasMore: true,
-            panelTargetName: null,
-          },
-          panelType: "AnalyticsList",
-          playHistoryType: null,
-        },
-      ],
-    });
+    return c.json(buildApiV2SurfaceResponse(getVersion(c)));
   });
 
   app.post("/api/v1/assets/Fortnite/*", async (c) => {
@@ -198,63 +635,44 @@ export default function () {
   });
 
   app.post("/fortnite/api/game/v2/creative/discovery/surface/*", async (c) => {
-    const Normal = require(`../../static/discovery/menu.json`);
-
-    return c.json(Normal);
+    return c.json(buildDiscoverySurfaceResponse(getVersion(c)));
   });
 
   app.post("/api/v1/discovery/surface/*", async (c) => {
-    const Normal = require(`../../static/discovery/menu.json`);
-
-    return c.json(Normal);
+    return c.json(buildDiscoverySurfaceResponse(getVersion(c)));
   });
 
   app.post("/links/api/fn/mnemonic", async (c) => {
     const ver = getVersion(c);
-    const Normal = require(`../../static/discovery/menu.json`);
-    const Latest = require("../../static/discovery/latest/menu.json");
+    return c.json(getMnemonicLinks(ver));
+  });
 
-    const DefaultLinks = Normal.Panels[0].Pages[0].results.map((result: any) => result.linkData);
-
-    if (ver.build >= 23.5) {
-      return c.json(Latest);
-    } else {
-      return c.json(DefaultLinks);
-    }
+  app.get("/links/api/fn/mnemonic/:playlistId", async (c) => {
+    const playlistId = c.req.param("playlistId");
+    return c.json(getDiscoveryLinkResponse(getVersion(c), playlistId));
   });
 
   app.get("/links/api/fn/mnemonic/:playlistId/related", async (c) => {
     const playlistId = c.req.param("playlistId");
+    const ver = getVersion(c);
+
+    const links: Record<string, DiscoveryLink> = {
+      [playlistId]: getDiscoveryLinkResponse(ver, playlistId),
+    };
+
+    const arenaMap: Record<string, string[]> = {
+      playlist_defaultsolo: ["playlist_showdownalt_solo"],
+      playlist_defaultduo: ["playlist_showdownalt_duos"],
+      playlist_trios: ["playlist_showdownalt_trios"],
+    };
+
+    for (const mnemonic of arenaMap[playlistId] || []) {
+      links[mnemonic] = getDiscoveryLinkResponse(ver, mnemonic);
+    }
+
     return c.json({
       parentLinks: [],
-      links: {
-        [playlistId]: {
-          namespace: "fn",
-          accountId: "epic",
-          creatorName: "Epic",
-          mnemonic: playlistId,
-          linkType: "BR:Playlist",
-          metadata: {
-            image_url: "",
-            image_urls: {
-              url_s: "",
-              url_xs: "",
-              url_m: "",
-              url: "",
-            },
-            matchmaking: {
-              override_playlist: playlistId,
-            },
-          },
-          version: 95,
-          active: true,
-          disabled: false,
-          created: "2021-10-01T00:56:45.010Z",
-          published: "2021-08-03T15:27:20.251Z",
-          descriptionTags: [],
-          moderationStatus: "Approved",
-        },
-      },
+      links,
     });
   });
 }
