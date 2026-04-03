@@ -2,7 +2,7 @@
   "_id": "ATLAS",
   "created": "0001-01-01T00:00:00.000Z",
   "updated": "0001-01-01T00:00:00.000Z",
-  "rvn": 49,
+  "rvn": 51,
   "wipeNumber": 1,
   "accountId": "ATLAS",
   "profileId": "athena",
@@ -15,7 +15,7 @@
           "slots": {
             "MusicPack": {
               "items": [
-                "AthenaMusicPack:MusicPack_119_CH1_DefaultMusic"
+                ""
               ]
             },
             "Character": {
@@ -78,7 +78,7 @@
             },
             "Glider": {
               "items": [
-                "AthenaGlider:Umbrella_Silver"
+                "AthenaGlider:DefaultGlider"
               ],
               "activeVariants": [
                 null
@@ -232897,5 +232897,5 @@
       ]
     }
   },
-  "commandRevision": 48
+  "commandRevision": 50
 }
