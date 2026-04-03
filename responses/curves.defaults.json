@@ -5,79 +5,100 @@
     "type": "amount"
   },
   "2": {
+    "name": "Impulse Vehicle Momentum",
+    "key": "Default.KnockGrenade.LaunchVelocity.Vehicle",
+    "type": "amount"
+  },
+  "3": {
     "name": "Shockwave Momentum",
     "key": "Default.ShockwaveGrenade.LaunchVelocity",
     "type": "amount"
   },
-  "3": {
+  "4": {
     "name": "Chiller Momentum",
     "key": "Default.IceGrenade.LaunchVelocity",
     "type": "amount"
   },
-  "4": {
+  "5": {
     "name": "Flint-Knock Momentum",
     "key": "Default.PistolFlintlock.KnockMagSelf",
     "type": "amount"
   },
-  "5": {
+  "6": {
     "name": "Dub Shotgun Momentum",
     "key": "Default.Dub.KnockMagSelf",
     "type": "amount"
   },
-  "6": {
+  "7": {
     "name": "Horizontal Crash Pad Momentum",
     "key": "Default.AppleSun.LaunchVelocity.HorizontalLaunch",
     "type": "amount"
   },
-  "7": {
+  "8": {
     "name": "Launch Pad Momentum",
     "key": "Default.Launchpad.LaunchStrength",
     "type": "amount"
   },
-  "8": {
+  "9": {
     "name": "Floor Bouncer Momentum",
     "key": "Default.BouncePad.Floor.Player.MaxVelocity",
     "type": "amount"
   },
-  "9": {
+  "10": {
     "name": "Wall Bouncer Momentum",
     "key": "Default.BouncePad.Wall.Player.MaxLateralVelocity",
     "type": "amount"
   },
-  "10": {
+  "11": {
+    "name": "Vehicle Floor Bouncer Momentum",
+    "key": "Default.BouncePad.Floor.Vehicle.MaxLateralVelocity",
+    "type": "amount"
+  },
+  "12": {
+    "name": "Vehicle Wall Bouncer Momentum",
+    "key": "Default.BouncePad.Wall.Vehicle.MaxLateralVelocity",
+    "type": "amount"
+  },
+  "13": {
     "name": "Cube Launch Amount",
     "key": "Default.Cube.Impulseamount",
     "type": "amount"
   },
-  "11": {
+  "14": {
     "name": "Glider Redeploy",
     "key": "Default.GliderRedeploy.CanRedeploy",
     "type": "static",
     "staticValue": "1"
   },
-  "12": {
+  "15": {
     "name": "Glider Speed",
     "key": "Default.ParachuteControlGliderRedeploy.MaxLateralSpeed",
     "type": "amount"
   },
-  "13": {
+  "16": {
     "name": "Jules' Grappler Projectile Speed",
     "key": "Default.GrapplingHoot.Speed",
     "type": "amount"
   },
-  "14": {
+  "17": {
     "name": "Disable Jules' Grappler Glider Redeploy",
     "key": "Default.GrapplingHoot.DisableGliderDeploy",
     "type": "static",
     "staticValue": "1"
   },
-  "15": {
+  "18": {
     "name": "Infinite Crashpad Lifespan",
     "key": "Default.AppleSun.Lifespan",
     "type": "static",
     "staticValue": "99999999999999"
   },
-  "16": {
+  "19": {
+    "name": "Crash Pad Environmental Damage",
+    "key": "Default.AppleSun.EnvironmentDamage",
+    "type": "static",
+    "staticValue": "0"
+  },
+  "20": {
     "name": "Infinite Rift Duration",
     "key": "Default.Rift.Item.ActiveDuration",
     "type": "static",
@@ -85,7 +106,12 @@
     "deletedLine": "+CurveTable=/Game/Athena/Balance/DataTables/AthenaGameData;RowUpdate;Default.Rift.Item.ActiveDuration;0;99999999999999",
     "isDeleted": true
   },
-  "17": {
+  "21": {
+    "name": "Rift Teleport Height",
+    "key": "Default.Rift.TeleportHeight",
+    "type": "amount"
+  },
+  "22": {
     "name": "Infinite Hop Flopper Duration",
     "key": "Default.HopFlopper.Duration",
     "type": "static",
@@ -93,7 +119,7 @@
     "deletedLine": "+CurveTable=/Game/Athena/Balance/DataTables/AthenaGameData;RowUpdate;Default.HopFlopper.Duration;0;99999999999999",
     "isDeleted": true
   },
-  "18": {
+  "23": {
     "name": "Allow Neutral Editing",
     "key": "AllowNeutralEditing",
     "type": "static",
@@ -101,7 +127,7 @@
     "deletedLine": "+CurveTable=/Game/Athena/Balance/DataTables/AthenaGameData;RowUpdate;AllowNeutralEditing;0;1",
     "isDeleted": true
   },
-  "19": {
+  "24": {
     "name": "Disable Fall Damage",
     "key": "Player",
     "pathPart": "/Game/Athena/Balance/DataTables/AthenaFallingDamage",
@@ -118,40 +144,149 @@
       "+CurveTable=/Game/Athena/Balance/DataTables/AthenaFallingDamage;RowUpdate;Player;7200;0.0"
     ]
   },
-  "20": {
-    "name": "Storm Damage Fix",
+  "25": {
+    "name": "S19 Storm Damage Fix",
     "key": "Default.SafeZone.Damage",
     "type": "static",
     "staticValue": "0"
   },
-  "21": {
+  "26": {
     "name": "Shells",
     "key": "Default.Ammo.MaxStackAmount.Shells",
     "type": "amount"
   },
-  "22": {
+  "27": {
     "name": "Light Ammo",
     "key": "Default.Ammo.MaxStackAmount.Light",
     "type": "amount"
   },
-  "23": {
+  "28": {
     "name": "Medium Ammo",
     "key": "Default.Ammo.MaxStackAmount.Medium",
     "type": "amount"
   },
-  "24": {
+  "29": {
     "name": "Heavy Ammo",
     "key": "Default.Ammo.MaxStackAmount.Heavy",
     "type": "amount"
   },
-  "25": {
+  "30": {
     "name": "XY Velocity",
     "key": "Default.RuneVent.LaunchXYVelocity",
     "type": "amount"
   },
-  "26": {
+  "31": {
     "name": "Z Velocity",
     "key": "Default.RuneVent.LaunchZVelocity",
+    "type": "amount"
+  },
+  "32": {
+    "name": "Shockwave Environmental Damage",
+    "key": "Default.ShockwaveGrenade.ShouldDestroyStructure",
+    "type": "static",
+    "staticValue": "0"
+  },
+  "33": {
+    "name": "Boogie Bomb Jump Multiplier",
+    "key": "Default.DanceGrenade.JumpMultiplier",
+    "type": "amount"
+  },
+  "34": {
+    "name": "Boogie Bomb Duration",
+    "key": "Default.DanceGrenade.Duration",
+    "type": "amount"
+  },
+  "35": {
+    "name": "Boogie Bomb Stack Amount",
+    "key": "Default.Consumables.MaxStackAmount.BoogieBomb",
+    "type": "amount"
+  },
+  "36": {
+    "name": "Chiller Walk Speed",
+    "key": "Default.IceGrenade.WalkSpeedMultiplier",
+    "type": "amount"
+  },
+  "37": {
+    "name": "Disable Sliding",
+    "key": "Default.Sliding.Enabled",
+    "type": "static",
+    "staticValue": "0"
+  },
+  "38": {
+    "name": "Sliding Velocity",
+    "key": "Default.Sliding.MaxLateralSlidingSpeed",
+    "type": "amount"
+  },
+  "39": {
+    "name": "Wood Stack Amount",
+    "key": "Default.MaxStack.Resources.Wood",
+    "type": "amount"
+  },
+  "40": {
+    "name": "Brick Stack Amount",
+    "key": "Default.MaxStack.Resources.Stone",
+    "type": "amount"
+  },
+  "41": {
+    "name": "Metal Stack Amount",
+    "key": "Default.MaxStack.Resources.Metal",
+    "type": "amount"
+  },
+  "42": {
+    "name": "Remove Mini Shield Cap",
+    "key": "Default.ShieldSmallCap",
+    "type": "static",
+    "staticValue": "100"
+  },
+  "43": {
+    "name": "Mini Shield Heal Amount",
+    "key": "Default.ShieldSmallAmount",
+    "type": "amount"
+  },
+  "44": {
+    "name": "Mini Shield Stack Amount",
+    "key": "Default.Consumables.MaxStackAmount.SmallShield",
+    "type": "amount"
+  },
+  "45": {
+    "name": "Big Shield Heal Amount",
+    "key": "Default.ShieldPotion.ShieldHealAmount",
+    "type": "amount"
+  },
+  "46": {
+    "name": "Remove Bandage Health Cap",
+    "key": "Default.Bandage.HealCap",
+    "type": "static",
+    "staticValue": "1"
+  },
+  "47": {
+    "name": "Bandage Heal Amount",
+    "key": "Default.Bandage.HealAmount",
+    "type": "amount"
+  },
+  "48": {
+    "name": "Slurp Juice Health Per Tick",
+    "key": "Default.PurpleStuff.EffectiveHealthPerTick",
+    "type": "amount"
+  },
+  "49": {
+    "name": "Chug Splash Heal Amount",
+    "key": "Default.ChillBronco.MaxHeal",
+    "type": "amount"
+  },
+  "50": {
+    "name": "Flopper Heal Amount",
+    "key": "Default.Flopper.Heal",
+    "type": "amount"
+  },
+  "51": {
+    "name": "Slurp Fish Heal Amount",
+    "key": "Default.FlopperEffective.Heal",
+    "type": "amount"
+  },
+  "52": {
+    "name": "Deadpool Dualies Heal Amount",
+    "key": "Default.Donut.LifeStealMult",
     "type": "amount"
   }
 }

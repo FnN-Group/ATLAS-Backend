@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ffi' hide Size;
 import 'dart:io';
 import 'dart:math';
 import 'dart:ui';
@@ -153,6 +154,14 @@ Future<void> _seedInstalledDataDirectory(Directory atlasDataDir) async {
     File(joinPath([installRoot, 'static', 'athenaprofiles', 'presets.json'])),
     File(joinPath([atlasDataDir.path, 'static', 'athenaprofiles', 'presets.json'])),
   );
+
+  // Always sync update notes so users see the latest version.
+  for (final name in ['update-notes.md', 'update-notes.txt']) {
+    await _copyFileReplacingIfDifferent(
+      File(joinPath([installRoot, name])),
+      File(joinPath([atlasDataDir.path, name])),
+    );
+  }
 }
 
 Future<void> _copyMissingDirectoryContents(
@@ -487,7 +496,11 @@ Future<void> _mergeInstallerMigrationData({
   );
   await _restoreFileFromInstallerMigration(
     sourceFile(['profiles-ui-state.json']),
-    await targetFile(['profiles-ui-state.json']),
+    await targetFile(['static', 'athenaprofiles', 'profiles-ui-state.json']),
+  );
+  await _restoreFileFromInstallerMigration(
+    sourceFile(['static', 'athenaprofiles', 'profiles-ui-state.json']),
+    await targetFile(['static', 'athenaprofiles', 'profiles-ui-state.json']),
   );
   await _restoreFileFromInstallerMigration(
     sourceFile(['responses', 'curvetables-state.json']),
@@ -2317,6 +2330,7 @@ class _AtlasHomePageState extends State<AtlasHomePage>
 
   Future<bool> _confirmExit() async {
     if (_exitInProgress) return false;
+    if (!_controller.isRunning) return true;
     _exitInProgress = true;
     final confirm = await DataService._confirmDialog(
       context,
@@ -2334,6 +2348,7 @@ class _AtlasHomePageState extends State<AtlasHomePage>
   Future<AppExitResponse> didRequestAppExit() async {
     if (!mounted) return AppExitResponse.exit;
     if (_exitInProgress) return AppExitResponse.cancel;
+    if (!_controller.isRunning) return AppExitResponse.exit;
 
     // Cancel the platform close request first, then show the confirmation dialog
     // on the next event-loop tick so the dialog transition can animate smoothly.
@@ -12989,7 +13004,20 @@ class ProfilesUiStateService {
   static Future<ProfilesUiState> load() async {
     final stateFile = File(_statePath());
     if (!await stateFile.exists()) {
-      return const ProfilesUiState();
+      // Migrate from legacy root-level location if present.
+      final legacyFile = File(_legacyStatePath());
+      if (await legacyFile.exists()) {
+        try {
+          await stateFile.parent.create(recursive: true);
+          await legacyFile.copy(stateFile.path);
+          await legacyFile.delete();
+        } catch (_) {}
+        if (!await stateFile.exists()) {
+          return const ProfilesUiState();
+        }
+      } else {
+        return const ProfilesUiState();
+      }
     }
 
     try {
@@ -13040,6 +13068,10 @@ class ProfilesUiStateService {
   }
 
   static String _statePath() {
+    return joinPath([getBackendRoot(), 'static', 'athenaprofiles', 'profiles-ui-state.json']);
+  }
+
+  static String _legacyStatePath() {
     return joinPath([getBackendRoot(), 'profiles-ui-state.json']);
   }
 }
@@ -14892,34 +14924,6 @@ const List<CurveGroup> _baseCurveGroups = [
     keywords: ['shockwave'],
   ),
   CurveGroup(
-    id: 'bouncer',
-    title: 'Bouncer',
-    imageName: 'bouncer.webp',
-    icon: Icons.unfold_more_double,
-    keywords: ['bouncer', 'bouncepad', 'bounce pad'],
-  ),
-  CurveGroup(
-    id: 'flint',
-    title: 'Flint-Knock',
-    imageName: 'flintknock.webp',
-    icon: Icons.local_fire_department,
-    keywords: ['flint', 'flintlock'],
-  ),
-  CurveGroup(
-    id: 'glider',
-    title: 'Glider Redeploy',
-    imageName: 'glider.webp',
-    icon: Icons.paragliding_rounded,
-    keywords: ['glider', 'redeploy', 'parachute'],
-  ),
-  CurveGroup(
-    id: 'jules',
-    title: 'Jules',
-    imageName: 'jules.webp',
-    icon: Icons.person,
-    keywords: ['jules', 'grappler', 'grapplinghoot'],
-  ),
-  CurveGroup(
     id: 'impulse',
     title: 'Impulse',
     imageName: 'impulse.webp',
@@ -14927,46 +14931,18 @@ const List<CurveGroup> _baseCurveGroups = [
     keywords: ['impulse', 'knockgrenade'],
   ),
   CurveGroup(
+    id: 'boogie',
+    title: 'Boogie',
+    imageName: 'boogie.webp',
+    icon: Icons.music_note,
+    keywords: ['boogie', 'dancegrenade'],
+  ),
+  CurveGroup(
     id: 'chiller',
     title: 'Chiller',
     imageName: 'chiller.webp',
     icon: Icons.ac_unit,
     keywords: ['chiller', 'icegrenade'],
-  ),
-  CurveGroup(
-    id: 'launchpad',
-    title: 'Launch Pad',
-    imageName: 'launch.webp',
-    icon: Icons.flight_takeoff,
-    keywords: ['launch pad', 'launchpad'],
-  ),
-  CurveGroup(
-    id: 'crashpad',
-    title: 'Crash Pad',
-    imageName: 'crashpad.webp',
-    icon: Icons.airline_seat_legroom_extra,
-    keywords: ['crash pad', 'applesun', 'crashpad'],
-  ),
-  CurveGroup(
-    id: 'dub',
-    title: 'Dub',
-    imageName: 'dub.webp',
-    icon: Icons.gavel,
-    keywords: ['dub'],
-  ),
-  CurveGroup(
-    id: 'cube',
-    title: 'Cube',
-    imageName: 'cube.webp',
-    icon: Icons.crop_square,
-    keywords: ['cube'],
-  ),
-  CurveGroup(
-    id: 'runevent',
-    title: 'Rune Vent',
-    imageName: 'runevent.webp',
-    icon: Icons.air,
-    keywords: ['rune vent', 'runevent'],
   ),
   CurveGroup(
     id: 'rift',
@@ -14983,18 +14959,74 @@ const List<CurveGroup> _baseCurveGroups = [
     keywords: ['hop flopper', 'hopflopper'],
   ),
   CurveGroup(
-    id: 'fall',
-    title: 'Fall Damage',
-    imageName: 'fall.webp',
-    icon: Icons.heart_broken,
-    keywords: ['fall damage', 'falling'],
+    id: 'glider',
+    title: 'Glider Redeploy',
+    imageName: 'glider.webp',
+    icon: Icons.paragliding_rounded,
+    keywords: ['glider', 'redeploy', 'parachute'],
   ),
   CurveGroup(
-    id: 'neutral',
-    title: 'Neutral Editing',
-    imageName: 'edit.webp',
-    icon: Icons.handyman,
-    keywords: ['neutral editing'],
+    id: 'bouncer',
+    title: 'Bouncer',
+    imageName: 'bouncer.webp',
+    icon: Icons.unfold_more_double,
+    keywords: ['bouncer', 'bouncepad', 'bounce pad'],
+  ),
+  CurveGroup(
+    id: 'launchpad',
+    title: 'Launch Pad',
+    imageName: 'launch.webp',
+    icon: Icons.flight_takeoff,
+    keywords: ['launch pad', 'launchpad'],
+  ),
+  CurveGroup(
+    id: 'crashpad',
+    title: 'Crash Pad',
+    imageName: 'crashpad.webp',
+    icon: Icons.airline_seat_legroom_extra,
+    keywords: ['crash pad', 'applesun', 'crashpad'],
+  ),
+  CurveGroup(
+    id: 'runevent',
+    title: 'Rune Vent',
+    imageName: 'runevent.webp',
+    icon: Icons.air,
+    keywords: ['rune vent', 'runevent'],
+  ),
+  CurveGroup(
+    id: 'cube',
+    title: 'Cube',
+    imageName: 'cube.webp',
+    icon: Icons.crop_square,
+    keywords: ['cube'],
+  ),
+  CurveGroup(
+    id: 'flint',
+    title: 'Flint-Knock',
+    imageName: 'flintknock.webp',
+    icon: Icons.local_fire_department,
+    keywords: ['flint', 'flintlock'],
+  ),
+  CurveGroup(
+    id: 'dub',
+    title: 'Dub',
+    imageName: 'dub.webp',
+    icon: Icons.gavel,
+    keywords: ['dub'],
+  ),
+  CurveGroup(
+    id: 'jules',
+    title: 'Jules',
+    imageName: 'jules.webp',
+    icon: Icons.person,
+    keywords: ['jules', 'grappler', 'grapplinghoot'],
+  ),
+  CurveGroup(
+    id: 'fall',
+    title: 'Player',
+    imageName: 'fall.webp',
+    icon: Icons.heart_broken,
+    keywords: ['fall damage', 'falling', 'neutralediting', 'sliding', 'safezone'],
   ),
   CurveGroup(
     id: 'ammunition',
@@ -15004,11 +15036,18 @@ const List<CurveGroup> _baseCurveGroups = [
     keywords: ['ammo', 'ammunition', 'maxstackamount', 'max stack'],
   ),
   CurveGroup(
-    id: 'storm',
-    title: 'Storm',
-    imageName: 'storm.webp',
-    icon: Icons.cloud,
-    keywords: ['storm', 'safezone', 'safe zone'],
+    id: 'materials',
+    title: 'Materials',
+    imageName: 'materials.webp',
+    icon: Icons.forest,
+    keywords: ['materials', 'maxstack.resources'],
+  ),
+  CurveGroup(
+    id: 'heals',
+    title: 'Heals',
+    imageName: 'heals.webp',
+    icon: Icons.healing,
+    keywords: ['shield', 'bandage', 'purplestuff', 'chillbronco', 'flopper.heal', 'floppereffective', 'donut'],
   ),
 ];
 
@@ -15229,9 +15268,9 @@ class CurveTableService {
 
   static Future<Map<String, dynamic>?> _loadDefaultCurveMap() async {
     final candidates = <String>[
-      BackendPaths.curvesDefaultsJson,
       joinPath([getInstallationRoot(), 'responses', 'curves.defaults.json']),
       joinPath([getInstallationRoot(), 'responses', 'curves.json']),
+      BackendPaths.curvesDefaultsJson,
     ];
 
     for (final candidate in candidates) {
@@ -17949,7 +17988,7 @@ class UpdateService {
 
 const List<String> _mutableUpdateFileRelativePaths = [
   'gui.ini',
-  'profiles-ui-state.json',
+  'static/athenaprofiles/profiles-ui-state.json',
   'responses/user-toggle-states.json',
   'responses/curves.json',
   'responses/curvetables-state.json',
@@ -18349,7 +18388,7 @@ class UpdateBackupService {
 List<_BackupEntry> _mutableUpdateEntries(String root) {
   final entries = <_BackupEntry>[
     _BackupEntry.file(joinPath([root, 'gui.ini'])),
-    _BackupEntry.file(joinPath([root, 'profiles-ui-state.json'])),
+    _BackupEntry.file(joinPath([root, 'static', 'athenaprofiles', 'profiles-ui-state.json'])),
     _BackupEntry.file(joinPath([root, 'responses', 'user-toggle-states.json'])),
     _BackupEntry.dir(joinPath([root, 'exports'])),
     _BackupEntry.dir(joinPath([root, 'static', 'ClientSettings'])),
@@ -18749,6 +18788,10 @@ class DataService {
       Directory(joinPath([hotfixDataDir.path, 'custom-items'])),
       (name) => name.toLowerCase().startsWith('custom_'),
     );
+    final exportedProfilesUiState = await _copyFileIfExists(
+      File(ProfilesUiStateService._statePath()),
+      File(joinPath([exportsRoot.path, 'profiles-ui-state.json'])),
+    );
 
     final profilesExported = await _copyNonEmptyChildDirs(
       Directory(joinPath([getBackendRoot(), 'static', 'profiles'])),
@@ -18803,6 +18846,7 @@ class DataService {
         !exportedCurvesCatalog &&
         !exportedDataTablesCatalog &&
         !exportedToggleStates &&
+        !exportedProfilesUiState &&
         !exportedCustomGroupImages &&
         !exportedCustomItemImages &&
         profilesExported == 0 &&
@@ -18827,6 +18871,7 @@ class DataService {
       await _showExportSummary(
         context,
         exportedToggleStates: exportedToggleStates,
+        exportedProfilesUiState: exportedProfilesUiState,
         exportedCurveTables: exportedCurveTables,
         exportedDataTables: exportedDataTables,
         exportedCurvesCatalog: exportedCurvesCatalog,
@@ -18961,6 +19006,15 @@ class DataService {
       toggleStatesFile,
       File(BackendPaths.userToggleStatesJson),
     );
+    final profilesUiStateExportFile = File(
+      joinPath([exportsRoot.path, 'profiles-ui-state.json']),
+    );
+    if (await profilesUiStateExportFile.exists()) {
+      await _copyFileIfExists(
+        profilesUiStateExportFile,
+        File(ProfilesUiStateService._statePath()),
+      );
+    }
     final importedCustomGroupImages =
         await _replaceDirectoryFromExportIfPresent(
           Directory(joinPath([hotfixDataDir.path, 'custom-groups'])),
@@ -19059,6 +19113,7 @@ class DataService {
   static Future<void> _showExportSummary(
     BuildContext context, {
     required bool exportedToggleStates,
+    required bool exportedProfilesUiState,
     required bool exportedCurveTables,
     required bool exportedDataTables,
     required bool exportedCurvesCatalog,
@@ -19072,6 +19127,9 @@ class DataService {
     final lines = <String>[];
     if (exportedToggleStates) {
       lines.add('user-toggle-states.json');
+    }
+    if (exportedProfilesUiState) {
+      lines.add('profiles-ui-state.json');
     }
     if (exportedDataTables) {
       lines.add('DataTables.ini');
@@ -20784,6 +20842,76 @@ Future<List<CustomCurveInput>?> _promptImportMissingCurves(
   return result;
 }
 
+/// Handle for a Windows Job Object configured with KILL_ON_JOB_CLOSE.
+/// When this process exits the OS automatically terminates every process in
+/// the job, ensuring the backend does not outlive the GUI.
+int _backendJobObject = 0;
+
+void _ensureBackendJobObject() {
+  if (!Platform.isWindows || _backendJobObject != 0) return;
+  try {
+    final k32 = DynamicLibrary.open('kernel32.dll');
+    final createJobObjectW = k32.lookupFunction<
+        IntPtr Function(Pointer<Void>, Pointer<Void>),
+        int Function(Pointer<Void>, Pointer<Void>)>('CreateJobObjectW');
+    final setInformationJobObject = k32.lookupFunction<
+        Int32 Function(IntPtr, Int32, Pointer<Uint8>, Uint32),
+        int Function(int, int, Pointer<Uint8>, int)>(
+        'SetInformationJobObject');
+    final getProcessHeap = k32
+        .lookupFunction<IntPtr Function(), int Function()>('GetProcessHeap');
+    final heapAlloc = k32.lookupFunction<
+        Pointer<Uint8> Function(IntPtr, Uint32, IntPtr),
+        Pointer<Uint8> Function(int, int, int)>('HeapAlloc');
+    final heapFree = k32.lookupFunction<
+        Int32 Function(IntPtr, Uint32, Pointer<Uint8>),
+        int Function(int, int, Pointer<Uint8>)>('HeapFree');
+
+    final hJob = createJobObjectW(nullptr, nullptr);
+    if (hJob == 0) return;
+
+    // Allocate a zeroed JOBOBJECT_EXTENDED_LIMIT_INFORMATION.
+    final infoSize = sizeOf<IntPtr>() == 8 ? 144 : 112;
+    final heap = getProcessHeap();
+    final buf = heapAlloc(heap, 0x00000008 /* HEAP_ZERO_MEMORY */, infoSize);
+    if (buf.address == 0) return;
+
+    // LimitFlags sits at byte-offset 16 on both x86 and x64.
+    (buf + 16).cast<Uint32>().value = 0x2000; // JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+    setInformationJobObject(
+        hJob, 9 /* JobObjectExtendedLimitInformation */, buf, infoSize);
+    heapFree(heap, 0, buf);
+
+    _backendJobObject = hJob;
+  } catch (_) {
+    // Non-fatal: backend simply won't auto-stop on GUI exit.
+  }
+}
+
+void _addProcessToBackendJob(int pid) {
+  if (_backendJobObject == 0) return;
+  try {
+    final k32 = DynamicLibrary.open('kernel32.dll');
+    final openProcess = k32.lookupFunction<
+        IntPtr Function(Uint32, Int32, Uint32),
+        int Function(int, int, int)>('OpenProcess');
+    final assignProcessToJobObject = k32.lookupFunction<
+        Int32 Function(IntPtr, IntPtr),
+        int Function(int, int)>('AssignProcessToJobObject');
+    final closeHandle = k32
+        .lookupFunction<Int32 Function(IntPtr), int Function(int)>(
+            'CloseHandle');
+
+    // PROCESS_SET_QUOTA | PROCESS_TERMINATE
+    final hProcess = openProcess(0x0100 | 0x0001, 0, pid);
+    if (hProcess == 0) return;
+    assignProcessToJobObject(_backendJobObject, hProcess);
+    closeHandle(hProcess);
+  } catch (_) {
+    // Non-fatal.
+  }
+}
+
 class BackendController extends ChangeNotifier {
   BackendController() {
     _logStore.clear();
@@ -20922,6 +21050,8 @@ class BackendController extends ChangeNotifier {
         environment: env,
         mode: ProcessStartMode.detachedWithStdio,
       );
+      _ensureBackendJobObject();
+      _addProcessToBackendJob(_process!.pid);
       _backendStartedAt = DateTime.now();
       _setStatus('Starting...', Colors.orangeAccent);
       notifyListeners();

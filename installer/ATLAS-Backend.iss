@@ -224,6 +224,7 @@ begin
 
   CopyRelativeFileToInstallerMigrationFromRoot(SourceRoot, MigrationRoot, 'gui.ini');
   CopyRelativeFileToInstallerMigrationFromRoot(SourceRoot, MigrationRoot, 'profiles-ui-state.json');
+  CopyRelativeFileToInstallerMigrationFromRoot(SourceRoot, MigrationRoot, 'static\athenaprofiles\profiles-ui-state.json');
   CopyRelativeFileToInstallerMigrationFromRoot(SourceRoot, MigrationRoot, 'responses\curves.json');
   CopyRelativeFileToInstallerMigrationFromRoot(SourceRoot, MigrationRoot, 'responses\curvetables-state.json');
   CopyRelativeFileToInstallerMigrationFromRoot(SourceRoot, MigrationRoot, 'responses\datatables.json');

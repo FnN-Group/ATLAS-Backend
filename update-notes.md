@@ -15,16 +15,14 @@ Markdown Quick Key
 # MANUAL UPDATE 
 - We have changed our installation method, make sure to **SAVE YOUR DATA** in your backend somewhere safe and **MANUALLY UPDATE** from our [GitHub](https://github.com/cipherfps/ATLAS-Backend/releases)
 # Improvements
-- Clean GUI Animations
-- Visuals for Clarity
-- Custom Cosemetic Athena Importer
-- Eon Profile & Pulse V2 Profile
-- S12 & S13 Battle Pass Purchasing
-- Temporarily Removed Custom DataTable 
+- New Heals CurveTable Group
+- New Materials CurveTable Group
+- Added Vehicle Bouncer Momentum Toggles
+- Added Impulse Vehicle Momentum Toggle
+- Added Rift Teleport Height Toggle
+- Added Crash Pad Environmental Damage Toggle
+- Reorganized CurveTable Groups for Better Navigation
 # Fixes
-- Discovery in Newer Versions
-- Fixed Water Levels in Config
-- Launcher Performance
-- Importing & Exporting Data Method
+- Fixed Backend Process Quiting
 
 [Full release notes](https://github.com/cipherfps/ATLAS-Backend/releases)

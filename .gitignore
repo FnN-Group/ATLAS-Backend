@@ -178,6 +178,8 @@ static/ClientSettings/*
 .vscode/settings.json
 profiles
 !static/profiles/
+gui.ini
+static/athenaprofiles/profiles-ui-state.json
 !static/profiles/profile_athena.json
 !static/athenaprofiles/Profile Presets/
 !static/athenaprofiles/Profile Presets/**
