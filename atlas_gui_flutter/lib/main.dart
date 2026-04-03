@@ -905,6 +905,12 @@ class _AtlasAppState extends State<AtlasApp> {
               foregroundColor: Colors.white,
             ),
           ),
+          filledButtonTheme: FilledButtonThemeData(
+            style: FilledButton.styleFrom(
+              backgroundColor: accentBlue,
+              foregroundColor: Colors.white,
+            ),
+          ),
           switchTheme: SwitchThemeData(
             thumbColor: WidgetStateProperty.resolveWith((states) {
               if (states.contains(WidgetState.selected)) return accentBlue;
@@ -964,15 +970,15 @@ class _AtlasAppState extends State<AtlasApp> {
               foregroundColor: Colors.white,
             ),
           ),
+          filledButtonTheme: FilledButtonThemeData(
+            style: FilledButton.styleFrom(
+              backgroundColor: accentBlue,
+              foregroundColor: Colors.white,
+            ),
+          ),
           switchTheme: SwitchThemeData(
             thumbColor: WidgetStateProperty.resolveWith((states) {
               if (states.contains(WidgetState.selected)) return accentBlue;
-              return Colors.white54;
-            }),
-            trackColor: WidgetStateProperty.resolveWith((states) {
-              if (states.contains(WidgetState.selected)) {
-                return accentBlue.withOpacity(0.55);
-              }
               return Colors.white24;
             }),
           ),
@@ -2197,7 +2203,7 @@ class _AtlasHomePageState extends State<AtlasHomePage>
                                       : 'Applying update...')
                                 : clamped > 0
                                 ? (info.isInstaller
-                                      ? 'Downloading latest setup... $pct%'
+                                      ? 'Downloading setup... $pct%'
                                       : 'Downloading update package... $pct%')
                                 : 'Preparing download...';
                             return Column(
@@ -15033,7 +15039,7 @@ const List<CurveGroup> _baseCurveGroups = [
     title: 'Ammunition',
     imageName: 'ammo.webp',
     icon: Icons.inventory_2,
-    keywords: ['ammo', 'ammunition', 'maxstackamount', 'max stack'],
+    keywords: ['ammo', 'ammunition'],
   ),
   CurveGroup(
     id: 'materials',

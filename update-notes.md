@@ -21,8 +21,10 @@ Markdown Quick Key
 - Added Impulse Vehicle Momentum Toggle
 - Added Rift Teleport Height Toggle
 - Added Crash Pad Environmental Damage Toggle
+- Added Player Group to change your own properties
 - Reorganized CurveTable Groups for Better Navigation
 # Fixes
 - Fixed Backend Process Quiting
+- Update Button Text/Color
 
 [Full release notes](https://github.com/cipherfps/ATLAS-Backend/releases)
