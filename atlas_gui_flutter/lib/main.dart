@@ -905,12 +905,6 @@ class _AtlasAppState extends State<AtlasApp> {
               foregroundColor: Colors.white,
             ),
           ),
-          filledButtonTheme: FilledButtonThemeData(
-            style: FilledButton.styleFrom(
-              backgroundColor: accentBlue,
-              foregroundColor: Colors.white,
-            ),
-          ),
           switchTheme: SwitchThemeData(
             thumbColor: WidgetStateProperty.resolveWith((states) {
               if (states.contains(WidgetState.selected)) return accentBlue;
@@ -970,15 +964,15 @@ class _AtlasAppState extends State<AtlasApp> {
               foregroundColor: Colors.white,
             ),
           ),
-          filledButtonTheme: FilledButtonThemeData(
-            style: FilledButton.styleFrom(
-              backgroundColor: accentBlue,
-              foregroundColor: Colors.white,
-            ),
-          ),
           switchTheme: SwitchThemeData(
             thumbColor: WidgetStateProperty.resolveWith((states) {
               if (states.contains(WidgetState.selected)) return accentBlue;
+              return Colors.white54;
+            }),
+            trackColor: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.selected)) {
+                return accentBlue.withOpacity(0.55);
+              }
               return Colors.white24;
             }),
           ),
@@ -2203,7 +2197,7 @@ class _AtlasHomePageState extends State<AtlasHomePage>
                                       : 'Applying update...')
                                 : clamped > 0
                                 ? (info.isInstaller
-                                      ? 'Downloading setup... $pct%'
+                                      ? 'Downloading latest setup... $pct%'
                                       : 'Downloading update package... $pct%')
                                 : 'Preparing download...';
                             return Column(
@@ -2264,7 +2258,7 @@ class _AtlasHomePageState extends State<AtlasHomePage>
                           ],
                           const SizedBox(width: 8),
                           _HoverScale(
-                            child: FilledButton(
+                            child: ElevatedButton(
                               onPressed: updating
                                   ? null
                                   : () async {
