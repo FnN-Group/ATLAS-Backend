@@ -5,7 +5,7 @@ import path from "node:path";
 import { ensureConfigFile } from "./config/config";
 import {
   atlasDataPath,
-  atlasDataReadPath,
+  atlasInstallPath,
   ensureAtlasDataLayout,
 } from "./config/paths";
 import { Atlas } from "./utils/handlers/errors";
@@ -87,9 +87,18 @@ function getDataTableSignature(dataTable: any): string {
   return `${weaponPath}|||${variantIds.join("||")}`;
 }
 
+function resolveShippedDefaultsPath(fileName: string): string {
+  const installPath = atlasInstallPath("responses", fileName);
+  if (fs.existsSync(installPath)) {
+    return installPath;
+  }
+
+  return atlasDataPath("responses", fileName);
+}
+
 function ensureCurveDefaults() {
   const curvesPath = atlasDataPath("responses", "curves.json");
-  const defaultsPath = atlasDataReadPath("responses", "curves.defaults.json");
+  const defaultsPath = resolveShippedDefaultsPath("curves.defaults.json");
 
   if (!fs.existsSync(defaultsPath)) {
     return;
@@ -158,7 +167,7 @@ function ensureCurveDefaults() {
 
 function ensureDataTableDefaults() {
   const dataTablesPath = atlasDataPath("responses", "datatables.json");
-  const defaultsPath = atlasDataReadPath("responses", "datatables.defaults.json");
+  const defaultsPath = resolveShippedDefaultsPath("datatables.defaults.json");
 
   if (!fs.existsSync(defaultsPath)) {
     return;

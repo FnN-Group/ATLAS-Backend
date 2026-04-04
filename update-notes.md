@@ -14,6 +14,7 @@ Markdown Quick Key
 ---
 
 # Improvements
-- Updated Backend Support for Latest Stellar Pak
+- New DataTable Group: Flint-Knock
+- New Credits Tab in Settings
 
 [Full release notes](https://github.com/cipherfps/ATLAS-Backend/releases)

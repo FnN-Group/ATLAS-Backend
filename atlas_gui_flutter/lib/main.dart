@@ -8,6 +8,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:image/image.dart' as img;
 import 'package:file_picker/file_picker.dart';
 import 'package:archive/archive_io.dart';
@@ -152,8 +153,17 @@ Future<void> _seedInstalledDataDirectory(Directory atlasDataDir) async {
   // Always sync shipped config files that live alongside user-mutable data.
   await _copyFileReplacingIfDifferent(
     File(joinPath([installRoot, 'static', 'athenaprofiles', 'presets.json'])),
-    File(joinPath([atlasDataDir.path, 'static', 'athenaprofiles', 'presets.json'])),
+    File(
+      joinPath([atlasDataDir.path, 'static', 'athenaprofiles', 'presets.json']),
+    ),
   );
+
+  for (final name in ['curves.defaults.json', 'datatables.defaults.json']) {
+    await _copyFileReplacingIfDifferent(
+      File(joinPath([installRoot, 'responses', name])),
+      File(joinPath([atlasDataDir.path, 'responses', name])),
+    );
+  }
 
   // Always sync update notes so users see the latest version.
   for (final name in ['update-notes.md', 'update-notes.txt']) {
@@ -361,12 +371,7 @@ Future<void> _migrateLegacyPresetFolders(Directory atlasDataDir) async {
   if (!await presetsDir.exists()) return;
 
   final configFile = File(
-    joinPath([
-      atlasDataDir.path,
-      'static',
-      'athenaprofiles',
-      'presets.json',
-    ]),
+    joinPath([atlasDataDir.path, 'static', 'athenaprofiles', 'presets.json']),
   );
   List<Map<String, dynamic>> migrations = [];
   if (await configFile.exists()) {
@@ -3131,17 +3136,18 @@ class _VersionTag extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: color.withOpacity(0.2),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withOpacity(0.6)),
+        border: Border.all(color: color.withOpacity(0.55)),
       ),
       child: Text(
         label,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: color,
-          fontWeight: FontWeight.w600,
+        style: TextStyle(
+          color: _onSurface(context, 0.96),
+          fontWeight: FontWeight.w700,
+          fontSize: 12,
         ),
       ),
     );
@@ -4347,6 +4353,402 @@ Color _darken(Color color, double amount) {
   return hsl.withLightness(lightness).toColor();
 }
 
+class _AboutCreatorProfile {
+  const _AboutCreatorProfile({
+    required this.name,
+    required this.handle,
+    required this.role,
+    required this.githubUrl,
+    required this.avatarUrl,
+    required this.description,
+  });
+
+  final String name;
+  final String handle;
+  final String role;
+  final String githubUrl;
+  final String avatarUrl;
+  final String description;
+}
+
+class _CreditProjectLink {
+  const _CreditProjectLink({required this.label, required this.url});
+
+  final String label;
+  final String url;
+}
+
+class _CreditProfileData {
+  const _CreditProfileData({
+    required this.name,
+    required this.handle,
+    required this.role,
+    required this.githubUrl,
+    required this.avatarUrl,
+    required this.description,
+    required this.projects,
+  });
+
+  final String name;
+  final String handle;
+  final String role;
+  final String githubUrl;
+  final String avatarUrl;
+  final String description;
+  final List<_CreditProjectLink> projects;
+}
+
+Widget _aboutCreatorAvatar(BuildContext context, {required String avatarUrl}) {
+  final dark = _isDarkTheme(context);
+  final secondary = Theme.of(context).colorScheme.secondary;
+
+  return Container(
+    width: 86,
+    height: 86,
+    padding: const EdgeInsets.all(3),
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      gradient: SweepGradient(
+        colors: [
+          secondary.withOpacity(0.92),
+          Colors.white.withOpacity(dark ? 0.55 : 0.90),
+          secondary.withOpacity(0.50),
+          secondary.withOpacity(0.92),
+        ],
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: secondary.withOpacity(dark ? 0.24 : 0.14),
+          blurRadius: 22,
+          offset: const Offset(0, 10),
+        ),
+      ],
+    ),
+    child: Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: (dark ? const Color(0xFF07111F) : Colors.white).withOpacity(
+          dark ? 0.92 : 0.96,
+        ),
+      ),
+      child: ClipOval(
+        child: Image.network(
+          avatarUrl,
+          width: 80,
+          height: 80,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) =>
+              _aboutCreatorAvatarFallback(context),
+        ),
+      ),
+    ),
+  );
+}
+
+Widget _aboutCreatorAvatarFallback(BuildContext context) {
+  final fallbackPath = joinPath([
+    getBackendRoot(),
+    'public',
+    'images',
+    'default_pfp.png',
+  ]);
+  final fallbackFile = File(fallbackPath);
+  if (fallbackFile.existsSync()) {
+    return Image.file(
+      fallbackFile,
+      width: 80,
+      height: 80,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) =>
+          _aboutCreatorAvatarFallbackPlaceholder(context),
+    );
+  }
+
+  return _aboutCreatorAvatarFallbackPlaceholder(context);
+}
+
+Widget _aboutCreatorAvatarFallbackPlaceholder(BuildContext context) {
+  return Container(
+    color: _adaptiveScrimColor(
+      context,
+      darkAlpha: 0.18,
+      lightAlpha: 0.08,
+    ),
+    alignment: Alignment.center,
+    child: Icon(
+      Icons.person_rounded,
+      color: _onSurface(context, 0.72),
+      size: 32,
+    ),
+  );
+}
+
+Widget _aboutCreatorCard(
+  BuildContext dialogContext,
+  _AboutCreatorProfile creator,
+) {
+  final dark = _isDarkTheme(dialogContext);
+  final secondary = Theme.of(dialogContext).colorScheme.secondary;
+  final cardTop = dark
+      ? const Color(0xFF0D1628).withOpacity(0.94)
+      : Colors.white.withOpacity(0.94);
+  final cardBottom = dark
+      ? secondary.withOpacity(0.10)
+      : secondary.withOpacity(0.08);
+
+  return Container(
+    padding: const EdgeInsets.all(20),
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(24),
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [cardTop, cardBottom],
+      ),
+      border: Border.all(color: _onSurface(dialogContext, 0.10)),
+      boxShadow: [
+        BoxShadow(
+          color: _dialogShadowColor(
+            dialogContext,
+          ).withOpacity(dark ? 0.34 : 0.14),
+          blurRadius: 24,
+          offset: const Offset(0, 14),
+        ),
+      ],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _aboutCreatorAvatar(dialogContext, avatarUrl: creator.avatarUrl),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(999),
+                      color: secondary.withOpacity(dark ? 0.18 : 0.12),
+                      border: Border.all(
+                        color: secondary.withOpacity(dark ? 0.36 : 0.24),
+                      ),
+                    ),
+                    child: Text(
+                      creator.role,
+                      style: TextStyle(
+                        color: _onSurface(dialogContext, 0.92),
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    creator.name,
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                      color: _onSurface(dialogContext, 0.96),
+                      height: 1.0,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    creator.handle,
+                    style: TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w600,
+                      color: _onSurface(dialogContext, 0.66),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        Text(
+          creator.description,
+          style: TextStyle(
+            color: _onSurface(dialogContext, 0.82),
+            height: 1.5,
+            fontSize: 14.5,
+          ),
+        ),
+        const SizedBox(height: 18),
+        _HoverScale(
+          child: FilledButton.icon(
+            onPressed: () => unawaited(_openUrl(creator.githubUrl)),
+            style: FilledButton.styleFrom(
+              backgroundColor: dark
+                  ? const Color(0xFF0A0F18)
+                  : const Color(0xFFEAF3FF),
+              foregroundColor: _onSurface(dialogContext, 0.96),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              shape: const StadiumBorder(),
+            ),
+            icon: const FaIcon(FontAwesomeIcons.github, size: 16),
+            label: Text('View ${creator.handle}'),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _creditProfileCard(BuildContext context, _CreditProfileData credit) {
+  final dark = _isDarkTheme(context);
+  final secondary = Theme.of(context).colorScheme.secondary;
+  final cardTop = dark
+      ? const Color(0xFF0E1728).withOpacity(0.92)
+      : Colors.white.withOpacity(0.92);
+  final cardBottom = dark
+      ? secondary.withOpacity(0.12)
+      : secondary.withOpacity(0.10);
+  final accent = dark ? secondary.withOpacity(0.88) : const Color(0xFF1565C0);
+
+  return Container(
+    padding: const EdgeInsets.all(20),
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(24),
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [cardTop, cardBottom],
+      ),
+      border: Border.all(color: _onSurface(context, 0.10)),
+      boxShadow: [
+        BoxShadow(
+          color: _dialogShadowColor(context).withOpacity(dark ? 0.18 : 0.10),
+          blurRadius: 26,
+          offset: const Offset(0, 14),
+        ),
+      ],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _aboutCreatorAvatar(context, avatarUrl: credit.avatarUrl),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(999),
+                      color: accent.withOpacity(dark ? 0.18 : 0.12),
+                      border: Border.all(
+                        color: accent.withOpacity(dark ? 0.36 : 0.24),
+                      ),
+                    ),
+                    child: Text(
+                      credit.role,
+                      style: TextStyle(
+                        color: _onSurface(context, 0.92),
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    credit.name,
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                      color: _onSurface(context, 0.96),
+                      height: 1.0,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    credit.handle,
+                    style: TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w600,
+                      color: _onSurface(context, 0.66),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        Text(
+          credit.description,
+          style: TextStyle(
+            color: _onSurface(context, 0.82),
+            height: 1.5,
+            fontSize: 14.5,
+          ),
+        ),
+        const SizedBox(height: 18),
+        Text(
+          'Projects',
+          style: TextStyle(
+            color: _onSurface(context, 0.92),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final project in credit.projects)
+              ActionChip(
+                onPressed: () => unawaited(_openUrl(project.url)),
+                backgroundColor: _onSurface(context, 0.06),
+                side: BorderSide(color: _onSurface(context, 0.12)),
+                avatar: Icon(
+                  Icons.open_in_new_rounded,
+                  size: 15,
+                  color: _onSurface(context, 0.82),
+                ),
+                label: Text(project.label),
+                labelStyle: TextStyle(
+                  color: _onSurface(context, 0.90),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        FilledButton.icon(
+          onPressed: () => unawaited(_openUrl(credit.githubUrl)),
+          style: FilledButton.styleFrom(
+            backgroundColor: dark
+                ? const Color(0xFF0A0F18)
+                : const Color(0xFF111827),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+            shape: const StadiumBorder(),
+          ),
+          icon: const FaIcon(FontAwesomeIcons.github, size: 18),
+          label: Text('View ${credit.handle}'),
+        ),
+      ],
+    ),
+  );
+}
+
 Future<void> _showAboutDialog(
   BuildContext context, {
   required String versionLabel,
@@ -4354,45 +4756,63 @@ Future<void> _showAboutDialog(
   const supportUrl = 'https://discord.gg/GqgakxU6bm';
   const githubUrl = 'https://github.com/cipherfps/ATLAS-Backend';
   final formattedVersion = _formatVersion(versionLabel);
+  const creators = <_AboutCreatorProfile>[
+    _AboutCreatorProfile(
+      name: 'cipher',
+      handle: '@cipherfps',
+      role: 'Owner',
+      githubUrl: 'https://github.com/cipherfps',
+      avatarUrl: 'https://github.com/cipherfps.png?size=240',
+      description:
+          'Creator of ATLAS and constantly updates and develops the launcher/backend for the best possible experience. (Thank you for trying ATLAS! <3)',
+    ),
+    _AboutCreatorProfile(
+      name: 'ralz',
+      handle: '@Ralzify',
+      role: 'Co-Owner',
+      githubUrl: 'https://github.com/Ralzify',
+      avatarUrl: 'https://github.com/Ralzify.png?size=240',
+      description:
+          'Co-creator of ATLAS and helps maintain the gameserver Magnesium, as well as contributing to launcher/backend features and improvements.',
+    ),
+  ];
+
   await _showBlurDialog<void>(
     context: context,
     builder: (dialogContext) {
       final secondary = Theme.of(dialogContext).colorScheme.secondary;
+      final size = MediaQuery.sizeOf(dialogContext);
+      final dialogWidth = max(320.0, min(920.0, size.width - 24));
+      final dialogMaxHeight = max(420.0, min(760.0, size.height - 24));
 
-      Widget linkRow({required String label, required String url}) {
-        return Wrap(
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 4,
-          runSpacing: 4,
-          children: [
-            Text(
-              '$label:',
-              style: TextStyle(
-                color: _onSurface(dialogContext, 0.86),
-                fontWeight: FontWeight.w600,
-              ),
+      Widget aboutActionButton({
+        required Widget icon,
+        required String label,
+        required VoidCallback onPressed,
+      }) {
+        return _HoverScale(
+          child: OutlinedButton.icon(
+            onPressed: onPressed,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _onSurface(dialogContext, 0.92),
+              backgroundColor: _onSurface(dialogContext, 0.03),
+              side: BorderSide(color: _onSurface(dialogContext, 0.14)),
+              shape: const StadiumBorder(),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             ),
-            InkWell(
-              onTap: () => _openUrl(url),
-              borderRadius: BorderRadius.circular(6),
-              child: Text(
-                _stripScheme(url),
-                style: TextStyle(
-                  color: secondary,
-                  fontWeight: FontWeight.w600,
-                  decoration: TextDecoration.underline,
-                  decorationColor: secondary,
-                ),
-              ),
-            ),
-          ],
+            icon: icon,
+            label: Text(label),
+          ),
         );
       }
 
       return Material(
         type: MaterialType.transparency,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
+          constraints: BoxConstraints(
+            maxWidth: dialogWidth,
+            maxHeight: dialogMaxHeight,
+          ),
           child: Container(
             decoration: BoxDecoration(
               color: _dialogSurfaceColor(dialogContext),
@@ -4406,101 +4826,149 @@ Future<void> _showAboutDialog(
                 ),
               ],
             ),
-            child: Stack(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(22, 20, 22, 16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 22, 24, 18),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: _adaptiveScrimColor(
-                                dialogContext,
-                                darkAlpha: 0.24,
-                                lightAlpha: 0.14,
-                              ),
-                              border: Border.all(
-                                color: _onSurface(dialogContext, 0.12),
-                              ),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(5),
-                              child: Image.asset(
-                                'assets/images/atlas_logo.png',
-                                fit: BoxFit.contain,
-                              ),
-                            ),
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: _adaptiveScrimColor(
+                            dialogContext,
+                            darkAlpha: 0.24,
+                            lightAlpha: 0.14,
                           ),
-                          const SizedBox(width: 10),
-                          Text(
-                            'About',
-                            style: TextStyle(
-                              fontSize: 34,
-                              fontWeight: FontWeight.w700,
-                              color: _onSurface(dialogContext, 0.96),
-                            ),
+                          border: Border.all(
+                            color: _onSurface(dialogContext, 0.12),
                           ),
-                          const Spacer(),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 5,
-                            ),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(999),
-                              color: secondary.withOpacity(0.2),
-                              border: Border.all(
-                                color: secondary.withOpacity(0.55),
-                              ),
-                            ),
-                            child: Text(
-                              formattedVersion,
-                              style: TextStyle(
-                                color: _onSurface(dialogContext, 0.96),
-                                fontWeight: FontWeight.w700,
-                                fontSize: 12,
-                              ),
-                            ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(6),
+                          child: Image.asset(
+                            'assets/images/atlas_logo.png',
+                            fit: BoxFit.contain,
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Made by cipher',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          color: _onSurface(dialogContext, 0.96),
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      linkRow(label: 'GitHub', url: githubUrl),
-                      const SizedBox(height: 6),
-                      linkRow(label: 'Support', url: supportUrl),
-                      const SizedBox(height: 14),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          _HoverScale(
-                            child: TextButton(
-                              onPressed: () =>
-                                  Navigator.of(dialogContext).pop(),
-                              child: const Text('Close'),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'About',
+                              style: TextStyle(
+                                fontSize: 40,
+                                fontWeight: FontWeight.w800,
+                                color: _onSurface(dialogContext, 0.96),
+                                height: 1.0,
+                              ),
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 6),
+                            Text(
+                              'Created by the ATLAS team',
+                              style: TextStyle(
+                                color: _onSurface(dialogContext, 0.72),
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      _VersionTag(label: formattedVersion, color: secondary),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    'ATLAS Backend is created and maintained by cipher and ralz. The backend experience is shaped by the team below.',
+                    style: TextStyle(
+                      color: _onSurface(dialogContext, 0.82),
+                      fontSize: 15,
+                      height: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      aboutActionButton(
+                        onPressed: () => unawaited(_openUrl(githubUrl)),
+                        icon: const FaIcon(FontAwesomeIcons.github, size: 16),
+                        label: 'ATLAS Repo',
+                      ),
+                      aboutActionButton(
+                        onPressed: () => unawaited(_openUrl(supportUrl)),
+                        icon: const Icon(Icons.discord_rounded, size: 18),
+                        label: 'Support',
+                      ),
+                      aboutActionButton(
+                        onPressed: () {
+                          Navigator.of(dialogContext).pop();
+                          Navigator.of(context).push(
+                            _buildRoute(
+                              const SettingsScreen(initialTabIndex: 3),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.auto_awesome_rounded, size: 18),
+                        label: 'Extra Credits',
                       ),
                     ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: 22),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final cards = creators
+                          .map(
+                            (creator) =>
+                                _aboutCreatorCard(dialogContext, creator),
+                          )
+                          .toList(growable: false);
+                      if (constraints.maxWidth < 780) {
+                        return Column(
+                          children: [
+                            for (var i = 0; i < cards.length; i++) ...[
+                              if (i > 0) const SizedBox(height: 16),
+                              cards[i],
+                            ],
+                          ],
+                        );
+                      }
+
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: cards[0]),
+                          const SizedBox(width: 16),
+                          Expanded(child: cards[1]),
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 18),
+                  Row(
+                    children: [
+                      const Spacer(),
+                      _HoverScale(
+                        child: TextButton(
+                          onPressed: () => Navigator.of(dialogContext).pop(),
+                          child: const Text('Close'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -5560,6 +6028,10 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
         _selectedWeaponSettings = null;
       }
 
+      if (!_dataTablesEnabled) {
+        _selectedWeaponSettings = null;
+      }
+
       if (replayContentEntrance) {
         _contentAnimationEpoch += 1;
       }
@@ -5877,6 +6349,51 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
     await _applySelectedWeaponSettings(weapon, newSettings);
   }
 
+  Future<void> _openSelectedWeaponAdvancedSettings({
+    required DataTableWeapon weapon,
+    required DataTableSettings settings,
+    required String displayDefaultDamage,
+    required String displayDefaultEnvDamage,
+  }) async {
+    final allFields = <String>[];
+    if (settings.damageEnabled) {
+      allFields.addAll(weapon.damageFields);
+    }
+    if (settings.envDamageEnabled) {
+      allFields.addAll(weapon.environmentalDamageFields);
+    }
+
+    if (allFields.isEmpty) {
+      if (!mounted) return;
+      showAtlasSnackBar(
+        context,
+        const SnackBar(
+          content: Text('Enable Damage or Environmental Damage first.'),
+        ),
+      );
+      return;
+    }
+
+    var defaultValue = displayDefaultDamage;
+    if (!settings.damageEnabled && settings.envDamageEnabled) {
+      defaultValue = displayDefaultEnvDamage;
+    }
+
+    final values = await _promptAdvancedSettings(
+      context,
+      allFields,
+      settings.customValues,
+      defaultValue,
+    );
+    if (values == null) return;
+
+    final newSettings = settings.copyWith(
+      advancedMode: true,
+      customValues: values,
+    );
+    await _applySelectedWeaponSettings(weapon, newSettings);
+  }
+
   Future<void> _refreshCurveStatesAfterGlobalToggle() async {
     if (_curves.isEmpty) return;
     final refreshedStates = await CurveTableService._loadCurveStates(_curves);
@@ -5968,6 +6485,8 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
         _selectedVariantWeaponId = hasVariants
             ? firstWeapon.variants!.first.weaponId
             : null;
+        _selectedWeaponSettings = null;
+      } else if (!enabled) {
         _selectedWeaponSettings = null;
       }
     });
@@ -7705,145 +8224,22 @@ class _ModificationsScreenState extends State<ModificationsScreen> {
             },
           ),
         if (hasDamageFields || hasEnvDamageFields)
-          _DataTableSettingTile(
+          _DataTableActionTile(
             title: 'Advanced Settings',
-            subtitle: 'Customize each damage field individually',
-            isEnabled: settings.advancedMode,
+            subtitle: settings.advancedMode
+                ? 'Viewing individual field values'
+                : 'View and customize each damage field individually',
+            isActive: settings.advancedMode,
             enabled: _dataTablesEnabled,
-            onToggle: (value) async {
-              if (value) {
-                // Collect all relevant fields
-                final allFields = <String>[];
-                if (settings.damageEnabled) {
-                  allFields.addAll(weapon.damageFields);
-                }
-                if (settings.envDamageEnabled) {
-                  allFields.addAll(weapon.environmentalDamageFields);
-                }
-
-                if (allFields.isEmpty) {
-                  if (!mounted) return;
-                  showAtlasSnackBar(
-                    context,
-                    const SnackBar(
-                      content: Text(
-                        'Enable Damage or Environmental Damage first.',
-                      ),
-                    ),
-                  );
-                  return;
-                }
-
-                // Determine default values based on what's enabled
-                String defaultValue = displayDefaultDamage;
-                if (settings.damageEnabled && !settings.envDamageEnabled) {
-                  defaultValue = displayDefaultDamage;
-                } else if (!settings.damageEnabled &&
-                    settings.envDamageEnabled) {
-                  defaultValue = displayDefaultEnvDamage;
-                }
-
-                final values = await _promptAdvancedSettings(
-                  context,
-                  allFields,
-                  settings.customValues,
-                  defaultValue,
-                );
-                if (values == null) return;
-
-                final newSettings = settings.copyWith(
-                  advancedMode: value,
-                  customValues: values,
-                );
-                await DataTableService.applyWeaponSettings(
-                  weapon,
-                  newSettings,
-                  variantWeaponId: _selectedVariantWeaponId,
-                );
-                final updated = await DataTableService.getWeaponSettings(
-                  weapon,
-                  variantWeaponId: _selectedVariantWeaponId,
-                );
-                setState(() => _selectedWeaponSettings = updated);
-              } else {
-                final newSettings = settings.copyWith(advancedMode: value);
-                // Re-apply settings to use simple mode values
-                await DataTableService.applyWeaponSettings(
-                  weapon,
-                  newSettings,
-                  variantWeaponId: _selectedVariantWeaponId,
-                );
-                final updated = await DataTableService.getWeaponSettings(
-                  weapon,
-                  variantWeaponId: _selectedVariantWeaponId,
-                );
-                setState(() => _selectedWeaponSettings = updated);
-              }
+            actionLabel: settings.advancedMode ? 'Edit' : 'View',
+            onPressed: () async {
+              await _openSelectedWeaponAdvancedSettings(
+                weapon: weapon,
+                settings: settings,
+                displayDefaultDamage: displayDefaultDamage,
+                displayDefaultEnvDamage: displayDefaultEnvDamage,
+              );
             },
-          ),
-        if (hasDamageFields || hasEnvDamageFields)
-          _menuToggleReveal(
-            context,
-            revealKey: 'weapon-advanced-$variantKey',
-            visible: settings.advancedMode,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 4,
-                  ),
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      // Collect all relevant fields
-                      final allFields = <String>[];
-                      if (settings.damageEnabled) {
-                        allFields.addAll(weapon.damageFields);
-                      }
-                      if (settings.envDamageEnabled) {
-                        allFields.addAll(weapon.environmentalDamageFields);
-                      }
-
-                      // Determine default values based on what's enabled
-                      String defaultValue = displayDefaultDamage;
-                      if (settings.damageEnabled &&
-                          !settings.envDamageEnabled) {
-                        defaultValue = displayDefaultDamage;
-                      } else if (!settings.damageEnabled &&
-                          settings.envDamageEnabled) {
-                        defaultValue = displayDefaultEnvDamage;
-                      }
-
-                      final values = await _promptAdvancedSettings(
-                        context,
-                        allFields,
-                        settings.customValues,
-                        defaultValue,
-                      );
-                      if (values == null) return;
-
-                      final newSettings = settings.copyWith(
-                        customValues: values,
-                      );
-                      await DataTableService.applyWeaponSettings(
-                        weapon,
-                        newSettings,
-                        variantWeaponId: _selectedVariantWeaponId,
-                      );
-                      final updated = await DataTableService.getWeaponSettings(
-                        weapon,
-                        variantWeaponId: _selectedVariantWeaponId,
-                      );
-                      setState(() => _selectedWeaponSettings = updated);
-                    },
-                    icon: const Icon(Icons.tune),
-                    label: const Text('Edit Advanced Settings'),
-                  ),
-                ),
-                const SizedBox(height: 8),
-              ],
-            ),
           ),
       ],
     );
@@ -9859,6 +10255,78 @@ class _DataTableSettingTile extends StatelessWidget {
   }
 }
 
+class _DataTableActionTile extends StatelessWidget {
+  const _DataTableActionTile({
+    required this.title,
+    required this.subtitle,
+    required this.isActive,
+    required this.enabled,
+    required this.actionLabel,
+    required this.onPressed,
+  });
+
+  final String title;
+  final String subtitle;
+  final bool isActive;
+  final bool enabled;
+  final String actionLabel;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isActive
+              ? const Color(0xFF6BE7FF).withOpacity(0.3)
+              : _onSurface(context, 0.12),
+          width: 1,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: _onSurface(context, 0.75),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            _HoverScale(
+              child: OutlinedButton.icon(
+                onPressed: enabled ? onPressed : null,
+                icon: const Icon(Icons.tune),
+                label: Text(actionLabel),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _DataManagementScreenState extends State<DataManagementScreen> {
   @override
   Widget build(BuildContext context) {
@@ -10506,9 +10974,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                     Expanded(
                       child: TextField(
                         controller: filePathController,
-                        style: TextStyle(
-                          color: _onSurface(context, 0.92),
-                        ),
+                        style: TextStyle(color: _onSurface(context, 0.92)),
                         onChanged: (value) {
                           final trimmed = value.trim();
                           if (trimmed.isEmpty) {
@@ -10518,11 +10984,16 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                             });
                             return;
                           }
-                          final name = trimmed.split(RegExp(r'[\\/]')).last.toLowerCase();
-                          if (name != 'profile_athena.json' && name != 'athena.json') {
+                          final name = trimmed
+                              .split(RegExp(r'[\\/]'))
+                              .last
+                              .toLowerCase();
+                          if (name != 'profile_athena.json' &&
+                              name != 'athena.json') {
                             setState(() {
                               pickedFilePath = null;
-                              fileError = 'File must be profile_athena.json or athena.json.';
+                              fileError =
+                                  'File must be profile_athena.json or athena.json.';
                             });
                           } else {
                             setState(() {
@@ -10560,7 +11031,9 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
                             borderSide: BorderSide(
-                              color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.95),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.secondary.withValues(alpha: 0.95),
                               width: 1.2,
                             ),
                           ),
@@ -10572,15 +11045,22 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                       child: OutlinedButton(
                         onPressed: () async {
                           final picked = await FilePicker.platform.pickFiles(
-                            dialogTitle: 'Select profile_athena.json or athena.json',
+                            dialogTitle:
+                                'Select profile_athena.json or athena.json',
                             type: FileType.custom,
                             allowedExtensions: ['json'],
                           );
-                          if (picked == null || picked.files.single.path == null) return;
-                          final fileName = picked.files.single.name.toLowerCase();
-                          if (fileName != 'profile_athena.json' && fileName != 'athena.json') {
+                          if (picked == null ||
+                              picked.files.single.path == null) {
+                            return;
+                          }
+                          final fileName = picked.files.single.name
+                              .toLowerCase();
+                          if (fileName != 'profile_athena.json' &&
+                              fileName != 'athena.json') {
                             setState(() {
-                              fileError = 'File must be profile_athena.json or athena.json.';
+                              fileError =
+                                  'File must be profile_athena.json or athena.json.';
                             });
                             return;
                           }
@@ -10600,24 +11080,22 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                             darkAlpha: 0.08,
                             lightAlpha: 0.16,
                           ),
-                          side: BorderSide(
-                            color: _onSurface(context, 0.14),
-                          ),
+                          side: BorderSide(color: _onSurface(context, 0.14)),
                         ),
                         child: const Text('Browse'),
                       ),
                     ),
                   ],
                 ),
-                if (fileError != null) ...[                  
+                if (fileError != null) ...[
                   const SizedBox(height: 6),
                   Padding(
                     padding: const EdgeInsets.only(left: 4),
                     child: Text(
                       fileError!,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.error,
-                          ),
+                        color: Theme.of(context).colorScheme.error,
+                      ),
                     ),
                   ),
                 ],
@@ -10641,7 +11119,9 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                             return;
                           }
                           if (pickedFilePath == null) {
-                            setState(() => fileError = 'Please select a JSON file.');
+                            setState(
+                              () => fileError = 'Please select a JSON file.',
+                            );
                             return;
                           }
                           setState(() {
@@ -10712,11 +11192,13 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     final customPresets = <ProfilePreset>[];
     for (final p in customList) {
       final map = p as Map<String, dynamic>;
-      customPresets.add(ProfilePreset(
-        name: map['name'] as String? ?? map['folder'] as String? ?? '',
-        folder: map['folder'] as String? ?? '',
-        versionTag: map['versionTag'] as String?,
-      ));
+      customPresets.add(
+        ProfilePreset(
+          name: map['name'] as String? ?? map['folder'] as String? ?? '',
+          folder: map['folder'] as String? ?? '',
+          versionTag: map['versionTag'] as String?,
+        ),
+      );
     }
 
     String? selectedFolder = customPresets.first.folder;
@@ -10761,9 +11243,9 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                 const SizedBox(height: 8),
                 Text(
                   'This will permanently delete the preset folder and its profile.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.redAccent,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: Colors.redAccent),
                 ),
               ],
             ),
@@ -10792,8 +11274,11 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     if (confirmed != true || selectedFolder == null) return;
 
     final presetName = customPresets
-        .firstWhere((p) => p.folder == selectedFolder,
-            orElse: () => ProfilePreset(name: selectedFolder!, folder: selectedFolder!))
+        .firstWhere(
+          (p) => p.folder == selectedFolder,
+          orElse: () =>
+              ProfilePreset(name: selectedFolder!, folder: selectedFolder!),
+        )
         .name;
 
     try {
@@ -12456,14 +12941,16 @@ class ArenaService {
 }
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  const SettingsScreen({super.key, this.initialTabIndex = 0});
+
+  final int initialTabIndex;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  int _tabIndex = 0;
+  late int _tabIndex;
   bool _loading = true;
   double _loadProgress = 0.0;
   bool _startBackendOnLaunch = false;
@@ -12480,6 +12967,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
+    _tabIndex = widget.initialTabIndex.clamp(0, 3);
     _scheduleDeferredScreenLoad(this, _load);
     _externalToggleStateListener = () {
       if (!mounted) return;
@@ -12633,6 +13121,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       selected: _tabIndex == 2,
                       onTap: () => setState(() => _tabIndex = 2),
                     ),
+                    _SettingsTab(
+                      label: 'Credits',
+                      icon: Icons.auto_awesome_rounded,
+                      selected: _tabIndex == 3,
+                      onTap: () => setState(() => _tabIndex = 3),
+                    ),
                   ],
                 ),
               ),
@@ -12664,6 +13158,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       0 => 'Appearance',
       1 => 'Data Management',
       2 => 'Startup',
+      3 => 'Credits',
       _ => 'Settings',
     };
     final menuKey = 'settings-tab-$title';
@@ -12921,6 +13416,100 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ],
         );
+      case 3:
+        const credits = <_CreditProfileData>[
+          _CreditProfileData(
+            name: 'andr1ww',
+            handle: '@andr1ww',
+            role: 'Backend Foundation',
+            githubUrl: 'https://github.com/andr1ww',
+            avatarUrl: 'https://github.com/andr1ww.png?size=240',
+            description:
+                'Created Nexa, the open-source base that ATLAS Backend was developed from.',
+            projects: <_CreditProjectLink>[
+              _CreditProjectLink(
+                label: 'Nexa',
+                url: 'https://github.com/andr1ww/Nexa',
+              ),
+            ],
+          ),
+          _CreditProfileData(
+            name: 'Lawin',
+            handle: '@Lawin0129',
+            role: 'Backend Foundation #2',
+            githubUrl: 'https://github.com/Lawin0129',
+            avatarUrl: 'https://github.com/Lawin0129.png?size=240',
+            description:
+                'Created LawinServer, another open-source Fortnite backend that helped add certain features to ATLAS Backend.',
+            projects: <_CreditProjectLink>[
+              _CreditProjectLink(
+                label: 'LawinServer',
+                url: 'https://github.com/Lawin0129/LawinServer',
+              ),
+            ],
+          ),
+        ];
+        return SingleChildScrollView(
+          key: const ValueKey('credits'),
+          primary: false,
+          padding: EdgeInsets.zero,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _menuEntrance(
+                context,
+                menuKey: menuKey,
+                index: 0,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _SectionTitle(title: title),
+                    const SizedBox(height: 12),
+                    Text(
+                      'ATLAS Backend builds on open-source work. These people and projects provided key foundations and reference points for the backend.',
+                      style: TextStyle(
+                        color: _onSurface(context, 0.78),
+                        height: 1.45,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+              _menuEntrance(
+                context,
+                menuKey: menuKey,
+                index: 1,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final cards = credits
+                        .map((credit) => _creditProfileCard(context, credit))
+                        .toList(growable: false);
+                    if (constraints.maxWidth < 940) {
+                      return Column(
+                        children: [
+                          for (var i = 0; i < cards.length; i++) ...[
+                            if (i > 0) const SizedBox(height: 16),
+                            cards[i],
+                          ],
+                        ],
+                      );
+                    }
+
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: cards[0]),
+                        const SizedBox(width: 16),
+                        Expanded(child: cards[1]),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
       default:
         return const SizedBox.shrink();
     }
@@ -13068,7 +13657,12 @@ class ProfilesUiStateService {
   }
 
   static String _statePath() {
-    return joinPath([getBackendRoot(), 'static', 'athenaprofiles', 'profiles-ui-state.json']);
+    return joinPath([
+      getBackendRoot(),
+      'static',
+      'athenaprofiles',
+      'profiles-ui-state.json',
+    ]);
   }
 
   static String _legacyStatePath() {
@@ -13442,12 +14036,7 @@ class ProfileService {
 
   static Future<Map<String, dynamic>?> _loadPresetsConfig() async {
     final configFile = File(
-      joinPath([
-        getBackendRoot(),
-        'static',
-        'athenaprofiles',
-        'presets.json',
-      ]),
+      joinPath([getBackendRoot(), 'static', 'athenaprofiles', 'presets.json']),
     );
     if (!await configFile.exists()) return null;
     try {
@@ -13476,7 +14065,9 @@ class ProfileService {
     }
   }
 
-  static Future<void> _saveCustomPresetsConfig(Map<String, dynamic> config) async {
+  static Future<void> _saveCustomPresetsConfig(
+    Map<String, dynamic> config,
+  ) async {
     final configFile = File(_customPresetsPath());
     await configFile.parent.create(recursive: true);
     const encoder = JsonEncoder.withIndent('  ');
@@ -13515,7 +14106,9 @@ class ProfileService {
     presetsList.add({
       'name': name,
       'folder': folderName,
-      'versionTag': versionTag?.trim().isNotEmpty == true ? versionTag!.trim() : null,
+      'versionTag': versionTag?.trim().isNotEmpty == true
+          ? versionTag!.trim()
+          : null,
       'pinned': null,
     });
     config['presets'] = presetsList;
@@ -13547,7 +14140,10 @@ class ProfileService {
     await _saveCustomPresetsConfig(config);
   }
 
-  static bool isCustomPreset(String folderName, Map<String, dynamic>? customConfig) {
+  static bool isCustomPreset(
+    String folderName,
+    Map<String, dynamic>? customConfig,
+  ) {
     if (customConfig == null) return false;
     final presetsList = customConfig['presets'] as List<dynamic>? ?? [];
     for (final p in presetsList) {
@@ -13614,9 +14210,7 @@ class ProfileService {
           ),
         );
       } else {
-        presets.add(
-          ProfilePreset(name: folder, folder: folder),
-        );
+        presets.add(ProfilePreset(name: folder, folder: folder));
       }
     }
 
@@ -15026,7 +15620,13 @@ const List<CurveGroup> _baseCurveGroups = [
     title: 'Player',
     imageName: 'fall.webp',
     icon: Icons.heart_broken,
-    keywords: ['fall damage', 'falling', 'neutralediting', 'sliding', 'safezone'],
+    keywords: [
+      'fall damage',
+      'falling',
+      'neutralediting',
+      'sliding',
+      'safezone',
+    ],
   ),
   CurveGroup(
     id: 'ammunition',
@@ -15047,7 +15647,15 @@ const List<CurveGroup> _baseCurveGroups = [
     title: 'Heals',
     imageName: 'heals.webp',
     icon: Icons.healing,
-    keywords: ['shield', 'bandage', 'purplestuff', 'chillbronco', 'flopper.heal', 'floppereffective', 'donut'],
+    keywords: [
+      'shield',
+      'bandage',
+      'purplestuff',
+      'chillbronco',
+      'flopper.heal',
+      'floppereffective',
+      'donut',
+    ],
   ),
 ];
 
@@ -16352,13 +16960,13 @@ class DataTableService {
 
   static Future<Map<String, dynamic>?> _loadDefaultDataTableMap() async {
     final candidates = <String>[
-      BackendPaths.dataTablesDefaultsJson,
       joinPath([
         getInstallationRoot(),
         'responses',
         'datatables.defaults.json',
       ]),
       joinPath([getInstallationRoot(), 'responses', 'datatables.json']),
+      BackendPaths.dataTablesDefaultsJson,
     ];
 
     for (final candidate in candidates) {
@@ -18190,28 +18798,53 @@ class UpdateBackupService {
     // Don't backup built-in Profile Presets - they are templates.
     // But DO backup custom preset folders and their JSON config.
     final customPresetsFile = File(
-      joinPath([backendRoot, 'static', 'athenaprofiles', 'custom-presets.json']),
+      joinPath([
+        backendRoot,
+        'static',
+        'athenaprofiles',
+        'custom-presets.json',
+      ]),
     );
     if (customPresetsFile.existsSync()) {
       final targetCustomPresetsFile = File(
-        joinPath([backupRoot.path, 'static', 'athenaprofiles', 'custom-presets.json']),
+        joinPath([
+          backupRoot.path,
+          'static',
+          'athenaprofiles',
+          'custom-presets.json',
+        ]),
       );
       await targetCustomPresetsFile.parent.create(recursive: true);
       await customPresetsFile.copy(targetCustomPresetsFile.path);
 
       try {
-        final customConfig = jsonDecode(await customPresetsFile.readAsString()) as Map<String, dynamic>;
-        final customPresetsList = customConfig['presets'] as List<dynamic>? ?? [];
+        final customConfig =
+            jsonDecode(await customPresetsFile.readAsString())
+                as Map<String, dynamic>;
+        final customPresetsList =
+            customConfig['presets'] as List<dynamic>? ?? [];
         for (final p in customPresetsList) {
           final map = p as Map<String, dynamic>;
           final folder = map['folder'] as String?;
           if (folder == null || folder.trim().isEmpty) continue;
           final customPresetDir = Directory(
-            joinPath([backendRoot, 'static', 'athenaprofiles', 'Profile Presets', folder]),
+            joinPath([
+              backendRoot,
+              'static',
+              'athenaprofiles',
+              'Profile Presets',
+              folder,
+            ]),
           );
           if (!customPresetDir.existsSync()) continue;
           final targetPresetDir = Directory(
-            joinPath([backupRoot.path, 'static', 'athenaprofiles', 'Profile Presets', folder]),
+            joinPath([
+              backupRoot.path,
+              'static',
+              'athenaprofiles',
+              'Profile Presets',
+              folder,
+            ]),
           );
           await _copyDirectory(customPresetDir, targetPresetDir);
         }
@@ -18269,28 +18902,53 @@ class UpdateBackupService {
     // Note: Built-in Profile Presets are templates and are not backed up.
     // Custom preset folders and their config are restored below.
     final customPresetsBackup = File(
-      joinPath([backupRoot.path, 'static', 'athenaprofiles', 'custom-presets.json']),
+      joinPath([
+        backupRoot.path,
+        'static',
+        'athenaprofiles',
+        'custom-presets.json',
+      ]),
     );
     if (customPresetsBackup.existsSync()) {
       final targetCustomPresetsFile = File(
-        joinPath([backendRoot, 'static', 'athenaprofiles', 'custom-presets.json']),
+        joinPath([
+          backendRoot,
+          'static',
+          'athenaprofiles',
+          'custom-presets.json',
+        ]),
       );
       await targetCustomPresetsFile.parent.create(recursive: true);
       await customPresetsBackup.copy(targetCustomPresetsFile.path);
 
       try {
-        final customConfig = jsonDecode(await customPresetsBackup.readAsString()) as Map<String, dynamic>;
-        final customPresetsList = customConfig['presets'] as List<dynamic>? ?? [];
+        final customConfig =
+            jsonDecode(await customPresetsBackup.readAsString())
+                as Map<String, dynamic>;
+        final customPresetsList =
+            customConfig['presets'] as List<dynamic>? ?? [];
         for (final p in customPresetsList) {
           final map = p as Map<String, dynamic>;
           final folder = map['folder'] as String?;
           if (folder == null || folder.trim().isEmpty) continue;
           final customPresetDir = Directory(
-            joinPath([backupRoot.path, 'static', 'athenaprofiles', 'Profile Presets', folder]),
+            joinPath([
+              backupRoot.path,
+              'static',
+              'athenaprofiles',
+              'Profile Presets',
+              folder,
+            ]),
           );
           if (!customPresetDir.existsSync()) continue;
           final targetPresetDir = Directory(
-            joinPath([backendRoot, 'static', 'athenaprofiles', 'Profile Presets', folder]),
+            joinPath([
+              backendRoot,
+              'static',
+              'athenaprofiles',
+              'Profile Presets',
+              folder,
+            ]),
           );
           await _copyDirectory(customPresetDir, targetPresetDir);
         }
@@ -18388,7 +19046,9 @@ class UpdateBackupService {
 List<_BackupEntry> _mutableUpdateEntries(String root) {
   final entries = <_BackupEntry>[
     _BackupEntry.file(joinPath([root, 'gui.ini'])),
-    _BackupEntry.file(joinPath([root, 'static', 'athenaprofiles', 'profiles-ui-state.json'])),
+    _BackupEntry.file(
+      joinPath([root, 'static', 'athenaprofiles', 'profiles-ui-state.json']),
+    ),
     _BackupEntry.file(joinPath([root, 'responses', 'user-toggle-states.json'])),
     _BackupEntry.dir(joinPath([root, 'exports'])),
     _BackupEntry.dir(joinPath([root, 'static', 'ClientSettings'])),
@@ -18806,12 +19466,20 @@ class DataService {
     // Export custom presets
     int customPresetsExported = 0;
     final customPresetsSource = File(
-      joinPath([getBackendRoot(), 'static', 'athenaprofiles', 'custom-presets.json']),
+      joinPath([
+        getBackendRoot(),
+        'static',
+        'athenaprofiles',
+        'custom-presets.json',
+      ]),
     );
     if (await customPresetsSource.exists()) {
       try {
-        final customConfig = jsonDecode(await customPresetsSource.readAsString()) as Map<String, dynamic>;
-        final customPresetsList = customConfig['presets'] as List<dynamic>? ?? [];
+        final customConfig =
+            jsonDecode(await customPresetsSource.readAsString())
+                as Map<String, dynamic>;
+        final customPresetsList =
+            customConfig['presets'] as List<dynamic>? ?? [];
         if (customPresetsList.isNotEmpty) {
           final customPresetsExportDir = Directory(
             joinPath([exportsRoot.path, 'CustomPresets']),
@@ -18825,7 +19493,13 @@ class DataService {
             final folder = map['folder'] as String?;
             if (folder == null || folder.trim().isEmpty) continue;
             final presetDir = Directory(
-              joinPath([getBackendRoot(), 'static', 'athenaprofiles', 'Profile Presets', folder]),
+              joinPath([
+                getBackendRoot(),
+                'static',
+                'athenaprofiles',
+                'Profile Presets',
+                folder,
+              ]),
             );
             if (!await presetDir.exists()) continue;
             await _copyDir(
@@ -18939,12 +19613,18 @@ class DataService {
       );
       if (await exportedCustomPresetsFile.exists()) {
         try {
-          final customConfig = jsonDecode(
-            await exportedCustomPresetsFile.readAsString(),
-          ) as Map<String, dynamic>;
-          final customPresetsList = customConfig['presets'] as List<dynamic>? ?? [];
+          final customConfig =
+              jsonDecode(await exportedCustomPresetsFile.readAsString())
+                  as Map<String, dynamic>;
+          final customPresetsList =
+              customConfig['presets'] as List<dynamic>? ?? [];
           final presetsDir = Directory(
-            joinPath([getBackendRoot(), 'static', 'athenaprofiles', 'Profile Presets']),
+            joinPath([
+              getBackendRoot(),
+              'static',
+              'athenaprofiles',
+              'Profile Presets',
+            ]),
           );
           await presetsDir.create(recursive: true);
           for (final p in customPresetsList) {
@@ -18964,9 +19644,11 @@ class DataService {
             await _copyDir(sourcePresetDir, targetPresetDir);
           }
           // Merge custom presets into existing custom-presets.json
-          final existingConfig = await ProfileService._loadCustomPresetsConfig();
+          final existingConfig =
+              await ProfileService._loadCustomPresetsConfig();
           final existingFolders = <String>{};
-          final existingList = existingConfig['presets'] as List<dynamic>? ?? [];
+          final existingList =
+              existingConfig['presets'] as List<dynamic>? ?? [];
           for (final p in existingList) {
             final map = p as Map<String, dynamic>;
             final folder = (map['folder'] as String?)?.trim().toLowerCase();
@@ -20851,21 +21533,28 @@ void _ensureBackendJobObject() {
   if (!Platform.isWindows || _backendJobObject != 0) return;
   try {
     final k32 = DynamicLibrary.open('kernel32.dll');
-    final createJobObjectW = k32.lookupFunction<
-        IntPtr Function(Pointer<Void>, Pointer<Void>),
-        int Function(Pointer<Void>, Pointer<Void>)>('CreateJobObjectW');
-    final setInformationJobObject = k32.lookupFunction<
-        Int32 Function(IntPtr, Int32, Pointer<Uint8>, Uint32),
-        int Function(int, int, Pointer<Uint8>, int)>(
-        'SetInformationJobObject');
+    final createJobObjectW = k32
+        .lookupFunction<
+          IntPtr Function(Pointer<Void>, Pointer<Void>),
+          int Function(Pointer<Void>, Pointer<Void>)
+        >('CreateJobObjectW');
+    final setInformationJobObject = k32
+        .lookupFunction<
+          Int32 Function(IntPtr, Int32, Pointer<Uint8>, Uint32),
+          int Function(int, int, Pointer<Uint8>, int)
+        >('SetInformationJobObject');
     final getProcessHeap = k32
         .lookupFunction<IntPtr Function(), int Function()>('GetProcessHeap');
-    final heapAlloc = k32.lookupFunction<
-        Pointer<Uint8> Function(IntPtr, Uint32, IntPtr),
-        Pointer<Uint8> Function(int, int, int)>('HeapAlloc');
-    final heapFree = k32.lookupFunction<
-        Int32 Function(IntPtr, Uint32, Pointer<Uint8>),
-        int Function(int, int, Pointer<Uint8>)>('HeapFree');
+    final heapAlloc = k32
+        .lookupFunction<
+          Pointer<Uint8> Function(IntPtr, Uint32, IntPtr),
+          Pointer<Uint8> Function(int, int, int)
+        >('HeapAlloc');
+    final heapFree = k32
+        .lookupFunction<
+          Int32 Function(IntPtr, Uint32, Pointer<Uint8>),
+          int Function(int, int, Pointer<Uint8>)
+        >('HeapFree');
 
     final hJob = createJobObjectW(nullptr, nullptr);
     if (hJob == 0) return;
@@ -20877,9 +21566,14 @@ void _ensureBackendJobObject() {
     if (buf.address == 0) return;
 
     // LimitFlags sits at byte-offset 16 on both x86 and x64.
-    (buf + 16).cast<Uint32>().value = 0x2000; // JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+    (buf + 16).cast<Uint32>().value =
+        0x2000; // JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
     setInformationJobObject(
-        hJob, 9 /* JobObjectExtendedLimitInformation */, buf, infoSize);
+      hJob,
+      9 /* JobObjectExtendedLimitInformation */,
+      buf,
+      infoSize,
+    );
     heapFree(heap, 0, buf);
 
     _backendJobObject = hJob;
@@ -20892,15 +21586,19 @@ void _addProcessToBackendJob(int pid) {
   if (_backendJobObject == 0) return;
   try {
     final k32 = DynamicLibrary.open('kernel32.dll');
-    final openProcess = k32.lookupFunction<
-        IntPtr Function(Uint32, Int32, Uint32),
-        int Function(int, int, int)>('OpenProcess');
-    final assignProcessToJobObject = k32.lookupFunction<
-        Int32 Function(IntPtr, IntPtr),
-        int Function(int, int)>('AssignProcessToJobObject');
+    final openProcess = k32
+        .lookupFunction<
+          IntPtr Function(Uint32, Int32, Uint32),
+          int Function(int, int, int)
+        >('OpenProcess');
+    final assignProcessToJobObject = k32
+        .lookupFunction<Int32 Function(IntPtr, IntPtr), int Function(int, int)>(
+          'AssignProcessToJobObject',
+        );
     final closeHandle = k32
         .lookupFunction<Int32 Function(IntPtr), int Function(int)>(
-            'CloseHandle');
+          'CloseHandle',
+        );
 
     // PROCESS_SET_QUOTA | PROCESS_TERMINATE
     final hProcess = openProcess(0x0100 | 0x0001, 0, pid);

@@ -530,5 +530,41 @@
     "weaponId": "Special_BadgerGrape_Athena_SR_Ore_T03",
     "imagePath": "BatmanGrapnelGun.webp",
     "clipSize": "10"
+  },
+  "13": {
+    "name": "Flint-Knock",
+    "weaponPath": "/Game/Athena/Items/Weapons/AthenaRangedWeapons",
+    "imagePath": "flintknock.webp",
+    "damageFields": [
+      "DmgPB",
+      "DmgMid",
+      "DmgLong",
+      "DmgMaxRange"
+    ],
+    "environmentalDamageFields": [
+      "EnvDmgPB",
+      "EnvDmgMid",
+      "EnvDmgLong",
+      "EnvDmgMaxRange"
+    ],
+    "damagePB": "1",
+    "defaultEnvDamage": "1",
+    "clipSize": "0",
+    "variants": [
+      {
+        "name": "Common",
+        "weaponId": "Pistol_Flintlock_Athena_C_Ore_T03",
+        "damagePB": "1",
+        "defaultEnvDamage": "1",
+        "reloadTime": "0"
+      },
+      {
+        "name": "Uncommon",
+        "weaponId": "Pistol_Flintlock_Athena_UC_Ore_T03",
+        "damagePB": "1",
+        "defaultEnvDamage": "1",
+        "reloadTime": "0"
+      }
+    ]
   }
 }
