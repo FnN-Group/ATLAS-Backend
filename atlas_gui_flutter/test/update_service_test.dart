@@ -5,11 +5,11 @@ void main() {
   test('selectReleaseInstallerUrl prefers setup exe over msi assets', () {
     final selected = selectReleaseInstallerUrl([
       {
-        'name': 'ATLAS-Backend-1.5.6.msi',
+        'name': 'ATLAS-Backend-1.6.2.msi',
         'browser_download_url': 'https://example.com/atlas.msi',
       },
       {
-        'name': 'ATLAS Backend Setup-1.5.6.exe',
+        'name': 'ATLAS Backend Setup-1.6.2.exe',
         'browser_download_url': 'https://example.com/atlas-setup.exe',
       },
     ]);
@@ -20,7 +20,7 @@ void main() {
   test('selectReleaseInstallerUrl falls back to msi when no exe exists', () {
     final selected = selectReleaseInstallerUrl([
       {
-        'name': 'ATLAS-Backend-1.5.6.msi',
+        'name': 'ATLAS-Backend-1.6.2.msi',
         'browser_download_url': 'https://example.com/atlas.msi',
       },
     ]);

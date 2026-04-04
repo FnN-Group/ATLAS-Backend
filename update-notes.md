@@ -12,19 +12,8 @@ Markdown Quick Key
 -->
 
 ---
-# MANUAL UPDATE 
-- We have changed our installation method, make sure to **SAVE YOUR DATA** in your backend somewhere safe and **MANUALLY UPDATE** from our [GitHub](https://github.com/cipherfps/ATLAS-Backend/releases)
+
 # Improvements
-- New Heals CurveTable Group
-- New Materials CurveTable Group
-- Added Vehicle Bouncer Momentum Toggles
-- Added Impulse Vehicle Momentum Toggle
-- Added Rift Teleport Height Toggle
-- Added Crash Pad Environmental Damage Toggle
-- Added Player Group to change your own properties
-- Reorganized CurveTable Groups for Better Navigation
-# Fixes
-- Fixed Backend Process Quiting
-- Update Button Text/Color
+- Updated Backend Support for Latest Stellar Pak
 
 [Full release notes](https://github.com/cipherfps/ATLAS-Backend/releases)
